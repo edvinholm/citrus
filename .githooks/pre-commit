@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message if
+# it wants to stop the commit.
+#
+# To enable this hook, rename this file to "pre-commit".
+
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+	against=HEAD
+else
+	# Initial commit: diff against an empty tree object
+	against=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+fi
+
+num_nocheckins=0
+
+for FILE in `git diff-index --name-status $against -- | cut -c3-` ; do
+    # Check if the file contains 'debugger'
+    if grep -q -i 'nocheckin' "$FILE"
+    then
+	if ! [[ $FILE == .githooks/* ]]
+	then
+            echo -e "\e[41mnocheckin in $FILE!\e[0m"
+            let "num_nocheckins+=1"
+	fi
+    fi
+done
+
+if [[ $num_nocheckins -gt 0 ]]
+then
+	exit 1
+fi

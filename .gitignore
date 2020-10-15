@@ -1,0 +1,17 @@
+
+local_env.bat
+
+citrus.exe
+citrus.pdb
+citrus_server.exe
+citrus_server.pdb
+citrus_release.exe
+citrus_release.pdb
+
+main.obj
+.vscode
+.vs/**
+todo.txt
+
+usr/
+tmp/
