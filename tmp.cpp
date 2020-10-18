@@ -7,7 +7,7 @@ void foo(UI_Manager *ui)
 }
 
 
-void baz(UI_Context ctx)
+void baz(UI_Context ctx, int build_index)
 {
     U(ctx);
 
@@ -18,18 +18,23 @@ void baz(UI_Context ctx)
     Debug_Print("LOOP:\n");
     for(int i = 0; i < 5; i++)
     {
+        if(build_index > 0 && random_float() > 0.5f) {
+            Debug_Print("--SKIP--\n");
+            continue;
+        }
+            
         button(PC(ctx, i));
         button(PC(ctx, i));
     }
 }
 
-void bar(UI_Context ctx)
+void bar(UI_Context ctx, int build_index)
 {
     U(ctx);
 
     button(P(ctx));
     
-    baz(P(ctx));
+    baz(P(ctx), build_index);
     
     button(P(ctx));
 }

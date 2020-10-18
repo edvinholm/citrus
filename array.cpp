@@ -145,6 +145,7 @@ bool merge_arrays(Array<T, A> &array, Array<T, A> &other_array)
 }
 
 
+// NOTE: Two arrays of the same length are guaranteed to move the remaining elements in the same way.
 template<typename T, Allocator_ID A>
 inline
 void array_unordered_remove(Array<T, A> &array, s64 index, s64 n /* = 1*/)

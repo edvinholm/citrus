@@ -28,12 +28,15 @@ int client_entry_point(int num_args, char **arguments)
     for(int j = 0; j < 3; j++)
     {
         ui_build_begin(ui);
+        
         Debug_Print("\n\nBUILD #%d\n", j);
         for(int i = 0; i < 3; i++)
         {
             Debug_Print("\nCALLING BAR (i = %d):\n", i);
-            bar(PC(ctx, i));
+            bar(PC(ctx, i), j);
         }
+        
+        ui_build_end(ui);
     }
     
     //auto ctx_b = pack(&ctx, __COUNTER__+1, 0);

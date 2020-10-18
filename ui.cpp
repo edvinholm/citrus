@@ -112,11 +112,16 @@ struct UI_Element
 
 struct UI_Manager
 {
+#if DEBUG
+    bool build_began;
+#endif
+    
     UI_ID_Manager id_manager;
 
     UI_Path current_path;
     u64     current_path_length;
 
+    Array<bool,       ALLOC_UI> element_alives;
     Array<UI_ID,      ALLOC_UI> element_ids;
     Array<UI_Element, ALLOC_UI> elements;
 };
@@ -138,6 +143,7 @@ void assert_state_valid(UI_Manager *ui)
     assert_state_valid(&id_manager);
 
     Assert(ui->element_ids.n == ui->elements.n);
+    Assert(ui->element_ids.n == ui->element_alives.n);
 }
 
 u8 ui_path_hash(UI_Path *path, u64 length)
@@ -252,7 +258,7 @@ void pop_ui_location(UI_Manager *ui)
 void init_ui_element(UI_Element_Type type, UI_Element *_e)
 {
     Zero(*_e);
-    _e->type = type;
+    _e->type  = type;
 
     switch(_e->type) {
         case BUTTON: break;
@@ -272,6 +278,7 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
             UI_Element *e = ui->elements.e + i;
             Assert(e->type == type);
 
+            ui->element_alives[i] = true;
             return e;
         }
     }
@@ -279,7 +286,8 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
     // NO ELEMENT FOUND -- SO CREATE ONE.
     UI_Element new_element;
     init_ui_element(type, &new_element);
-    array_add(ui->element_ids, id);
+    array_add(ui->element_alives, true);
+    array_add(ui->element_ids,      id);
     return array_add(ui->elements, new_element);
 }
 
@@ -287,8 +295,48 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
 void ui_build_begin(UI_Manager *ui)
 {
 #if DEBUG
+    Assert(ui->build_began == false);
+    ui->build_began = true;
+    
     ui->id_manager.used_ids_this_build.n = 0;
 #endif
+}
+
+void ui_build_end(UI_Manager *ui)
+{
+#if DEBUG
+    Assert(ui->build_began == true);
+    ui->build_began = false;
+#endif
+    
+    s64 num_removed = 0;
+
+    Assert(ui->element_alives.n == ui->elements.n);
+    Assert(ui->element_alives.n == ui->element_ids.n);
+        
+    // Remove elements that were not built (a.k.a. not alive) this time.
+    for(s64 i = 0; i < ui->element_alives.n; i++)
+    {
+        
+        // Alive -- reset it.
+        if(ui->element_alives[i]) {
+            ui->element_alives[i] = false;
+            continue;
+        }
+
+        // Dead -- remove it.
+        array_ordered_remove(ui->elements,       i);
+        array_ordered_remove(ui->element_ids,    i);
+        array_ordered_remove(ui->element_alives, i);
+        i--;
+
+        num_removed++;
+
+    }
+
+    Debug_Print("Removed %lld dead elements.\n", num_removed);
+
+    
 }
 
 
