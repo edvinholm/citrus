@@ -2,7 +2,7 @@
 
 
 const size_t TMP_MEMORY_PAGE_SIZE = 0xF000;
-const u64 MAX_NUM_TEMPORARY_MEMORY_PAGES_AFTER_RESET = 4;
+const s64 MAX_NUM_TEMPORARY_MEMORY_PAGES_AFTER_RESET = 4;
 
 struct Temporary_Memory_Page
 {

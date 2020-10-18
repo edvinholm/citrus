@@ -14,23 +14,9 @@ int client_entry_point(int num_args, char **arguments)
     Client client = {0};
     UI_Manager *ui = &client.ui;
 
+    
+
 #if 0
-    for(int i = 0; i < 3; i++)
-    {
-        push_ui_location(__COUNTER__+1, 1, ui);
-        push_ui_location(__COUNTER__+1, 1, ui);
-        foo(ui);
-        push_ui_location(__COUNTER__+1, 1, ui);
-        push_ui_location(__COUNTER__+1, 1, ui);
-        push_ui_location(__COUNTER__+1, 1, ui);
-        
-        pop_ui_location(ui);
-        pop_ui_location(ui);
-        pop_ui_location(ui);
-        pop_ui_location(ui);
-        pop_ui_location(ui);
-    }
-#else
     UI_Context ctx = UI_Context();
     ctx.manager = ui;
 
@@ -41,7 +27,8 @@ int client_entry_point(int num_args, char **arguments)
 
     for(int j = 0; j < 3; j++)
     {
-        Debug_Print("\n\nFRAME %d\n", j);
+        ui_build_begin(ui);
+        Debug_Print("\n\nBUILD #%d\n", j);
         for(int i = 0; i < 3; i++)
         {
             Debug_Print("\nCALLING BAR (i = %d):\n", i);

@@ -3,16 +3,16 @@
 
 
 template<typename T, Allocator_ID A>
-T &Array<T, A>::operator [] (const u64 index)
+T &Array<T, A>::operator [] (const s64 index)
 {
     Assert(this->n > index);
     return this->e[index];
 }
 
 template<typename T, Allocator_ID A>
-bool ensure_capacity(Array<T, A> &array, u64 capacity)
+bool ensure_capacity(Array<T, A> &array, s64 capacity)
 {
-    u64 new_allocated = max(array.allocated, (u64)1);
+    s64 new_allocated = max(array.allocated, (s64)1);
     while(new_allocated < capacity)
     {
         new_allocated *= 2;
@@ -20,7 +20,7 @@ bool ensure_capacity(Array<T, A> &array, u64 capacity)
     if(new_allocated != array.allocated)
     {
         T *new_e = (T *)alloc(new_allocated * sizeof(T), A);
-        Release_Assert_Args(new_e,    "new_allocated", new_allocated, "sizeof(T)", sizeof(T), "A", A, "array.allocated", array.allocated, "array.n", array.n, "array.e", (u64)array.e);
+        Release_Assert_Args(new_e,    "new_allocated", new_allocated, "sizeof(T)", sizeof(T), "A", A, "array.allocated", array.allocated, "array.n", array.n, "array.e", (s64)array.e);
         if(!new_e) return false;
 
         if(array.n)
@@ -39,7 +39,7 @@ bool ensure_capacity(Array<T, A> &array, u64 capacity)
 
 template<typename T, Allocator_ID A>
 inline
-T *array_add_uninitialized(Array<T, A> &array, u64 num_elements = 1)
+T *array_add_uninitialized(Array<T, A> &array, s64 num_elements = 1)
 {
     ensure_capacity(array, array.n + num_elements);
 
@@ -50,7 +50,7 @@ T *array_add_uninitialized(Array<T, A> &array, u64 num_elements = 1)
 }
 
 template<typename T, Allocator_ID A>
-T *array_add(Array<T, A> &array, T *elements, u64 num_elements /* = 1 */)
+T *array_add(Array<T, A> &array, T *elements, s64 num_elements /* = 1 */)
 {
     T *element0 = array_add_uninitialized(array, num_elements);
     
@@ -67,7 +67,7 @@ T *array_add(Array<T, A> &array, T item)
 }
 
 template<typename T, Allocator_ID A>
-void array_set(Array<T, A> &array, T *elements, u64 num_elements)
+void array_set(Array<T, A> &array, T *elements, s64 num_elements)
 {
     array.n = 0;
     array_add(array, elements, num_elements);
@@ -81,12 +81,12 @@ void array_set(Array<T, A> &dest, Array<T, B> &src)
 
 
 template<typename T, Allocator_ID A>
-T *array_insert(Array<T, A> &array, T *elements, int index, u64 num_elements = 1)
+T *array_insert(Array<T, A> &array, T *elements, int index, s64 num_elements = 1)
 {
     Assert(index <= array.n);
     Assert(index >= 0);
 
-    u64 index_64 = index;
+    s64 index_64 = index;
     
     if(index_64 == array.n)
         return array_add(array, elements, num_elements);
@@ -95,7 +95,7 @@ T *array_insert(Array<T, A> &array, T *elements, int index, u64 num_elements = 1
 
     // Shift elements forward
     //TODO @Speed: IMPORTANT We should do something better here. Reason to why we don't just do a memcpy is because it's undefined behaviour to have the destination overlap the source data.
-    /*u64 num_elements_64 = num_elements;
+    /*s64 num_elements_64 = num_elements;
     auto *dest = array.e + array.n + num_elements_64 - 1;
     auto *src  = dest - 1;
     auto *end = array.e + index_64 + num_elements_64;
@@ -147,18 +147,18 @@ bool merge_arrays(Array<T, A> &array, Array<T, A> &other_array)
 
 template<typename T, Allocator_ID A>
 inline
-void array_unordered_remove(Array<T, A> &array, u64 index, u64 n /* = 1*/)
+void array_unordered_remove(Array<T, A> &array, s64 index, s64 n /* = 1*/)
 {
     Assert(n <= array.n - index);
     
-    u64 to_copy = min(n, array.n - (index + n));
+    s64 to_copy = min(n, array.n - (index + n));
     memcpy(array.e + index, array.e + array.n - to_copy, sizeof(T)*to_copy);
     array.n -= n;
 }
 
 template<typename T, Allocator_ID A>
 inline
-void array_ordered_remove(Array<T, A> &array, u64 index, u64 n /* = 1*/)
+void array_ordered_remove(Array<T, A> &array, s64 index, s64 n /* = 1*/)
 {
     Assert(index >= 0 && index < array.n);
     memcpy(array.e + index, array.e + index + n, sizeof(T) * (array.n - (index + n)));
@@ -168,7 +168,7 @@ void array_ordered_remove(Array<T, A> &array, u64 index, u64 n /* = 1*/)
 
 template<typename T, Allocator_ID A>
 inline
-void array_swap(Array<T, A> &array, u64 a, u64 b)
+void array_swap(Array<T, A> &array, s64 a, s64 b)
 {
     T tmp = array.e[a];
     array.e[a] = array.e[b];
@@ -177,7 +177,7 @@ void array_swap(Array<T, A> &array, u64 a, u64 b)
 
 template<typename T, Allocator_ID A>
 inline
-T *element_pointer(Array<T, A> &array, u64 index)
+T *element_pointer(Array<T, A> &array, s64 index)
 {
     Assert(array.n > index);
     return array.e + index;
@@ -198,9 +198,9 @@ T last_element(Array<T, A> &array)
 }
 
 template<typename T, Allocator_ID A>
-bool in_array(Array<T, A> &array, T element, u64 *_index /* = NULL */)
+bool in_array(Array<T, A> &array, T element, s64 *_index /* = NULL */)
 {
-    for(u64 i = 0; i < array.n; i++)
+    for(s64 i = 0; i < array.n; i++)
     {
         if(array.e[i] == element) {
             if(_index) *_index = i;
@@ -227,7 +227,7 @@ template<typename T, Allocator_ID A>
 inline
 void ensure_not_in_array(Array<T, A> &array, T &element)
 {
-    u64 index;
+    s64 index;
     if(in_array(array, element, &index))
         array_unordered_remove(array, index);
 }
@@ -298,7 +298,7 @@ bool all_elements_equal(Array<T, A> &a, Array<T, A> &b)
 
 
 template<typename T, int Size>
-T &Static_Array<T, Size>::operator [] (const u64 index)
+T &Static_Array<T, Size>::operator [] (const s64 index)
 {
     Assert(index < this->n);
     Assert(index >= 0);
@@ -314,7 +314,7 @@ int capacity_of(Static_Array<T, Size> &array)
 }
 
 template<typename T, int Size>
-T *array_add(Static_Array<T, Size> &array, T *elements, u64 num_elements/* = 1*/)
+T *array_add(Static_Array<T, Size> &array, T *elements, s64 num_elements/* = 1*/)
 {
     Assert(array.n + num_elements <= Size);
 
@@ -342,19 +342,19 @@ T *last_element_pointer(Static_Array<T, Size> &array)
 
 
 template<typename T, int Size>
-void array_unordered_remove(Static_Array<T, Size> &array, u64 index, u64 n/* = 1*/)
+void array_unordered_remove(Static_Array<T, Size> &array, s64 index, s64 n/* = 1*/)
 {
     Assert(n <= array.n - index);
     
-    u64 to_copy = min(n, array.n - (index + n));
+    s64 to_copy = min(n, array.n - (index + n));
     memcpy(array.e + index, array.e + array.n - to_copy, sizeof(T) * to_copy);
     array.n -= n;
 }
     
 template<typename T, int Size>
-bool in_array(Static_Array<T, Size> &array, T element, u64 *_index/* = NULL*/)
+bool in_array(Static_Array<T, Size> &array, T element, s64 *_index/* = NULL*/)
 {
-    for(u64 i = 0; i < array.n; i++)
+    for(s64 i = 0; i < array.n; i++)
     {
         if(array.e[i] == element) {
             if(_index) *_index = i;
@@ -379,7 +379,7 @@ void ensure_in_array(Static_Array<T, Size> &array, T &element)
 template<typename T, int Size>
 void ensure_not_in_array(Static_Array<T, Size> &array, T &element)
 {
-    u64 index;
+    s64 index;
     if(in_array(array, element, &index))
         array_unordered_remove(array, index);
 }

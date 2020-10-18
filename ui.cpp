@@ -79,6 +79,10 @@ struct UI_Path
 struct UI_ID_Manager
 {
     UI_ID last_id;
+
+#if DEBUG
+    Array<UI_ID, ALLOC_UI> used_ids_this_build; // To detect if we generate the same ID for multiple elements. A build is a "frame"....
+#endif
     
     struct Path_Bucket
     {
@@ -227,6 +231,16 @@ void pop_ui_location(UI_Manager *ui)
 }
 
 
+void ui_build_begin(UI_Manager *ui)
+{
+#if DEBUG
+    ui->id_manager.used_ids_this_build.n = 0;
+#endif
+}
+
+
+
+
 
 
 struct UI_Context
@@ -255,6 +269,8 @@ struct UI_Context
         }
 
         if(this->state == PACKED) {
+            this->id_given = false;
+        
             this->state = DELIVERED;
             return;
         }
@@ -267,8 +283,25 @@ struct UI_Context
 
     UI_ID get_id()
     {
+        if(id_given) {
+            Debug_Print("ERROR: A UI_Context for a specific path can only give an ID once!");
+            Assert(false);
+        }
+        
         Assert(state == UNPACKED);
-        return find_or_create_ui_id_for_path(&manager->current_path, manager->current_path_length, &manager->id_manager);
+        id_given = true;
+        UI_ID id = find_or_create_ui_id_for_path(&manager->current_path, manager->current_path_length, &manager->id_manager);
+
+#if DEBUG
+        if(in_array(manager->id_manager.used_ids_this_build, id)) {
+            Debug_Print("ERROR: Same ID used multiple times in the same build.\n");
+            Assert(false);
+        }
+
+        array_add(manager->id_manager.used_ids_this_build, id);
+#endif
+        
+        return id;
     }
 
     
@@ -291,6 +324,8 @@ struct UI_Context
         //       To prevent that constructor from thinking that this is a parameter-pass-to-proc,
         //       we set a special state (PACKING) here, and the constructor will then set it to PACKED, and not DELIVERED.
         ctx.state = PACKED;
+
+        ctx.id_given = false;
 
         ctx.returning_from_pack = true;
         return ctx;
@@ -320,6 +355,7 @@ struct UI_Context
 private:    
     State state;
     bool returning_from_pack;
+    bool id_given;
 };
 
 
@@ -331,6 +367,6 @@ void button(UI_Context ctx)
     U(ctx);
     
     UI_Manager *ui = ctx.manager;
-    
+
     Debug_Print("Button ID: %I64X\n", ctx.get_id());
 }

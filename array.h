@@ -6,16 +6,16 @@
 template<typename T, Allocator_ID A>
 struct Array
 {
-    u64 n;
+    s64 n;
     T *e;
-    u64 allocated;
+    s64 allocated;
 
-    T &operator [] (const u64 index);
+    T &operator [] (const s64 index);
 };
 
 
 template<typename T, Allocator_ID A>
-T *array_add(Array<T, A> &array, T *elements, u64 num_elements = 1);
+T *array_add(Array<T, A> &array, T *elements, s64 num_elements = 1);
 
 
 template<typename T, Allocator_ID A>
@@ -28,13 +28,13 @@ T *last_element_pointer(Array<T, A> &array);
 
 
 template<typename T, Allocator_ID A>
-void array_unordered_remove(Array<T, A> &array, u64 index, u64 n = 1);
+void array_unordered_remove(Array<T, A> &array, s64 index, s64 n = 1);
 
 template<typename T, Allocator_ID A>
-void array_ordered_remove(Array<T, A> &array, u64 index, u64 n = 1);
+void array_ordered_remove(Array<T, A> &array, s64 index, s64 n = 1);
     
 template<typename T, Allocator_ID A>
-bool in_array(Array<T, A> &array, T element, u64 *_index = NULL);
+bool in_array(Array<T, A> &array, T element, s64 *_index = NULL);
 
 
 template<typename T, Allocator_ID A>
@@ -49,17 +49,17 @@ void ensure_not_in_array(Array<T, A> &array, T &element);
 template<typename T, int Size>
 struct Static_Array
 {
-    u64 n;
+    s64 n;
     T e[Size];
     
-    T &operator [] (const u64 index);
+    T &operator [] (const s64 index);
 };
 
 template<typename T, int Size>
 int capacity_of(Static_Array<T, Size> &array);
 
 template<typename T, int Size>
-T *array_add(Static_Array<T, Size> &array, T *elements, u64 num_elements = 1);
+T *array_add(Static_Array<T, Size> &array, T *elements, s64 num_elements = 1);
 
 
 template<typename T, int Size>
@@ -72,10 +72,10 @@ T *last_element_pointer(Static_Array<T, Size> &array);
 
 
 template<typename T, int Size>
-void array_unordered_remove(Static_Array<T, Size> &array, u64 index, u64 n = 1);
+void array_unordered_remove(Static_Array<T, Size> &array, s64 index, s64 n = 1);
     
 template<typename T, int Size>
-bool in_array(Static_Array<T, Size> &array, T element, u64 *_index = NULL);
+bool in_array(Static_Array<T, Size> &array, T element, s64 *_index = NULL);
 
 
 template<typename T, int Size>
