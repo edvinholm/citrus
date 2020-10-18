@@ -112,6 +112,8 @@ struct UI_Element
 
 struct UI_Manager
 {
+    Mutex mutex;
+    
 #if DEBUG
     bool build_began;
 #endif
@@ -294,6 +296,8 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
 
 void ui_build_begin(UI_Manager *ui)
 {
+    lock_mutex(ui->mutex);
+    
 #if DEBUG
     Assert(ui->build_began == false);
     ui->build_began = true;
@@ -336,7 +340,7 @@ void ui_build_end(UI_Manager *ui)
 
     Debug_Print("Removed %lld dead elements.\n", num_removed);
 
-    
+    unlock_mutex(ui->mutex);
 }
 
 
@@ -467,10 +471,7 @@ void button(UI_Context ctx)
 {
     U(ctx);
     
-    UI_Manager *ui = ctx.manager;
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
 
-    UI_ID id = ctx.get_id();
-    UI_Element *e = find_or_create_ui_element(id, BUTTON, ui);
-   
-    Debug_Print("Button ID: %I64X\n", id);
+    
 }

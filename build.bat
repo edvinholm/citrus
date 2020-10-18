@@ -35,7 +35,7 @@ echo Done.
 echo ----------------------------------------------------------------
 
 echo ############# COMPILING SERVER #############
-cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link -incremental:no /opt:ref /opt:icf /nologo
+cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib -incremental:no /opt:ref /opt:icf /nologo
 
 IF %ERRORLEVEL% NEQ 0 EXIT 1
 echo Done.

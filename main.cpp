@@ -1,13 +1,51 @@
 
+#include <string.h>
+#include <math.h>
 #include <utility>
 
 #include "types.h"
 #include "defer.cpp"
 
+#include "memory_macros.h"
+
+// --
+
 #if DEBUG
 #include <stdio.h>
 #include "debug.h"
 #endif
+
+// --
+
+#include "memory_pre.h"
+
+#include "array.h"
+
+#include "math.h"
+#include "math.cpp"
+
+#include "memory.h"
+#include "memory.cpp"
+
+#include "array.cpp"
+
+#include "string.h"
+#include "string.cpp"
+
+// --
+
+#include "platform.h"
+
+#if OS_WINDOWS
+#include <Windows.h>
+#include <shellscalingapi.h>
+#include "platform_win32.h"
+#include "platform_win32.cpp"
+#endif
+
+// --
+
+#include "thread.cpp"
 
 #if SERVER
 #include "server_includes.h"
