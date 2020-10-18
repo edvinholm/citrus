@@ -9,30 +9,27 @@ void foo(UI_Manager *ui)
 
 void baz(UI_Context ctx)
 {
-    UNPACK(ctx);
-    
-    Debug_Print("ctx state is %d\n", ctx.get_state());
+    U(ctx);
 
-    button(PACK(ctx));
-    button(PACK(ctx)); button(PACK(ctx));
-    button(PACK(ctx));
+    button(P(ctx));
+    button(P(ctx)); button(P(ctx));
+    button(P(ctx));
 
     Debug_Print("LOOP:\n");
     for(int i = 0; i < 5; i++)
     {
-        button(PACK_COUNT(ctx, i));
-        button(PACK_COUNT(ctx, i));
+        button(PC(ctx, i));
+        button(PC(ctx, i));
     }
 }
 
 void bar(UI_Context ctx)
 {
-    UNPACK(ctx);
+    U(ctx);
 
-    button(PACK(ctx));
+    button(P(ctx));
     
-    Debug_Print("ctx state is %d\n", ctx.get_state());
-    baz(PACK(ctx));
+    baz(P(ctx));
     
-    button(PACK(ctx));
+    button(P(ctx));
 }

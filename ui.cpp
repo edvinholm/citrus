@@ -1,12 +1,60 @@
 
-#define PACK_COUNT(CTX, COUNT)                  \
+/*
+  AUTOMATIC UI ID GENERATION
+  --------------------------
+  This is a messy solution, but it's the best way I've come
+  up with for C++. And it's worth it to not need to worry
+  about generating unique and reproducable IDs.
+
+  It is this messy to help the programmer as much as possible and prevent them
+  to do some of the most easily made mistakes. But it's nowhere near perfect,
+  and you need to respect the rules of the systems in order for it to work.
+
+  The same code path gives the same ID, basically.
+  The paths are stored and mapped to ID integers.
+  A path is a sequence of locations, identified by a "place" and a "count".
+  The place component is an ID of a PACK site. The count is the number of
+  packs in that place, in the current path...
+
+  Example:     (The P() and PC() macros are the packing macros, and the U() macro is the unpack macro)
+  void foo() {
+      U(ctx);
+      for(int i = 0; i < 10; i++)
+      {
+          button(PC(ctx, i)); // This is a "place" that will be hit multiple times for the same path, so we need to pass a "count" in to make 10 unique IDs here.
+      }
+  }
+  void bar(UI_Context ctx) {
+      U(ctx);
+      foo(P(ctx));  // This is a "place"
+      foo(P(ctx));  // This is a "place"
+  }
+  void main() {
+      bar(P(ctx));  // This is a "place"
+  }
+
+  When you PACK a context, the current location (place+count) is pushed onto the path stack.
+  When you UNPACK a context, a pop of that location is deferred to happen at the end of the scope.
+                             THIS SHOULD BE DONE AT THE TOP OF THE PROCEDURES. Do not use the context
+                             after the pop!
+  
+  IMPORTANT: When the UI_Context object is COPIED, we assume that it is passed by value to a procedure.
+             So it is NOT ALLOWED to assign a UI_Context variable by copying a context by value.
+
+ */
+
+
+
+// PACK WITH COUNT
+#define PC(CTX, COUNT)                          \
     ctx.pack(__COUNTER__+1, COUNT)
 
-#define PACK(CTX)                               \
-    PACK_COUNT(CTX, 0)
+// PACK
+#define P(CTX)                                  \
+    PC(CTX, 0)
 
-
-#define UNPACK(CTX)                             \
+// UNPACK
+#define U(CTX)                                  \
     CTX.set_state_to_unpacked();                \
     defer(pop_ui_location(CTX.manager);)
 
@@ -138,8 +186,6 @@ UI_ID find_or_create_ui_id_for_path(UI_Path *path, u64 length, UI_ID_Manager *ma
 
 void push_ui_location(u32 place, u32 count, UI_Manager *ui)
 {
-    Debug_Print("push_ui_location\n");
-    
     Assert(place != 0);
     
     assert_state_valid(ui);
@@ -176,8 +222,6 @@ void push_ui_location(u32 place, u32 count, UI_Manager *ui)
 
 void pop_ui_location(UI_Manager *ui)
 {
-    Debug_Print("pop_ui_location\n");
-    
     Assert(ui->current_path_length > 0);
     ui->current_path_length--;
 }
@@ -211,7 +255,6 @@ struct UI_Context
         }
 
         if(this->state == PACKED) {
-            Debug_Print("DELIVERED\n");
             this->state = DELIVERED;
             return;
         }
@@ -247,7 +290,6 @@ struct UI_Context
         // NOTE: Unfortunately, when returning the context, the copy constructor for UI_Context will be called
         //       To prevent that constructor from thinking that this is a parameter-pass-to-proc,
         //       we set a special state (PACKING) here, and the constructor will then set it to PACKED, and not DELIVERED.
-        Debug_Print("PACKED\n");
         ctx.state = PACKED;
 
         ctx.returning_from_pack = true;
@@ -258,7 +300,6 @@ struct UI_Context
     void set_state_to_unpacked() {
         Assert(!returning_from_pack);
         
-        Debug_Print("UNPACKED\n");
         state = UNPACKED;
     }
     
@@ -270,7 +311,7 @@ struct UI_Context
         if(returning_from_pack) return;
         
         if(state != UNPACKED) {
-            Debug_Print("All UI_Contexts must be UNPACKED() before destroyed! A context is being deconstructed with state set to DELIVERED, which should never happen.\n");
+            Debug_Print("All UI_Contexts must be UNPACKED before being destroyed! A context is being deconstructed with state set to DELIVERED, which should never happen.\n");
             Assert(false); // All delivered contexts should be unpacked.
         }
     }
@@ -287,14 +328,9 @@ private:
 
 void button(UI_Context ctx)
 {
-    UNPACK(ctx);
+    U(ctx);
     
     UI_Manager *ui = ctx.manager;
     
-    Debug_Print("Button ID: %I64X (Path: ", ctx.get_id());
-    for(u64 i = 0; i < ui->current_path_length; i++) {
-        if(i > 0) Debug_Print("      >> ");
-        Debug_Print("%I64X", ui->current_path.e[i]);
-    }
-    Debug_Print(")\n");
+    Debug_Print("Button ID: %I64X\n", ctx.get_id());
 }

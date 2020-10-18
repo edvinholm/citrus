@@ -39,8 +39,15 @@ int client_entry_point(int num_args, char **arguments)
     pack(&ctx, &ctx_a, __COUNTER__+1, 0);
     */
 
-    Debug_Print("bar(PACK):\n");
-    bar(PACK(ctx));
+    for(int j = 0; j < 3; j++)
+    {
+        Debug_Print("\n\nFRAME %d\n", j);
+        for(int i = 0; i < 3; i++)
+        {
+            Debug_Print("\nCALLING BAR (i = %d):\n", i);
+            bar(PC(ctx, i));
+        }
+    }
     
     //auto ctx_b = pack(&ctx, __COUNTER__+1, 0);
     //bar(ctx_b);
