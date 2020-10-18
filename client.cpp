@@ -16,7 +16,7 @@ int client_entry_point(int num_args, char **arguments)
 
     
 
-#if 0
+#if 1
     UI_Context ctx = UI_Context();
     ctx.manager = ui;
 

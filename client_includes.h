@@ -23,4 +23,6 @@
 #include "string.h"
 #include "string.cpp"
 
+#include "random.cpp"
+
 #include "ui.cpp"

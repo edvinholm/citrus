@@ -100,18 +100,34 @@ struct UI_ID_Manager
     
 };
 
+enum UI_Element_Type
+{
+    BUTTON
+};
+
+struct UI_Element
+{
+    UI_Element_Type type;
+};
+
 struct UI_Manager
 {
     UI_ID_Manager id_manager;
 
     UI_Path current_path;
     u64     current_path_length;
+
+    Array<UI_ID,      ALLOC_UI> element_ids;
+    Array<UI_Element, ALLOC_UI> elements;
 };
+
+
+
+
 
 inline
 void assert_state_valid(UI_ID_Manager *manager)
 {
-    
 }
 
 inline
@@ -120,6 +136,8 @@ void assert_state_valid(UI_Manager *ui)
     auto &id_manager = ui->id_manager;
     
     assert_state_valid(&id_manager);
+
+    Assert(ui->element_ids.n == ui->elements.n);
 }
 
 u8 ui_path_hash(UI_Path *path, u64 length)
@@ -228,6 +246,41 @@ void pop_ui_location(UI_Manager *ui)
 {
     Assert(ui->current_path_length > 0);
     ui->current_path_length--;
+}
+
+
+void init_ui_element(UI_Element_Type type, UI_Element *_e)
+{
+    Zero(*_e);
+    _e->type = type;
+
+    switch(_e->type) {
+        case BUTTON: break;
+            
+        default: Assert(false); break;
+    }
+}
+
+UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager *ui)
+{
+    assert_state_valid(ui);
+
+    for(s64 i = 0; i < ui->element_ids.n; i++)
+    {
+        if(ui->element_ids[i] == id)
+        {
+            UI_Element *e = ui->elements.e + i;
+            Assert(e->type == type);
+
+            return e;
+        }
+    }
+
+    // NO ELEMENT FOUND -- SO CREATE ONE.
+    UI_Element new_element;
+    init_ui_element(type, &new_element);
+    array_add(ui->element_ids, id);
+    return array_add(ui->elements, new_element);
 }
 
 
@@ -368,5 +421,8 @@ void button(UI_Context ctx)
     
     UI_Manager *ui = ctx.manager;
 
-    Debug_Print("Button ID: %I64X\n", ctx.get_id());
+    UI_ID id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, BUTTON, ui);
+   
+    Debug_Print("Button ID: %I64X\n", id);
 }
