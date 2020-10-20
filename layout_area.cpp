@@ -301,10 +301,10 @@ Rect cut_right_square(Layout_Manager *manager)
 
 
 #define shrink(...) \
-    set_area(shrunken(area(), __VA_ARGS__));
+    set_area(shrunken(area(ctx.layout), __VA_ARGS__));
 
 #define _SHRINK_(...) \
-    _AREA_(shrunken(area(), __VA_ARGS__));
+    _AREA_(shrunken(area(ctx.layout), __VA_ARGS__));
 
 
 #define grow(...) \

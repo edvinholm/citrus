@@ -18,6 +18,8 @@
 #include "shaders.h"
 #include "gpu_gl.cpp"
 
+#include "input.h"
+
 #include "ui.cpp"
 
 #include "graphics.h"

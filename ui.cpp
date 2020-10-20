@@ -108,6 +108,7 @@ enum UI_Element_Type
 struct UI_Button
 {
     Rect a;
+    bool hovered;
 };
 
 struct UI_Element
@@ -314,13 +315,30 @@ void ui_build_begin(UI_Manager *ui)
 #endif
 }
 
-void ui_build_end(UI_Manager *ui)
+void ui_build_end(UI_Manager *ui, User_Input *input)
 {
 #if DEBUG
     Assert(ui->build_began == true);
     ui->build_began = false;
     Assert(ui->current_path_length == 0);
 #endif
+
+
+
+
+    for(u64 i = 0; i < ui->elements.n; i++)
+    {
+        UI_Element *e = &ui->elements[i];
+
+        if(e->type != BUTTON) continue;
+
+        UI_Button &btn = e->button;
+        btn.hovered = point_inside_rect(input->mouse_p, btn.a);
+    }
+
+
+
+    
     
     s64 num_removed = 0;
 
@@ -483,6 +501,5 @@ void button(UI_Context ctx)
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
     
     auto *btn = &e->button;
-    btn->a = area(ctx.layout);
-    
+    btn->a = area(ctx.layout);    
 }

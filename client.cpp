@@ -1,14 +1,11 @@
 
-
 struct Client
 {
     Layout_Manager layout;
     UI_Manager ui;
+    User_Input input;
 
     Window main_window;
-
-    // @Temporary!!!!!!!!!
-    v2 mouse_p;
 };
 
 // @Temporary
@@ -188,9 +185,19 @@ DWORD render_loop(void *loop_)
                     { 1, 0, 1, 1 },
                     { 0, 1, 1, 1 }
                 };
+                
+                v4 h[6] = {
+                    { 0, 0, 0.5, 1 },
+                    { 1, 0, 0.5, 1 },
+                    { 0, 1, 0.5, 1 },
+                    
+                    { 0, 0, 0.5, 1 },
+                    { 1, 0, 0.5, 1 },
+                    { 0, 1, 0.5, 1 }
+                };
 
                 {
-                    triangles_now(v, uv, c, 6, &gfx);
+                    triangles_now(v, uv, (btn.hovered) ? h : c, 6, &gfx);
                 }
             }
 
@@ -256,16 +263,16 @@ void stop_render_loop(Render_Loop *loop)
 void client_ui(UI_Context ctx, Client *client)
 {
     U(ctx);
-    
-    v2 mouse_p = client->mouse_p;
 
-    { _LEFT_CUT_(mouse_p.x);
-        { _TOP_CUT_(mouse_p.y); button(P(ctx)); }
-        {                       button(P(ctx)); }
-    }
+    Rect a = area(ctx.layout);
+
+    _SHRINK_(10);
+    _GRID_(2, 2, 10);
+
+    for(int i = 0; i < 4; i++)
     {
-        { _TOP_CUT_(mouse_p.y); button(P(ctx)); }
-        {                       button(P(ctx)); }
+        _CELL_();
+        button(PC(ctx, i));
     }
 }
 
@@ -273,8 +280,9 @@ void client_ui(UI_Context ctx, Client *client)
 void client_mouse_move(Window *window, int x, int y, u64 ms, void *client_)
 {
     auto *client = (Client *)client_;
+    auto &input = client->input;
     
-    client->mouse_p = { (float)x, (float)y };
+    input.mouse_p = { (float)x, (float)y };
 }
 
 void client_set_window_delegate(Window *window, Client *client)
@@ -373,7 +381,7 @@ int client_entry_point(int num_args, char **arguments)
                 pop_layout(layout);
 
             }
-            ui_build_end(ui);
+            ui_build_end(ui, &client.input);
             // //////// //
             
         }
