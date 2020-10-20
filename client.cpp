@@ -54,10 +54,16 @@ DWORD render_loop(void *client_)
         u64 second = platform_milliseconds() / 1000;
         frame_begin(main_window);
 
+        // @Temporary
+        float r;
+        float b;
+        
         lock_mutex(ui->mutex);
         {
-            glClearColor(clear_r, random_float() * 0.1, clear_b, 1); // nocheckin
-            glClear(GL_COLOR_BUFFER_BIT); // nocheckin
+            // @Temporary
+            r = clear_r;
+            b = clear_b;
+            
             // TODO "Draw" UI (Collect data and figure out what to draw)
 
             if(second != last_second) {
@@ -69,6 +75,10 @@ DWORD render_loop(void *client_)
         }
         unlock_mutex(ui->mutex);
 
+        // @Temporary
+        glClearColor(r, random_float() * 0.1, b, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        
         // TODO Actually draw things. (Send to graphics library, swap buffers...)
         
         frame_end(main_window);
