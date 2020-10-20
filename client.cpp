@@ -153,6 +153,14 @@ DWORD render_loop(void *loop_)
         
         lock_mutex(loop->mutex);
         {
+            if(loop->state == Render_Loop::SHOULD_EXIT) {
+                unlock_mutex(loop->mutex);
+                break;
+            }
+
+
+
+                
             // Draw UI
             
             for(int i = 0; i < ui->elements.n; i++)
@@ -212,7 +220,6 @@ DWORD render_loop(void *loop_)
         }
         unlock_mutex(loop->mutex);
 
-        // Draw other stuff here
         
         frame_end(main_window, &gfx);
         last_second = second;
@@ -392,6 +399,8 @@ int client_entry_point(int num_args, char **arguments)
         // NOTE: Experienced stuttering when not sleeping here -- guessing that this thread kept locking the mutex without letting the render loop render its frame(s).
         platform_sleep_microseconds(100);
     }
+
+    stop_render_loop(&render_loop);
  
     return 0;
 }
