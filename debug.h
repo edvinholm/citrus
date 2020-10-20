@@ -1,8 +1,10 @@
 
+#define CONCAT(A, B) A##B
 
 #if DEBUG && OS_WINDOWS
 
 int DEBUG_timed_block_depth = 0;
+
 
 #define TIMED_BLOCK_(Ident, BlockIdent, BlockName, Limit)       \
     char *BlockIdent = ##BlockName;                                     \

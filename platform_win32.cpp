@@ -252,48 +252,64 @@ LPARAM LParam
         } break;
         
         case WM_LBUTTONDOWN:
-            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_PRIMARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle);
+
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_PRIMARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
         
         case WM_RBUTTONDOWN:
-            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_SECONDARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle);
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_SECONDARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
         
         case WM_MBUTTONDOWN:
-            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_AUXILARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle);
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, MB_AUXILARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
 
         case WM_XBUTTONDOWN:
         {
             SetCapture(WIN32_DEFAULT_INPUT_WINDOW->Handle); 
             Mouse_Button Button= (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? MB_FOURTH : MB_FIFTH;
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, Button, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_down(WIN32_DEFAULT_INPUT_WINDOW, Button, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         } break;
 
         
         case WM_LBUTTONUP:
-            ReleaseCapture(); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_PRIMARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            ReleaseCapture();
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_PRIMARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
         
         case WM_RBUTTONUP:
-            ReleaseCapture(); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_SECONDARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            ReleaseCapture();
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_SECONDARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
         
         case WM_MBUTTONUP:
-            ReleaseCapture(); 
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_AUXILARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            ReleaseCapture();
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, MB_AUXILARY, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         break;
         
         case WM_XBUTTONUP:
         {
             ReleaseCapture(); 
             Mouse_Button Button = (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? MB_FOURTH : MB_FIFTH;
-            WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, Button, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
+            
+            if(WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up)
+                WIN32_DEFAULT_INPUT_WINDOW->delegate.mouse_up(WIN32_DEFAULT_INPUT_WINDOW, Button, WIN32_DEFAULT_INPUT_WINDOW->delegate.data);
         } break;
             
         
@@ -354,8 +370,8 @@ LPARAM LParam
     return Result;
 }
 
-//NOTE: Returns true if the window should close.
-bool platform_process_input(Window *window, u8 mouse_buttons_down /* @Hack */)
+//NOTE: Returns false if the window should close.
+bool platform_process_input(Window *window)
 {
     MSG Message;
     while(PeekMessage(&Message, window->Handle, 0, 0, PM_REMOVE))
@@ -364,10 +380,9 @@ bool platform_process_input(Window *window, u8 mouse_buttons_down /* @Hack */)
         DispatchMessage(&Message);
     }
 
-    return window->CloseButtonClicked;
+    return !window->CloseButtonClicked;
 }
 
-#if 0
 inline
 HGLRC _win32_init_opengl(HWND Window)
 {
@@ -420,8 +435,6 @@ HGLRC _win32_init_opengl(HWND Window)
     return OpenGLContext;
 }
 
-#endif
-
 //TODO: When destroying window:
 /*
   ReleaseDC(WindowHandle, WindowDeviceContext);
@@ -440,9 +453,6 @@ void platform_get_dpi(Window *window, u32 *_x, u32 *_y)
 void platform_create_gl_window(Window *_window, const char *Title = "",
                                int Width = 640, int Height = 480, int X = CW_USEDEFAULT, int Y = CW_USEDEFAULT)
 {
-    Assert(false);
-    
-    
     HINSTANCE Instance = GetModuleHandle(0);
     
     WNDCLASS WindowClass = {};
@@ -472,7 +482,6 @@ void platform_create_gl_window(Window *_window, const char *Title = "",
         
         if (WindowHandle)
         {
-#if 0
             HGLRC OpenGLContext = _win32_init_opengl(WindowHandle);
             HDC WindowDeviceContext = GetDC(WindowHandle);
             
@@ -490,7 +499,6 @@ void platform_create_gl_window(Window *_window, const char *Title = "",
             _window->DeviceContext = WindowDeviceContext;
             
             if(!WIN32_DEFAULT_INPUT_WINDOW) WIN32_DEFAULT_INPUT_WINDOW = _window;
-#endif
         }
     }
     

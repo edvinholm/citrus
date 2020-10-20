@@ -3,6 +3,8 @@ struct Client
 {   
     Layout_Manager layout;
     UI_Manager ui;
+
+    Window main_window;
 };
 
 
@@ -36,6 +38,8 @@ int client_entry_point(int num_args, char **arguments)
     
     Client client = {0};
     UI_Manager *ui = &client.ui;
+
+    platform_create_gl_window(&client.main_window, "Citrus");
     
     Thread render_loop_thread;
     if(!create_thread(&render_loop, &client, &render_loop_thread)) {
@@ -43,11 +47,116 @@ int client_entry_point(int num_args, char **arguments)
         return 1;
     }
 
-    while(true)
+    UI_Context ui_ctx = UI_Context();
+    ui_ctx.manager = ui;
+
+    while(platform_process_input(&client.main_window))
     {
         ui_build_begin(ui);
         {
-            Debug_Print("UI build!\n");
+            {
+                TIMED_BLOCK("Buttons");
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+                button(P(ui_ctx));
+            }
             Sleep(200);
         }
         ui_build_end(ui);

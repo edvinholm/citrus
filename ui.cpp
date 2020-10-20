@@ -47,7 +47,7 @@
 
 // PACK WITH COUNT
 #define PC(CTX, COUNT)                          \
-    ctx.pack(__COUNTER__+1, COUNT)
+    CTX.pack(__COUNTER__+1, COUNT)
 
 // PACK
 #define P(CTX)                                  \
@@ -468,10 +468,8 @@ private:
 
 
 void button(UI_Context ctx)
-{
+{    
     U(ctx);
     
-    UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
-
-    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);   
 }
