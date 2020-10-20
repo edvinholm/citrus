@@ -14,11 +14,6 @@ struct Window
     Window_Delegate delegate;
 };
 
-struct Thread
-{
-    HANDLE handle;
-};
-
 
 
 
@@ -611,6 +606,11 @@ bool platform_create_thread(DWORD (*proc)(void *), void *param, Thread *_thread)
     return (_thread->handle != NULL);
 }
 
+void platform_join_thread(Thread &thread)
+{
+    WaitForSingleObject(thread.handle, INFINITE);
+}
+
 void platform_create_mutex(Mutex *_mutex)
 {
     HANDLE mutex = CreateMutexA(NULL, false, NULL);
@@ -726,4 +726,3 @@ void platform_sleep_microseconds(u64 microseconds)
         if(delta_us >= microseconds) break;
     }
 }
-

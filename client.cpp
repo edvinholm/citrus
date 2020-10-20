@@ -1,6 +1,7 @@
 
+
 struct Client
-{   
+{
     Layout_Manager layout;
     UI_Manager ui;
 
@@ -15,6 +16,7 @@ int fps = 0;
 int frames_this_second = 0;
 int ups = 0;
 int updates_this_second = 0;
+
 
 
 
@@ -84,21 +86,58 @@ bool init_graphics(Window *window, Graphics *gfx)
     return true;
 }
 
-DWORD render_loop(void *client_)
-{
-    // nocheckin
-    // TODO: @ThreadSafety Other threads should wait for this to init, because it uses things like temporary memory....
-    
-    Client *client = (Client *)client_;
-    UI_Manager *ui = &client->ui;    
-    Window *main_window = &client->main_window;
 
+
+
+
+
+
+struct Render_Loop
+{
+    enum State
+    {
+        INITIALIZING,
+        RUNNING,
+        SHOULD_EXIT
+    };
+    
+    Mutex mutex;
+    
+    State  state;
+    Thread thread;
+    Client *client;
+};
+
+DWORD render_loop(void *loop_)
+{
+    Render_Loop *loop = (Render_Loop *)loop_;
+
+    Client     *client;
+    UI_Manager *ui;    
+    Window     *main_window;
+    
     Graphics gfx = {0};
 
-    bool graphics_init_result = init_graphics(main_window, &gfx);
-    Assert(graphics_init_result);
+    // START INITIALIZATION //
+    lock_mutex(loop->mutex);
+    {
+        Assert(loop->state == Render_Loop::INITIALIZING);
+        
+        client =      loop->client;
+        ui =          &client->ui;    
+        main_window = &client->main_window;
+        
+        bool graphics_init_result = init_graphics(main_window, &gfx);
+        Assert(graphics_init_result);
 
+        // INITIALIZATION DONE //        
+        loop->state = Render_Loop::RUNNING;
+    }
+    unlock_mutex(loop->mutex);
+
+    
     u64 last_second = platform_milliseconds() / 1000;
+    
     while(true)
     {
         u64 second = platform_milliseconds() / 1000;
@@ -115,12 +154,9 @@ DWORD render_loop(void *client_)
             
         gpu_set_viewport(0, 0, gfx.frame_s.w, gfx.frame_s.h);
         
-        lock_mutex(ui->mutex);
+        lock_mutex(loop->mutex);
         {
             // Draw UI
-            
-            // nocheckin
-            v2 asum = {0};
             
             for(int i = 0; i < ui->elements.n; i++)
             {
@@ -130,15 +166,6 @@ DWORD render_loop(void *client_)
                 Assert(e->type == BUTTON);
                 auto &btn = e->button;
                 auto a = btn.a;
-
-                // nocheckin
-                switch(i) {
-                    case 0: asum.w += a.w; asum.h += a.h; break;
-                    case 1:                asum.h += a.h; break;
-                    case 2: asum.w += a.w;                break;
-                    case 3:                               break;
-                    default: Assert(false); break;
-                }
 
                 v3 v[6] = {
                     { a.x,       a.y,       0 },
@@ -152,7 +179,7 @@ DWORD render_loop(void *client_)
         
                 v2 uv[6] = {0};
 
-                v4 m_c[6] = {
+                v4 c[6] = {
                     { 0, 0, 1, 1 },
                     { 1, 0, 1, 1 },
                     { 0, 1, 1, 1 },
@@ -161,19 +188,9 @@ DWORD render_loop(void *client_)
                     { 1, 0, 1, 1 },
                     { 0, 1, 1, 1 }
                 };
-                    
-                v4 n_c[6] = {
-                    { 0, 0, 0, 1 },
-                    { 1, 0, 0, 1 },
-                    { 0, 1, 0, 1 },
-                    
-                    { 0, 0, 0, 1 },
-                    { 1, 0, 0, 1 },
-                    { 0, 1, 0, 1 }
-                };
 
                 {
-                    triangles_now(v, uv, (btn.marked) ? m_c : n_c, 6, &gfx);
+                    triangles_now(v, uv, c, 6, &gfx);
                 }
             }
 
@@ -186,7 +203,7 @@ DWORD render_loop(void *client_)
             frames_this_second++;
             
         }
-        unlock_mutex(ui->mutex);
+        unlock_mutex(loop->mutex);
 
         // Draw other stuff here
         
@@ -197,6 +214,44 @@ DWORD render_loop(void *client_)
     return 0;
 }
 
+// NOTE: Assumes you've zeroed *_ctx
+bool start_render_loop(Render_Loop *_loop, Client *client)
+{
+    create_mutex(_loop->mutex);
+    _loop->state = Render_Loop::INITIALIZING;
+    _loop->client = client;
+
+    // Start thread
+    if(!create_thread(&render_loop, _loop, &_loop->thread)) {
+        delete_mutex(_loop->mutex);
+        return false;
+    } 
+
+    // Wait for the loop to initialize itself.
+    while(true) {
+        lock_mutex(_loop->mutex);
+        defer(unlock_mutex(_loop->mutex););
+
+        if(_loop->state != Render_Loop::INITIALIZING) {
+            Assert(_loop->state == Render_Loop::RUNNING);
+            break;
+        }
+    }
+
+    return true;
+}
+
+void stop_render_loop(Render_Loop *loop)
+{
+    lock_mutex(loop->mutex);
+    Assert(loop->state == Render_Loop::RUNNING);
+    loop->state = Render_Loop::SHOULD_EXIT;
+    unlock_mutex(loop->mutex);
+
+    join_thread(loop->thread);
+
+    delete_mutex(loop->mutex);
+}
 
 void client_ui(UI_Context ctx, Client *client)
 {
@@ -263,9 +318,10 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // START RENDER THREAD //
-    Thread render_loop_thread;
-    if(!create_thread(&render_loop, &client, &render_loop_thread)) {
-        Debug_Print("Unable to start render loop thread.\n");
+    Render_Loop render_loop = {0};
+    if(!start_render_loop(&render_loop, &client))
+    {
+        Debug_Print("Unable to start render loop.\n");
         return 1;
     }
     //--
@@ -294,30 +350,35 @@ int client_entry_point(int num_args, char **arguments)
         platform_get_window_rect(main_window, &window_a.x, &window_a.y, &window_a.w, &window_a.h);
         layout->root_size = window_a.s;
         // //////////////////////////////////// //
-
-        // BUILD UI //
-        ui_build_begin(ui);
+        
+        lock_mutex(render_loop.mutex);
         {
+            // BUILD UI //
+            ui_build_begin(ui);
+            {
             
-            push_area_layout(window_a, layout);
+                push_area_layout(window_a, layout);
             
-            client_ui(P(ui_ctx), &client);
+                client_ui(P(ui_ctx), &client);
             
 #if DEBUG
-            if(second != last_second) {
-                ups = updates_this_second;
-                updates_this_second = 0;
-            }
-            updates_this_second++;
+                if(second != last_second) {
+                    ups = updates_this_second;
+                    updates_this_second = 0;
+                }
+                updates_this_second++;
             
-            platform_set_window_title(main_window, concat_tmp("Citrus | ", fps, " FPS | ", ups, " UPS", sb));
+                platform_set_window_title(main_window, concat_tmp("Citrus | ", fps, " FPS | ", ups, " UPS", sb));
 #endif
-            pop_layout(layout);
+                pop_layout(layout);
 
-        }
-        ui_build_end(ui);
-        // //////// //
+            }
+            ui_build_end(ui);
+            // //////// //
             
+        }
+        unlock_mutex(render_loop.mutex);
+        
         last_second = second;
 
         // NOTE: Experienced stuttering when not sleeping here -- guessing that this thread kept locking the mutex without letting the render loop render its frame(s).

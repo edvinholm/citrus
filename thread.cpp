@@ -8,6 +8,12 @@ bool create_thread(DWORD (*proc)(void *), void *param, Thread *_thread)
     return platform_create_thread(proc, param, _thread);
 }
 
+inline
+void join_thread(Thread &thread)
+{
+    return platform_join_thread(thread);
+}
+
 
 
 inline

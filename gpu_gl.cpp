@@ -19,7 +19,7 @@ bool gpu_init(float clear_color_r, float clear_color_g, float clear_color_b, flo
     return (error == 0);
 }
 
-void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader /* nocheckin */)
+void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader)
 {   
     Assert(set_index < ARRLEN(vertex_shader->buffer_sets));
     auto &set = vertex_shader->buffer_sets[set_index];

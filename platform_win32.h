@@ -4,6 +4,12 @@ struct Mutex
     HANDLE handle;
 };
 
+struct Thread
+{
+    HANDLE handle;
+};
+
+
 
 
 u32 platform_big_endian_32(u32 int_with_machine_endianness);

@@ -108,7 +108,6 @@ enum UI_Element_Type
 struct UI_Button
 {
     Rect a;
-    bool marked; // nocheckin @Temporary
 };
 
 struct UI_Element
@@ -122,7 +121,6 @@ struct UI_Element
 
 struct UI_Manager
 {
-    Mutex mutex;
     
 #if DEBUG
     bool build_began;
@@ -141,7 +139,6 @@ struct UI_Manager
 
 void init_ui_manager(UI_Manager *manager)
 {
-    create_mutex(manager->mutex);
 }
 
 
@@ -309,8 +306,6 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
 
 void ui_build_begin(UI_Manager *ui)
 {
-    lock_mutex(ui->mutex);
-    
 #if DEBUG
     Assert(ui->build_began == false);
     ui->build_began = true;
@@ -354,7 +349,6 @@ void ui_build_end(UI_Manager *ui)
 
     //if(num_removed > 0) Debug_Print("Removed %lld dead elements.\n", num_removed);
 
-    unlock_mutex(ui->mutex);
 }
 
 
