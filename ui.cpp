@@ -105,9 +105,19 @@ enum UI_Element_Type
     BUTTON
 };
 
+struct UI_Button
+{
+    Rect a;
+    bool marked; // nocheckin @Temporary
+};
+
 struct UI_Element
 {
     UI_Element_Type type;
+
+    union {
+        UI_Button button;
+    };
 };
 
 struct UI_Manager
@@ -129,7 +139,10 @@ struct UI_Manager
 };
 
 
-
+void init_ui_manager(UI_Manager *manager)
+{
+    create_mutex(manager->mutex);
+}
 
 
 inline
@@ -311,6 +324,7 @@ void ui_build_end(UI_Manager *ui)
 #if DEBUG
     Assert(ui->build_began == true);
     ui->build_began = false;
+    Assert(ui->current_path_length == 0);
 #endif
     
     s64 num_removed = 0;
@@ -338,7 +352,7 @@ void ui_build_end(UI_Manager *ui)
 
     }
 
-    Debug_Print("Removed %lld dead elements.\n", num_removed);
+    //if(num_removed > 0) Debug_Print("Removed %lld dead elements.\n", num_removed);
 
     unlock_mutex(ui->mutex);
 }
@@ -350,7 +364,8 @@ void ui_build_end(UI_Manager *ui)
 
 struct UI_Context
 {
-    UI_Manager *manager;
+    UI_Manager     *manager;
+    Layout_Manager *layout;
     
     enum State
     {
@@ -471,5 +486,9 @@ void button(UI_Context ctx)
 {    
     U(ctx);
     
-    UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);   
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
+    
+    auto *btn = &e->button;
+    btn->a = area(ctx.layout);
+    
 }

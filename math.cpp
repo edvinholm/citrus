@@ -108,6 +108,10 @@ struct Quat
 const Quat Q_IDENTITY = {0, 0, 0, 1};
 
 
+#include "matrix.cpp"
+
+
+
 inline
 bool operator == (Quat q, Quat r)
 {

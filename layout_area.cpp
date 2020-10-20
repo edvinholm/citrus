@@ -67,56 +67,56 @@ void set_area_width(float w, Layout_Manager *manager)
 
 
 #define _AREA_(A) \
-    push_area_layout(A); \
-    defer(pop_layout(););
+    push_area_layout(A, ctx.layout);                       \
+    defer(pop_layout(ctx.layout););
 
 #define _AREA_REL_(A) \
-    push_area_layout(translated(A, area().p));\
-    defer(pop_layout(););
+    push_area_layout(translated(A, area().p), ctx.layout);\
+    defer(pop_layout(ctx.layout););
 
 #define _AREA_COPY_() \
-    _AREA_(area());
+    _AREA_(area(ctx.layout));
 
 
 #define _TOP_(H) \
-    _AREA_(top_of(area(), H));
+    _AREA_(top_of(area(ctx.layout), H));
 
 #define _BOTTOM_(H) \
-    _AREA_(bottom_of(area(), H));
+    _AREA_(bottom_of(area(ctx.layout), H));
 
 #define _LEFT_(W) \
-    _AREA_(left_of(area(), W));
+    _AREA_(left_of(area(ctx.layout), W));
 
 #define _RIGHT_(W) \
-    _AREA_(right_of(area(), W));
+    _AREA_(right_of(area(ctx.layout), W));
 
 
 #define _TOP_CENTER_(W, H) \
-    _AREA_(center_top_of(area(), W, H));
+    _AREA_(center_top_of(area(ctx.layout), W, H));
 
 #define _BOTTOM_CENTER_(W, H) \
-    _AREA_(center_bottom_of(area(), W, H));
+    _AREA_(center_bottom_of(area(ctx.layout), W, H));
 
 #define _LEFT_CENTER_(W, H) \
-    _AREA_(center_left_of(area(), W, H));
+    _AREA_(center_left_of(area(ctx.layout), W, H));
 
 #define _RIGHT_CENTER_(W, H) \
-    _AREA_(center_right_of(area(), W, H));
+    _AREA_(center_right_of(area(ctx.layout), W, H));
 
 
 #define _CENTER_X_(W) \
-    _AREA_(center_x(area(), W));
+    _AREA_(center_x(area(ctx.layout), W));
 
 #define _CENTER_Y_(H) \
-    _AREA_(center_y(area(), H));
+    _AREA_(center_y(area(ctx.layout), H));
 
 #define _CENTER_(W, H) \
-    _AREA_(center_of(area(), W, H));
+    _AREA_(center_of(area(ctx.layout), W, H));
 
 
 inline
 Rect cut_top(float h, Layout_Manager *manager)
-{
+{   
     Rect a = area(manager);
     Rect result = cut_top_off(&a, h);
     set_area(a, manager);
@@ -151,16 +151,16 @@ Rect cut_right(float w, Layout_Manager *manager)
 }
 
 #define _TOP_CUT_(H) \
-    _AREA_(cut_top(H));
+    _AREA_(cut_top(H, ctx.layout));
 
 #define _BOTTOM_CUT_(H) \
-    _AREA_(cut_bottom(H));
+    _AREA_(cut_bottom(H, ctx.layout));
 
 #define _LEFT_CUT_(W) \
-    _AREA_(cut_left(W));
+    _AREA_(cut_left(W, ctx.layout));
 
 #define _RIGHT_CUT_(W) \
-    _AREA_(cut_right(W));
+    _AREA_(cut_right(W, ctx.layout));
 
 
 //NOTE: @BadName: "slide top" means take top_of(a, h) and translate a down by h.

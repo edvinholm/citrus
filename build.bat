@@ -32,23 +32,23 @@ cl -D OS_WINDOWS=1 -D DEBUG=1  /EHsc main.cpp /Fecitrus.exe /Z7 /link Shcore.lib
 IF %ERRORLEVEL% NEQ 0 EXIT 1
 echo Done.
 
-echo ----------------------------------------------------------------
-
-echo ############# COMPILING SERVER #############
-cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib opengl32.lib gdi32.lib -incremental:no /opt:ref /opt:icf /nologo
-
-IF %ERRORLEVEL% NEQ 0 EXIT 1
-echo Done.
-
 REM echo ----------------------------------------------------------------
 
-REM echo Copying shader code...
+REM echo ############# COMPILING SERVER #############
+REM cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib opengl32.lib gdi32.lib -incremental:no /opt:ref /opt:icf /nologo
 
-REM copy vertex_shader.glsl         "res\vertex_shader.glsl"
-REM copy fragment_shader.glsl         "res\fragment_shader.glsl"
-
+REM IF %ERRORLEVEL% NEQ 0 EXIT 1
 REM echo Done.
 
-REM echo ----------------------------------------------------------------
+echo ----------------------------------------------------------------
+
+echo Copying shader code...
+
+copy vertex_shader.glsl    "res\vertex_shader.glsl"
+copy fragment_shader.glsl  "res\fragment_shader.glsl"
+
+echo Done.
+
+echo ----------------------------------------------------------------
 
 IF %ERRORLEVEL% NEQ 0 EXIT 1

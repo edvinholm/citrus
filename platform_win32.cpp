@@ -579,6 +579,7 @@ u64 platform_milliseconds()
 }
 
 
+// Counts per second
 inline
 s64 platform_performance_counter_frequency()
 {
@@ -619,7 +620,8 @@ void platform_create_mutex(Mutex *_mutex)
 
 void platform_lock_mutex(Mutex *mutex)
 {
-    WaitForSingleObject(mutex->handle, INFINITE);
+    auto result = WaitForSingleObject(mutex->handle, INFINITE);
+    Assert(result == WAIT_OBJECT_0);
 }
 
 void platform_unlock_mutex(Mutex *mutex)
@@ -711,4 +713,17 @@ bool platform_get_iso_language(String *_iso, Allocator_ID allocator)
     return true;
 }
 
+
+void platform_sleep_microseconds(u64 microseconds)
+{
+    u64 start = platform_performance_counter();
+    while(true)
+    {
+        u64 now   = platform_performance_counter();
+        u64 delta = now - start;
+        double delta_us = ((double)delta / (double)platform_performance_counter_frequency()) * 1000 * 1000;
+
+        if(delta_us >= microseconds) break;
+    }
+}
 

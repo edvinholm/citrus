@@ -478,7 +478,6 @@ u16 reversed_byte_order_16(u32 integer)
 
 int machine_is_big_endian = -1; // 0 == false, 1 == true, -1 == uninitialized.
 
-#if 0
 u32 big_endian_32(u32 int_with_machine_endianness){
     return platform_big_endian_32(int_with_machine_endianness);
 }
@@ -492,7 +491,6 @@ u32 machine_endian_from_big_32(u32 big_endian_int){
 u16 machine_endian_from_big_16(u16 big_endian_int){
     return platform_machine_endian_from_big_16(big_endian_int);
 }
-#endif
 
 
 u32 machine_endian_from_little_32(u32 i){

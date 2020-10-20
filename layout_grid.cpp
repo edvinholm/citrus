@@ -110,38 +110,38 @@ Rect current_area_from_grid_layout(Grid_Layout *grid)
 
 
 #define _GRID_(...) \
-    push_grid_layout(__VA_ARGS__); \
-    defer(pop_layout(););
+    push_grid_layout(__VA_ARGS__, ctx.layout);             \
+    defer(pop_layout(ctx.layout););
 
 
 #define _CELL_() \
-    next_grid_cell();
+    next_grid_cell(ctx.layout);
 
 
 inline
 void push_columns(int n, Layout_Manager *manager, float spacing = 0.0f) { push_grid_layout(area(manager), n, 1, spacing, manager); }
 
 #define _COLUMNS_(...) \
-    push_columns(__VA_ARGS__); \
-    defer(pop_layout(););
+    push_columns(__VA_ARGS__, ctx.layout);                 \
+    defer(pop_layout(ctx.layout););
 
 #define _COL_() \
-    _AREA_(next_grid_cell());
+    _AREA_(next_grid_cell(ctx.layout));
 
 #define _COL_I_(Ix) \
-    _AREA_(grid_cell(Ix, 0, current_grid_layout()));
+    _AREA_(grid_cell(Ix, 0, current_grid_layout(ctx.layout)));
 
 
 inline
 void push_rows(int n, Layout_Manager *manager, float spacing = 0.0f) { push_grid_layout(area(manager), 1, n, spacing, manager); }
 
 #define _ROWS_(...) \
-    push_rows(__VA_ARGS__); \
-    defer(pop_layout(););
+    push_rows(__VA_ARGS__, ctx.layout);                    \
+    defer(pop_layout(ctx.layout););
 
 #define _ROW_() \
-    _AREA_(next_grid_cell());
+    _AREA_(next_grid_cell(ctx.layout));
 
 #define _ROW_I_(Ix) \
-    _AREA_(grid_cell(0, Ix, current_grid_layout()));
+    _AREA_(grid_cell(0, Ix, current_grid_layout(ctx.layout)));
 

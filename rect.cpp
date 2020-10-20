@@ -429,8 +429,7 @@ inline
 Rect removed_bottom(Rect Rect, float Bottom)
 {
     return {
-        Rect.x, Rect.y,
-        Rect.w, Rect.h - Bottom
+        Rect.x, Rect.y, Rect.w, max(0, Rect.h - Bottom)
     };
 }
 
@@ -454,8 +453,7 @@ inline
 Rect removed_top(Rect Rect, float Top)
 {
     return {
-        Rect.x, Rect.y + Top,
-        Rect.w, Rect.h - Top
+        Rect.x, min(Rect.y + Rect.h, Rect.y + Top), Rect.w, max(0, Rect.h - Top)
     };
 }
 

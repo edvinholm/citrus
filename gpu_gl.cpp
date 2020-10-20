@@ -19,6 +19,34 @@ bool gpu_init(float clear_color_r, float clear_color_g, float clear_color_b, flo
     return (error == 0);
 }
 
+void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader /* nocheckin */)
+{   
+    Assert(set_index < ARRLEN(vertex_shader->buffer_sets));
+    auto &set = vertex_shader->buffer_sets[set_index];
+           
+    for(int b = 0; b < ARRLEN(set.buffers); b++)
+    {
+        auto &buffer = set.buffers[b];
+        glBindBuffer(GL_ARRAY_BUFFER, buffer); Assert(glGetError() == 0);
+
+        // @Hack
+        GLint element_size = 0;
+        switch(b % 3) {
+            
+            case 0: { element_size = 3; } break;
+            case 1: { element_size = 2; } break;
+            case 2: { element_size = 4; } break;
+
+            default: Assert(false); break;
+        }
+        
+        glVertexAttribPointer(vertex_shader->buffer_attributes[b], element_size, GL_FLOAT, GL_FALSE, 0, 0); Assert(glGetError() == 0);
+        glEnableVertexAttribArray(vertex_shader->buffer_attributes[b]); Assert(glGetError() == 0);
+        
+        Assert(glGetError() == 0);
+    }
+}
+
 inline
 bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_shader,
                       GPU_Context *context)
@@ -30,7 +58,7 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     
     //@ColorUniform: shader->color_uniform = glGetUniformLocation(program, "color");
     
-    vertex_shader->vertex_position_attr = glGetAttribLocation(program, "aVertexPosition");
+    vertex_shader->position_attr = glGetAttribLocation(program, "aVertexPosition");
     vertex_shader->texcoord_attr = glGetAttribLocation(program, "aTexCoord");
     vertex_shader->color_attr = glGetAttribLocation(program, "color");
     //@Normals: shader->normal_attr = glGetAttribLocation(program, "aNormal");
@@ -44,26 +72,14 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     glEnableVertexAttribArray(shader->normal_attr);
     */
 
-    Zero(vertex_shader->uv_buffer);
-    glGenBuffers(1, &vertex_shader->uv_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_shader->uv_buffer);
-    glVertexAttribPointer(vertex_shader->texcoord_attr, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(vertex_shader->texcoord_attr);
 
-    Zero(vertex_shader->vertex_buffer);
-    glGenBuffers(1, &vertex_shader->vertex_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_shader->vertex_buffer);
-    glVertexAttribPointer(vertex_shader->vertex_position_attr, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(vertex_shader->vertex_position_attr);
+    // GENERATE BUFFERS //
+    glGenBuffers(ARRLEN(vertex_shader->all_buffers), vertex_shader->all_buffers);
+    Assert(glGetError() == 0);
 
-    Zero(vertex_shader->color_buffer);
-    glGenBuffers(1, &vertex_shader->color_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_shader->color_buffer);
-    glVertexAttribPointer(vertex_shader->color_attr, 4, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(vertex_shader->color_attr);
-
-    
-    
+    gpu_set_buffer_set(0, vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
+    // //////////////// //
+        
     fragment_shader->texture_uniform = glGetUniformLocation(program, "texture_");
     fragment_shader->texture_present_uniform = glGetUniformLocation(program, "texture_present");
 
@@ -118,15 +134,18 @@ void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size)
     Assert(data != NULL);
     Assert(size >= 0);
     
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);                      { auto err = glGetError(); Assert(err == 0); }
+    glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
 }
+
 
 inline
 void gpu_draw(GPU_Primitive_Type type, int num_vertices, size_t offset = 0)
 {
     Assert(num_vertices >= 0);
     glDrawArrays(type, offset, num_vertices);
+
+    Assert(glGetError() == 0);
 }
 
 

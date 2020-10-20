@@ -29,15 +29,9 @@
 #include "math.cpp"
 
 #include "memory.h"
-#include "memory.cpp"
-
-#include "array.cpp"
 
 #include "string.h"
 #include "string.cpp"
-
-#include "string_builder.h"
-#include "string_builder.cpp"
 
 // --
 
@@ -51,6 +45,18 @@
 #endif
 
 // --
+
+#include "memory.cpp"
+
+#include "array.cpp"
+
+
+#include "string_builder.h"
+#include "string_builder.cpp"
+
+#include "file.cpp"
+#include "file_read.cpp"
+#include "file_write.cpp"
 
 #include "thread.cpp"
 
@@ -66,6 +72,13 @@
 
 int main(int num_arguments, char **arguments)
 {
+    // Check endianness
+    {
+        u16 x = 1;
+        machine_is_big_endian = (*(u8 *)&x == 0);
+        Debug_Print("machine_is_big_endian: %d\n", machine_is_big_endian);
+    }
+    
 #if SERVER
     return server_entry_point(num_arguments, arguments);
 #else
