@@ -18,7 +18,7 @@
 #include "shaders.h"
 #include "gpu_gl.cpp"
 
-#include "input.h"
+#include "input.cpp"
 
 #include "ui.cpp"
 

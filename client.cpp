@@ -3,7 +3,7 @@ struct Client
 {
     Layout_Manager layout;
     UI_Manager ui;
-    User_Input input;
+    Input_Manager input;
 
     Window main_window;
 };
@@ -204,8 +204,18 @@ DWORD render_loop(void *loop_)
                     { 0, 1, 0.5, 1 }
                 };
 
+                v4 p[6] = {
+                    { 0, 0, 0.5, 1 },
+                    { 0.5, 0, 1.0, 1 },
+                    { 0, 1, 0.5, 1 },
+                    
+                    { 0, 0, 0.5, 1 },
+                    { 0.5, 0, 1.0, 1 },
+                    { 0, 1, 0.5, 1 }
+                };
+
                 {
-                    triangles_now(v, uv, (btn.hovered) ? h : c, 6, &gfx);
+                    triangles_now(v, uv, (btn.hovered) ? ((btn.pressed) ? p : h) : c, 6, &gfx);
                 }
             }
 
@@ -273,23 +283,47 @@ void client_ui(UI_Context ctx, Client *client)
 
     Rect a = area(ctx.layout);
 
-    _SHRINK_(10);
-    _GRID_(2, 2, 10);
+    static int x = 2;
 
-    for(int i = 0; i < 4; i++)
+    _SHRINK_(10);
+    _GRID_(x, x, 10);
+
+    int new_x = x;
+    for(int i = 0; i < x*x; i++)
     {
         _CELL_();
-        button(PC(ctx, i));
+        if(button(PC(ctx, i))) {
+            new_x++;
+        }
     }
+    x = new_x;
 }
 
+
+void client_mouse_down(Window *window, Mouse_Button button, void *client_)
+{
+    auto *client = (Client *)client_;
+    auto &mouse = client->input.mouse;
+
+    mouse.buttons      |= button;
+    mouse.buttons_down |= button;
+}
+
+void client_mouse_up(Window *window, Mouse_Button button, void *client_)
+{
+    auto *client = (Client *)client_;
+    auto &mouse = client->input.mouse;
+
+    mouse.buttons    &= ~button;
+    mouse.buttons_up |=  button;
+}
 
 void client_mouse_move(Window *window, int x, int y, u64 ms, void *client_)
 {
     auto *client = (Client *)client_;
     auto &input = client->input;
     
-    input.mouse_p = { (float)x, (float)y };
+    input.mouse.p = { (float)x, (float)y };
 }
 
 void client_set_window_delegate(Window *window, Client *client)
@@ -302,8 +336,8 @@ void client_set_window_delegate(Window *window, Client *client)
     
     delegate.character_input = NULL;
 
-    delegate.mouse_down = NULL;
-    delegate.mouse_up   = NULL;
+    delegate.mouse_down = &client_mouse_down;
+    delegate.mouse_up   = &client_mouse_up;
     delegate.mouse_move = &client_mouse_move;
 
     window->delegate = delegate;
@@ -323,7 +357,8 @@ int client_entry_point(int num_args, char **arguments)
     Client client = {0};
     init_client(&client);
     Layout_Manager *layout = &client.layout;
-    UI_Manager     *ui = &client.ui;    
+    UI_Manager         *ui = &client.ui;
+    Input_Manager   *input = &client.input;
     Window *main_window = &client.main_window;
     //--
 
@@ -352,8 +387,11 @@ int client_entry_point(int num_args, char **arguments)
     String_Builder sb = {0};
 #endif
    
-    while(platform_process_input(main_window))
-    {   
+    while(true)
+    {
+        new_input_frame(input);
+        if(!platform_process_input(main_window)) break;
+        
         // TIME //
         u64 millisecond = platform_milliseconds();
         u64 second = millisecond / 1000;
@@ -367,7 +405,7 @@ int client_entry_point(int num_args, char **arguments)
         // //////////////////////////////////// //
         
         lock_mutex(render_loop.mutex);
-        {
+        {   
             // BUILD UI //
             ui_build_begin(ui);
             {

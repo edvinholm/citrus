@@ -109,6 +109,8 @@ struct UI_Button
 {
     Rect a;
     bool hovered;
+    bool pressed;
+    bool clicked;
 };
 
 struct UI_Element
@@ -286,7 +288,7 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
 
     for(s64 i = 0; i < ui->element_ids.n; i++)
     {
-        if(ui->element_ids[i] == id)
+        if(ui->element_ids.e[i] == id)
         {
             UI_Element *e = ui->elements.e + i;
             Assert(e->type == type);
@@ -315,7 +317,7 @@ void ui_build_begin(UI_Manager *ui)
 #endif
 }
 
-void ui_build_end(UI_Manager *ui, User_Input *input)
+void ui_build_end(UI_Manager *ui, Input_Manager *input)
 {
 #if DEBUG
     Assert(ui->build_began == true);
@@ -324,8 +326,8 @@ void ui_build_end(UI_Manager *ui, User_Input *input)
 #endif
 
 
-
-
+    
+    auto &mouse = input->mouse;
     for(u64 i = 0; i < ui->elements.n; i++)
     {
         UI_Element *e = &ui->elements[i];
@@ -333,7 +335,21 @@ void ui_build_end(UI_Manager *ui, User_Input *input)
         if(e->type != BUTTON) continue;
 
         UI_Button &btn = e->button;
-        btn.hovered = point_inside_rect(input->mouse_p, btn.a);
+
+        btn.clicked = false;
+        btn.hovered = point_inside_rect(mouse.p, btn.a);
+
+        if(mouse.buttons_down & MB_PRIMARY) {
+            if(btn.hovered) btn.pressed = true;
+        }
+        else if(!(mouse.buttons & MB_PRIMARY)) {
+
+            if(mouse.buttons_up & MB_PRIMARY) {
+                if(btn.pressed && btn.hovered) btn.clicked = true;
+            }
+            btn.pressed = false;
+        }
+        
     }
 
 
@@ -424,7 +440,7 @@ struct UI_Context
         id_given = true;
         UI_ID id = find_or_create_ui_id_for_path(&manager->current_path, manager->current_path_length, &manager->id_manager);
 
-#if DEBUG
+#if DEBUG && false
         if(in_array(manager->id_manager.used_ids_this_build, id)) {
             Debug_Print("ERROR: Same ID used multiple times in the same build.\n");
             Assert(false);
@@ -494,12 +510,14 @@ private:
 
 
 
-void button(UI_Context ctx)
+bool button(UI_Context ctx)
 {    
     U(ctx);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
     
     auto *btn = &e->button;
-    btn->a = area(ctx.layout);    
+    btn->a = area(ctx.layout);
+
+    return btn->clicked;
 }
