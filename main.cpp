@@ -1,4 +1,8 @@
 
+
+#define GFX_GL 1
+
+
 #include <string.h>
 #include <math.h>
 #include <utility>
@@ -31,6 +35,9 @@
 
 #include "string.h"
 #include "string.cpp"
+
+#include "string_builder.h"
+#include "string_builder.cpp"
 
 // --
 

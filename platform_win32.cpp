@@ -383,6 +383,11 @@ bool platform_process_input(Window *window)
     return !window->CloseButtonClicked;
 }
 
+bool platform_make_gpu_context_current(Window *window)
+{
+    return wglMakeCurrent(window->DeviceContext, window->GLContext);
+}
+
 inline
 HGLRC _win32_init_opengl(HWND Window)
 {
@@ -418,17 +423,8 @@ HGLRC _win32_init_opengl(HWND Window)
     SetPixelFormat(WindowDeviceContext, PixelFormatIndex, &PixelFormat);
     
     HGLRC OpenGLContext = wglCreateContext(WindowDeviceContext);
-    if (wglMakeCurrent(WindowDeviceContext, OpenGLContext))
-    {
-        
-    }
-    else
-    {
-        //DEBUG
-#if DEBUG
-        MessageBox(Window, "wglMakeCurrent failed.", "Error", 0);
-#endif
-    }
+
+    
     
     ReleaseDC(Window, WindowDeviceContext);
     
@@ -484,6 +480,8 @@ void platform_create_gl_window(Window *_window, const char *Title = "",
         {
             HGLRC OpenGLContext = _win32_init_opengl(WindowHandle);
             HDC WindowDeviceContext = GetDC(WindowHandle);
+
+            Assert(OpenGLContext);
             
             HANDLE Icon = LoadImage(Instance, "res/icon.ico", IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
             SendMessage(WindowHandle, (UINT)WM_SETICON, ICON_BIG, (LPARAM)Icon);
@@ -558,14 +556,6 @@ inline
 bool platform_set_window_size_and_position(Window *window, int x, int y, int w, int h)
 {
     return SetWindowPos(window->Handle, 0, x, y, w, h, SWP_NOZORDER);   
-}
-
-
-inline
-bool platform_make_window_gpu_context_current(Window *window)
-{
-    // We do this when we create the window. When we tried to do it again, glGetError returned 1282.
-    return false;
 }
 
 inline
