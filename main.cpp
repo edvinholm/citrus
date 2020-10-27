@@ -41,6 +41,15 @@
 #include <Windows.h>
 #include <shellscalingapi.h>
 #include "platform_win32.h"
+
+#include <GL\gl.h>
+#include "gpu_gl.h"
+#include "gpu.h"
+#include "gl.h"
+#include "gl.cpp"
+#include "shaders.h"
+#include "gpu_gl.cpp"
+
 #include "platform_win32.cpp"
 #endif
 

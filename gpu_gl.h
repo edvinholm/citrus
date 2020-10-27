@@ -1,6 +1,8 @@
 
 typedef GLuint GPU_Buffer_ID;
 
+typedef GLuint GPU_Framebuffer_ID;
+
 typedef GLuint GPU_Texture_ID;
 
 typedef GLint GPU_Uniform_ID;

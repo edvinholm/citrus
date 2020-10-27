@@ -2,6 +2,8 @@
 
 #if OS_WINDOWS || OS_ANDROID
 
+
+
 #if !(OS_ANDROID)
 typedef void (*gl_depth_range_f)(GLfloat nearVal, GLfloat farVal);
 gl_depth_range_f glDepthRangef;
@@ -122,9 +124,17 @@ gl_named_renderbuffer_storage glNamedRenderbufferStorage;
 typedef void (*gl_framebuffer_renderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
 gl_framebuffer_renderbuffer glFramebufferRenderbuffer;
 
-
 typedef void (*gl_delete_renderbuffers)(GLsizei n, GLuint *renderbuffers);
 gl_delete_renderbuffers glDeleteRenderbuffers;
+
+typedef void (*gl_tex_image_2d_multisample)(GLenum target, GLsizei samples, GLint internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+gl_tex_image_2d_multisample glTexImage2DMultisample;
+
+typedef void (*gl_framebuffer_texture_2d)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+gl_framebuffer_texture_2d glFramebufferTexture2D;
+
+typedef void (*gl_blit_named_framebuffer)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+gl_blit_named_framebuffer glBlitNamedFramebuffer;
 
 #endif
 
@@ -146,6 +156,7 @@ bool load_gl_extensions()
     
 #if OS_WINDOWS || OS_ANDROID
 
+
 #if !(OS_ANDROID)
     TRY_LOAD_GL_EXT(gl_depth_range_f, glDepthRangef);
     TRY_LOAD_GL_EXT(gl_bind_buffer, glBindBuffer);
@@ -154,6 +165,7 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_active_texture, glActiveTexture);
     TRY_LOAD_GL_EXT(gl_gen_buffers, glGenBuffers);
 #endif
+
     
     TRY_LOAD_GL_EXT(gl_create_shader, glCreateShader);
     TRY_LOAD_GL_EXT(gl_shader_source, glShaderSource);
@@ -185,6 +197,9 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_renderbuffer_storage, glRenderbufferStorage);
     TRY_LOAD_GL_EXT(gl_framebuffer_renderbuffer, glFramebufferRenderbuffer);
     TRY_LOAD_GL_EXT(gl_delete_renderbuffers, glDeleteRenderbuffers);
+    TRY_LOAD_GL_EXT(gl_tex_image_2d_multisample, glTexImage2DMultisample);
+    TRY_LOAD_GL_EXT(gl_framebuffer_texture_2d, glFramebufferTexture2D);
+    TRY_LOAD_GL_EXT(gl_blit_named_framebuffer, glBlitNamedFramebuffer);
 
 #endif
     

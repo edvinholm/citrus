@@ -1,4 +1,5 @@
 
+
 struct GPU_Context
 {
     GLint shader_program;
@@ -12,6 +13,8 @@ bool gpu_init(float clear_color_r, float clear_color_g, float clear_color_b, flo
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glEnable(GL_MULTISAMPLE);
 
     glClearColor(clear_color_r, clear_color_g, clear_color_b, clear_color_a);
 
@@ -40,7 +43,7 @@ void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader)
             default: Assert(false); break;
         }
         
-        glVertexAttribPointer(vertex_shader->buffer_attributes[b], element_size, GL_FLOAT, GL_FALSE, 0, 0); Assert(glGetError() == 0);
+        glVertexAttribPointer(vertex_shader->buffer_attributes[b], element_size, GL_FLOAT, GL_FALSE, 0, 0); { auto err = glGetError();  Assert(err == 0); }
         glEnableVertexAttribArray(vertex_shader->buffer_attributes[b]); Assert(glGetError() == 0);
         
         Assert(glGetError() == 0);
@@ -180,9 +183,58 @@ bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    *_error_code = glGetError();
-    
+    *_error_code = glGetError();    
     return (*_error_code == 0);
+}
+
+
+inline
+void gpu_create_framebuffers(int n, GPU_Framebuffer_ID *_ids)
+{
+    glGenFramebuffers(n, _ids);
+}
+
+inline
+void gpu_update_framebuffer(GPU_Framebuffer_ID id, GPU_Texture_ID color_attachment0 = 0, bool color_attachment0_is_multisample = false)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, id);
+
+    if(color_attachment0 != 0) {
+        auto texture_slot = (color_attachment0_is_multisample) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_slot, color_attachment0, 0);
+    }
+    
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    Assert(status == GL_FRAMEBUFFER_COMPLETE);
+}
+
+inline
+int gpu_max_num_multisample_samples()
+{
+    int max_samples;
+    glGetIntegerv (GL_MAX_SAMPLES, &max_samples);
+    Assert(glGetError() == 0);
+    return max_samples;
+}
+
+//IMPORTANT: id=0 means the texture does not exist, so we create one. This works for OpenGL, since 0 is not a valid texture ID.
+//           But we need to make sure this is true in other GPU APIs as well! @Robustness
+inline
+bool gpu_update_or_create_multisample_texture(GPU_Texture_ID *id, u32 width, u32 height, int num_samples, GPU_Error_Code *_error_code)
+{
+    bool did_exist = *id != 0; // nocheckin
+    if(*id == 0) {
+        glGenTextures(1, id);
+    }            
+    
+    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, *id);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, num_samples, GL_RGBA8,
+                            width, height, GL_FALSE);
+    auto err = glGetError();
+    Assert(err == 0);
+
+    *_error_code = glGetError();
+    return (*_error_code == 0);    
 }
 
 inline

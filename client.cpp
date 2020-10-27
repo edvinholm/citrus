@@ -16,18 +16,61 @@ int updates_this_second = 0;
 
 
 
+// nocheckin: Should this be here? Should it be called update_framebuffers?
+bool update_framebuffers(Graphics *gfx)
+{   
+    // CREATE MULTISAMPLE TEXTURE //
 
-void frame_begin(Window *window, Graphics *gfx)
+    int max_num_samples = gpu_max_num_multisample_samples();
+    int num_samples = min(16, max_num_samples);
+    
+    GPU_Texture_Parameters multisample_texture_params = {0};
+    multisample_texture_params.pixel_components = GPU_PIX_COMP_RGBA;
+    multisample_texture_params.pixel_format     = GPU_PIX_FORMAT_RGBA;
+    multisample_texture_params.pixel_data_type  = GPU_PIX_DATA_UNSIGNED_BYTE;
+    GPU_Error_Code gpu_error;
+    if(!gpu_update_or_create_multisample_texture(&gfx->multisample_texture, (u64)gfx->frame_s.w, (u64)gfx->frame_s.h, num_samples, &gpu_error)) {
+        Debug_Print("Failed to create multisample texture.\n");
+        Assert(false);
+        return false;
+    }
+
+    //NOTE: @Cleanup: We only need to attach the texture to the framebuffer once. Not every time we update the texture properties...
+    gpu_update_framebuffer(gfx->multisample_framebuffer, gfx->multisample_texture, true);
+
+    // nocheckin: Delete old fbo?
+    // ////////////////////////// //
+
+    return true;
+}
+
+void frame_begin(Window *window, bool first_frame, Graphics *gfx)
 {
     platform_begin_frame(window);
     gpu_frame_init();
 
+    u64 old_frame_w = (u64)gfx->frame_s.w;
+    u64 old_frame_h = (u64)gfx->frame_s.h;
+
     float window_x, window_y;
     platform_get_window_rect(window, &window_x, &window_y, &gfx->frame_s.w, &gfx->frame_s.h);
+
+    if(first_frame ||
+       old_frame_w != (u64)gfx->frame_s.w || // @Robustness: Maybe frame w and h should be floats.
+       old_frame_h != (u64)gfx->frame_s.h)
+    {
+        bool framebuffer_update_result = update_framebuffers(gfx);
+        Assert(framebuffer_update_result);
+    }
 }
 
 void frame_end(Window *window, Graphics *gfx)
 {
+    //nocheckin
+    auto w = gfx->frame_s.w;
+    auto h = gfx->frame_s.h;
+    glBlitNamedFramebuffer(gfx->multisample_framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    
     platform_end_frame(window);
 
     // Switch buffer set //
@@ -68,6 +111,7 @@ bool init_graphics(Window *window, Graphics *gfx)
     if(!gpu_compile_shaders(vertex_shader_code, fragment_shader_code, &gfx->gpu_ctx))
     {   
         Debug_Print("Failed to compile shaders.\n");
+        Assert(false);
         return false;
     }
     else {
@@ -77,8 +121,13 @@ bool init_graphics(Window *window, Graphics *gfx)
     
     if(!gpu_init_shaders(&gfx->vertex_shader, &gfx->fragment_shader, &gfx->gpu_ctx)) {
         Debug_Print("Failed to init shaders.\n");
+        Assert(false);
         return false;
     }
+
+    // Create multisample framebuffer
+    gpu_create_framebuffers(1, &gfx->multisample_framebuffer);
+    
 
     return true;
 }
@@ -133,12 +182,13 @@ DWORD render_loop(void *loop_)
     unlock_mutex(loop->mutex);
 
     
+    bool first_frame = true;
     u64 last_second = platform_milliseconds() / 1000;
     
     while(true)
     {
         u64 second = platform_milliseconds() / 1000;
-        frame_begin(main_window, &gfx);
+        frame_begin(main_window, first_frame, &gfx);
 
         m4x4 ui_projection = make_m4x4(
             2.0/gfx.frame_s.w,  0, 0, -1,
@@ -233,6 +283,7 @@ DWORD render_loop(void *loop_)
         
         frame_end(main_window, &gfx);
         last_second = second;
+        first_frame = false;
     }
 
     return 0;
@@ -421,7 +472,7 @@ int client_entry_point(int num_args, char **arguments)
                 }
                 updates_this_second++;
             
-                platform_set_window_title(main_window, concat_tmp("Citrus | ", fps, " FPS | ", ups, " UPS", sb));
+                platform_set_window_title(main_window, concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS", sb));
 #endif
                 pop_layout(layout);
 

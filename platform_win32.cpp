@@ -383,10 +383,12 @@ bool platform_make_gpu_context_current(Window *window)
     return wglMakeCurrent(window->DeviceContext, window->GLContext);
 }
 
+
 inline
 HGLRC _win32_init_opengl(HWND Window)
 {
     HDC WindowDeviceContext = GetDC(Window);
+    Assert(WindowDeviceContext);
     
     PIXELFORMATDESCRIPTOR DesiredPixelFormat =
     {
@@ -416,13 +418,37 @@ HGLRC _win32_init_opengl(HWND Window)
     DescribePixelFormat(WindowDeviceContext, PixelFormatIndex, sizeof(PixelFormat), &PixelFormat);
     
     SetPixelFormat(WindowDeviceContext, PixelFormatIndex, &PixelFormat);
-    
+
+
+    // nocheckin
+#if 0
     HGLRC OpenGLContext = wglCreateContext(WindowDeviceContext);
+#else
+
+    //FROM: https://gist.github.com/nickrolfe/1127313ed1dbf80254b614a721b3ee9c
+    int gl33_attribs[] = {
+        0
+    };
 
     
-    
-    ReleaseDC(Window, WindowDeviceContext);
-    
+    typedef HGLRC (*wgl_create_context_attribs_arb)(HDC hDC, HGLRC hshareContext, const int *attribList);
+    wgl_create_context_attribs_arb wglCreateContextAttribsARB;
+    { // STUUUUPIIIIIIIIIIIIIIIIIIIIID
+        HGLRC dummy_context = wglCreateContext(WindowDeviceContext);
+        Assert(dummy_context);
+        if (!wglMakeCurrent(WindowDeviceContext, dummy_context)) { Assert(false); return 0; }
+
+        // Just to be able to do this.....
+        wglCreateContextAttribsARB = (wgl_create_context_attribs_arb)wglGetProcAddress("wglCreateContextAttribsARB");    
+        
+        wglMakeCurrent(WindowDeviceContext, 0);
+        wglDeleteContext(dummy_context);
+    } // /////////////////////////////
+
+    Assert(wglCreateContextAttribsARB);
+    HGLRC OpenGLContext = wglCreateContextAttribsARB(WindowDeviceContext, 0, gl33_attribs);
+#endif
+
     return OpenGLContext;
 }
 
@@ -528,11 +554,11 @@ void platform_get_window_rect(Window *win, float *_x, float *_y, float *_w, floa
 }
 
 
+// NOTE: title must be zero-terminated
 inline
-void platform_set_window_title(Window *window, String title)
+void platform_set_window_title(Window *window, char *title)
 {
-    //@Robustness: Hmmmmm.... Doesn't SetWindowText expect a zero-terminated string?
-    SetWindowText(window->Handle, (LPCSTR)title.data);
+    SetWindowText(window->Handle, (LPCSTR)title);
 }
 
 inline
