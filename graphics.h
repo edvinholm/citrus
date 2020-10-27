@@ -4,8 +4,8 @@ struct Graphics
 {
     GPU_Context gpu_ctx;
 
-    GPU_Texture_ID multisample_texture;
-    GLuint multisample_framebuffer; // nocheckin
+    GPU_Texture_ID     multisample_texture;
+    GPU_Framebuffer_ID multisample_framebuffer;
     
     u8 buffer_set_index;
     

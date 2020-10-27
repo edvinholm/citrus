@@ -325,16 +325,16 @@ Rect cut_right_square(Layout_Manager *manager)
 
 
 #define _GROW_(...) \
-    _AREA_(grown(area(), __VA_ARGS__));
+    _AREA_(grown(area(ctx.layout), __VA_ARGS__));
 
 #define _GROW_LEFT_(DW) \
-    _AREA_(grown(area(), DW, 0, 0, 0));
+    _AREA_(grown(area(ctx.layout), DW, 0, 0, 0));
 
 #define _GROW_RIGHT_(DW) \
-    _AREA_(grown(area(), 0, DW, 0, 0));
+    _AREA_(grown(area(ctx.layout), 0, DW, 0, 0));
 
 #define _GROW_TOP_(DH) \
-    _AREA_(grown(area(), 0, 0, DH, 0));
+    _AREA_(grown(area(ctx.layout), 0, 0, DH, 0));
 
 #define _GROW_BOTTOM_(DH) \
-    _AREA_(grown(area(), 0, 0, 0, DH));
+    _AREA_(grown(area(ctx.layout), 0, 0, 0, DH));

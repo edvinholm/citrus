@@ -102,13 +102,29 @@ struct UI_ID_Manager
 
 enum UI_Element_Type
 {
+    WINDOW,
     BUTTON
+};
+
+struct UI_Window
+{
+    Rect initial_a;
+    Rect current_a;
+    
+    bool pressed;
+
+    s8 resize_dir_x;
+    s8 resize_dir_y;
+    bool moving;
+    v2 mouse_offset_on_move_start;
+    
+    bool was_resized_or_moved; // This is set to true when a resize/move begins, and will remain false even if the user sets current_a back to initial_a.
 };
 
 struct UI_Button
 {
     Rect a;
-    bool hovered;
+    bool hovered; // TODO @Cleanup: Make bools into bitfield
     bool pressed;
     bool clicked;
 };
@@ -118,17 +134,13 @@ struct UI_Element
     UI_Element_Type type;
 
     union {
+        UI_Window window;
         UI_Button button;
     };
 };
 
 struct UI_Manager
-{
-    
-#if DEBUG
-    bool build_began;
-#endif
-    
+{   
     UI_ID_Manager id_manager;
 
     UI_Path current_path;
@@ -137,6 +149,7 @@ struct UI_Manager
     Array<bool,       ALLOC_UI> element_alives;
     Array<UI_ID,      ALLOC_UI> element_ids;
     Array<UI_Element, ALLOC_UI> elements;
+    Array<UI_ID,      ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
 };
 
 
@@ -276,13 +289,17 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
     _e->type  = type;
 
     switch(_e->type) {
+        case WINDOW:
         case BUTTON: break;
             
         default: Assert(false); break;
     }
 }
 
-UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager *ui)
+
+// NOTE: This DOES NOT set the element as alive.
+// NOTE: This DOES NOT add the element to ui->elements_in_depth_order.
+UI_Element *find_ui_element(UI_ID id, UI_Manager *ui, s64 *_index = NULL)
 {
     assert_state_valid(ui);
 
@@ -291,98 +308,61 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
         if(ui->element_ids.e[i] == id)
         {
             UI_Element *e = ui->elements.e + i;
-            Assert(e->type == type);
 
-            ui->element_alives[i] = true;
+            if(_index) *_index = i;
             return e;
         }
     }
 
-    // NO ELEMENT FOUND -- SO CREATE ONE.
-    UI_Element new_element;
-    init_ui_element(type, &new_element);
-    array_add(ui->element_alives, true);
-    array_add(ui->element_ids,      id);
-    return array_add(ui->elements, new_element);
+    return NULL;
 }
 
-
-void ui_build_begin(UI_Manager *ui)
+// NOTE: This sets the element as alive.
+// NOTE: This adds the element to ui->elements_in_depth_order.
+UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager *ui, bool *_was_created = NULL)
 {
-#if DEBUG
-    Assert(ui->build_began == false);
-    ui->build_began = true;
+    assert_state_valid(ui);
+
+    if(_was_created) *_was_created = false;
+
+    s64 index;
+    UI_Element *e = find_ui_element(id, ui, &index);
+    if(e) {   
+        Assert(e->type == type);
+        ui->element_alives[index] = true;
+    }
+    else {
+        // NO ELEMENT FOUND -- SO CREATE ONE.
+        if(_was_created) *_was_created = true;
     
-    ui->id_manager.used_ids_this_build.n = 0;
-#endif
+        UI_Element new_element;
+        init_ui_element(type, &new_element);
+        array_add(ui->element_alives, true);
+        array_add(ui->element_ids,      id);
+        e = array_add(ui->elements, new_element);
+    }
+    
+    Assert(e);
+
+    array_add(ui->elements_in_depth_order, id);
+    return e;
 }
 
-void ui_build_end(UI_Manager *ui, Input_Manager *input)
+// NOTE: The element must exist.
+void put_ui_element_on_bottom(UI_ID id, UI_Manager *ui)
 {
-#if DEBUG
-    Assert(ui->build_began == true);
-    ui->build_began = false;
-    Assert(ui->current_path_length == 0);
-#endif
+    assert_state_valid(ui);
 
-
-    
-    auto &mouse = input->mouse;
-    for(u64 i = 0; i < ui->elements.n; i++)
+    for(s64 i = 0; i < ui->elements_in_depth_order.n; i++)
     {
-        UI_Element *e = &ui->elements[i];
-
-        if(e->type != BUTTON) continue;
-
-        UI_Button &btn = e->button;
-
-        btn.clicked = false;
-        btn.hovered = point_inside_rect(mouse.p, btn.a);
-
-        if(mouse.buttons_down & MB_PRIMARY) {
-            if(btn.hovered) btn.pressed = true;
+        if(ui->elements_in_depth_order[i] == id) {
+            array_add(ui->elements_in_depth_order, id);
+            array_ordered_remove(ui->elements_in_depth_order, i);
+            return;
         }
-        else if(!(mouse.buttons & MB_PRIMARY)) {
-
-            if(mouse.buttons_up & MB_PRIMARY) {
-                if(btn.pressed && btn.hovered) btn.clicked = true;
-            }
-            btn.pressed = false;
-        }
-        
     }
-
-
-
-    
-    
-    s64 num_removed = 0;
-
-    Assert(ui->element_alives.n == ui->elements.n);
-    Assert(ui->element_alives.n == ui->element_ids.n);
         
-    // Remove elements that were not built (a.k.a. not alive) this time.
-    for(s64 i = 0; i < ui->element_alives.n; i++)
-    {
-        
-        // Alive -- reset it.
-        if(ui->element_alives[i]) {
-            ui->element_alives[i] = false;
-            continue;
-        }
-
-        // Dead -- remove it.
-        array_ordered_remove(ui->elements,       i);
-        array_ordered_remove(ui->element_ids,    i);
-        array_ordered_remove(ui->element_alives, i);
-        i--;
-
-        num_removed++;
-
-    }
-
-    //if(num_removed > 0) Debug_Print("Removed %lld dead elements.\n", num_removed);
-
+    Assert(false);
 }
 
 
@@ -440,7 +420,7 @@ struct UI_Context
         id_given = true;
         UI_ID id = find_or_create_ui_id_for_path(&manager->current_path, manager->current_path_length, &manager->id_manager);
 
-#if DEBUG && false
+#if DEBUG
         if(in_array(manager->id_manager.used_ids_this_build, id)) {
             Debug_Print("ERROR: Same ID used multiple times in the same build.\n");
             Assert(false);
@@ -520,4 +500,217 @@ bool button(UI_Context ctx)
     btn->a = area(ctx.layout);
 
     return btn->clicked;
+}
+
+void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    Assert(e->type == BUTTON);
+    
+    UI_Button &btn = e->button;
+
+    auto &mouse = input->mouse;
+
+    btn.clicked = false;
+    btn.hovered = (e == hovered_element);
+
+    if(mouse.buttons_down & MB_PRIMARY) {
+        if(btn.hovered) btn.pressed = true;
+    }
+    else if(!(mouse.buttons & MB_PRIMARY)) {
+
+        if(mouse.buttons_up & MB_PRIMARY) {
+            if(btn.pressed && btn.hovered) btn.clicked = true;
+        }
+        btn.pressed = false;
+    }
+}
+
+
+const float window_border_width =  4;
+const float window_title_height = 16;
+
+Rect begin_window(UI_Context ctx, UI_ID *_id)
+{
+    U(ctx);
+
+    UI_ID id = ctx.get_id();
+
+    UI_Element *e = find_or_create_ui_element(id, WINDOW, ctx.manager);
+
+    auto *win = &e->window;
+    win->initial_a = area(ctx.layout);
+    if(!win->was_resized_or_moved)
+        win->current_a = win->initial_a;
+
+    *_id = id;
+    
+    return shrunken(win->current_a,
+                    window_border_width,  // Left
+                    window_border_width,  // Right
+                    window_border_width + window_title_height, // Top
+                    window_border_width); // Bottom
+}
+
+void end_window(UI_ID id, UI_Manager *manager)
+{
+    put_ui_element_on_bottom(id, manager);
+
+    // TODO set depth etc... nocheckin
+}
+
+void update_window(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    auto &mouse = input->mouse;
+    
+    Assert(e->type == WINDOW);
+    UI_Window &win = e->window;
+
+    // BORDER AND TITLE AREAS //
+    Rect left_border   = left_of(  win.current_a, window_border_width);
+    Rect right_border  = right_of( win.current_a, window_border_width);
+    Rect top_border    = top_of(   win.current_a, window_border_width);
+    Rect bottom_border = bottom_of(win.current_a, window_border_width);
+    
+    Rect title_a       = top_of(win.current_a, window_title_height);
+    title_a.y += window_border_width;
+    //
+
+    if(!(mouse.buttons & MB_PRIMARY)) {
+        // PRESS END //
+        win.pressed = false;
+        win.resize_dir_x = 0;
+        win.resize_dir_y = 0;
+        win.moving = false;
+    }
+    
+    if(e == hovered_element) {
+        if(!win.pressed && (mouse.buttons_down & MB_PRIMARY))
+        {
+            // PRESS START //
+            win.pressed = true;
+            
+            if(point_inside_rect(mouse.p, left_border))  win.resize_dir_x -= 1;
+            if(point_inside_rect(mouse.p, right_border)) win.resize_dir_x += 1;
+        
+            if(point_inside_rect(mouse.p, top_border))    win.resize_dir_y -= 1;
+            if(point_inside_rect(mouse.p, bottom_border)) win.resize_dir_y += 1;
+
+            if(point_inside_rect(mouse.p, title_a)) {
+                win.moving = true;
+                win.mouse_offset_on_move_start = mouse.p - win.current_a.p;
+            }
+        }
+    }
+
+    
+    // Remember that we moved or resized.
+    if(win.moving || win.resize_dir_x != 0 || win.resize_dir_y != 0)
+        win.was_resized_or_moved = true;
+
+    
+    // RESIZE IF RESIZING //
+    if(win.resize_dir_x == 1) {
+        win.current_a.w = mouse.p.x - win.current_a.x + right_border.w/2.0f;
+    }
+    else if(win.resize_dir_x == -1) {
+        float delta = (win.current_a.x + left_border.w/2.0f) - mouse.p.x;
+        win.current_a.w += delta;
+        win.current_a.x -= delta;
+    }
+    
+    if(win.resize_dir_y == 1) {
+        win.current_a.h = mouse.p.y - win.current_a.y + bottom_border.h/2.0f;
+    }
+    else if(win.resize_dir_y == -1) {
+        float delta = (win.current_a.y + top_border.h/2.0f) - mouse.p.y;
+        win.current_a.h += delta;
+        win.current_a.y -= delta;
+    }
+    // //////////////// //
+
+    // MOVE IF MOVING //
+    if(win.moving)
+    {
+        win.current_a.p = mouse.p - win.mouse_offset_on_move_start;
+    }
+    // ////////////// //
+}
+
+
+
+
+
+
+
+void new_ui_build(UI_Manager *ui, Input_Manager *input)
+{
+    Assert(ui->current_path_length == 0);
+
+    auto &mouse = input->mouse;
+
+    // FIND HOVERED ELEMENT //
+    UI_Element *hovered_element = NULL;
+    for(s64 i = 0; i < ui->elements_in_depth_order.n; i++)
+    {
+        UI_Element *e = find_ui_element(ui->elements_in_depth_order[i], ui); // TODO @Speed
+        Assert(e);
+
+        bool mouse_over = false;
+        
+        switch(e->type) {
+            case WINDOW: mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
+            case BUTTON: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
+
+            default: Assert(false); break;
+        }
+
+        if(mouse_over) {
+            hovered_element = e;
+            break;
+        }
+    }
+
+    for(s64 i = 0; i < ui->elements.n; i++)
+    {
+        UI_Element *e = &ui->elements[i];
+
+        switch(e->type) {
+            case WINDOW: update_window(e, input, hovered_element); break;
+            case BUTTON: update_button(e, input, hovered_element); break;
+
+            default: Assert(false); break;
+        }
+    }
+    
+    s64 num_removed = 0;
+
+    Assert(ui->element_alives.n == ui->elements.n);
+    Assert(ui->element_alives.n == ui->element_ids.n);
+        
+    // Remove elements that were not built (a.k.a. not alive) this time.
+    for(s64 i = 0; i < ui->element_alives.n; i++)
+    {
+        
+        // Alive -- reset it.
+        if(ui->element_alives[i]) {
+            ui->element_alives[i] = false;
+            continue;
+        }
+
+        // Dead -- remove it.
+        array_ordered_remove(ui->elements,       i);
+        array_ordered_remove(ui->element_ids,    i);
+        array_ordered_remove(ui->element_alives, i);
+        i--;
+
+        num_removed++;
+
+    }
+
+    Assert(ui->elements.n == ui->elements_in_depth_order.n);
+    ui->elements_in_depth_order.n = 0;
+
+    //if(num_removed > 0) Debug_Print("Removed %lld dead elements.\n", num_removed);
+
+    ui->id_manager.used_ids_this_build.n = 0;
 }

@@ -15,15 +15,14 @@ int ups = 0;
 int updates_this_second = 0;
 
 
-
-// nocheckin: Should this be here? Should it be called update_framebuffers?
 bool update_framebuffers(Graphics *gfx)
-{   
-    // CREATE MULTISAMPLE TEXTURE //
-
+{
+    // GET MAX NUM MULTISAMPLE SAMPLES //
     int max_num_samples = gpu_max_num_multisample_samples();
     int num_samples = min(16, max_num_samples);
-    
+    // 
+
+    // UPDATE OR CREATE MULTISAMPLE TEXTURE //
     GPU_Texture_Parameters multisample_texture_params = {0};
     multisample_texture_params.pixel_components = GPU_PIX_COMP_RGBA;
     multisample_texture_params.pixel_format     = GPU_PIX_FORMAT_RGBA;
@@ -34,12 +33,12 @@ bool update_framebuffers(Graphics *gfx)
         Assert(false);
         return false;
     }
+    //
 
+    // UPDATE MULTISAMPLE FRAMEBUFFER //
     //NOTE: @Cleanup: We only need to attach the texture to the framebuffer once. Not every time we update the texture properties...
     gpu_update_framebuffer(gfx->multisample_framebuffer, gfx->multisample_texture, true);
-
-    // nocheckin: Delete old fbo?
-    // ////////////////////////// //
+    //
 
     return true;
 }
@@ -66,10 +65,11 @@ void frame_begin(Window *window, bool first_frame, Graphics *gfx)
 
 void frame_end(Window *window, Graphics *gfx)
 {
-    //nocheckin
+    // BLIT MULTISAMPLE TO DEFAULT FRAMEBUFFER //
     auto w = gfx->frame_s.w;
     auto h = gfx->frame_s.h;
     glBlitNamedFramebuffer(gfx->multisample_framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    //
     
     platform_end_frame(window);
 
@@ -154,6 +154,127 @@ struct Render_Loop
     Client *client;
 };
 
+
+void quad_now(Rect a, v4 color, Graphics *gfx)
+{
+    v3 v[6] = {
+        { a.x,       a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y,       0 },
+
+        { a.x + a.w, a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y + a.h, 0 }
+    };
+    
+    v2 uv[6] = {0};
+    
+    v4 c[6] = {
+        color,
+        color,
+        color,
+        
+        color,
+        color,
+        color
+    };
+
+    triangles_now(v, uv, c, 6, gfx);
+}
+
+void draw_window(UI_Element *e, Graphics *gfx)
+{
+    Assert(e->type == WINDOW);
+    auto &win = e->window;
+    auto a = win.current_a;
+
+    /*
+    v3 v[6] = {
+        { a.x,       a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y,       0 },
+
+        { a.x + a.w, a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y + a.h, 0 }
+    };
+        
+    v2 uv[6] = {0};
+
+    v4 c[6] = {
+        { 0.25, 0, 1, 1 },
+        { 0.25, 0, 1, 1 },
+        { 0.25, 0, 1, 1 },
+                    
+        { 0.25, 0, 1, 1 },
+        { 0.25, 0, 1, 1 },
+        { 0.25, 0, 1, 1 }
+    };
+    */
+
+    const v4 c = { 0.25, 0, 1, 1 };
+    quad_now(a, c, gfx);
+
+    const v4 c_red = { 1, 0, 0, 1 };
+    if(win.resize_dir_x < 0) quad_now(left_of(  a, window_border_width), c_red, gfx);
+    if(win.resize_dir_x > 0) quad_now(right_of( a, window_border_width), c_red, gfx);
+    if(win.resize_dir_y < 0) quad_now(top_of(   a, window_border_width), c_red, gfx);
+    if(win.resize_dir_y > 0) quad_now(bottom_of(a, window_border_width), c_red, gfx);
+}
+
+void draw_button(UI_Element *e, Graphics *gfx)
+{    
+    Assert(e->type == BUTTON);
+    auto &btn = e->button;
+    auto a = btn.a;
+
+    v3 v[6] = {
+        { a.x,       a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y,       0 },
+
+        { a.x + a.w, a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y + a.h, 0 }
+    };
+        
+    v2 uv[6] = {0};
+
+    v4 c[6] = {
+        { 0, 0, 1, 1 },
+        { 1, 0, 1, 1 },
+        { 0, 1, 1, 1 },
+                    
+        { 0, 0, 1, 1 },
+        { 1, 0, 1, 1 },
+        { 0, 1, 1, 1 }
+    };
+                
+    v4 h[6] = {
+        { 0, 0, 0.5, 1 },
+        { 1, 0, 0.5, 1 },
+        { 0, 1, 0.5, 1 },
+                    
+        { 0, 0, 0.5, 1 },
+        { 1, 0, 0.5, 1 },
+        { 0, 1, 0.5, 1 }
+    };
+
+    v4 p[6] = {
+        { 0, 0, 0.5, 1 },
+        { 0.5, 0, 1.0, 1 },
+        { 0, 1, 0.5, 1 },
+                    
+        { 0, 0, 0.5, 1 },
+        { 0.5, 0, 1.0, 1 },
+        { 0, 1, 0.5, 1 }
+    };
+
+    {
+        triangles_now(v, uv, (btn.hovered) ? ((btn.pressed) ? p : h) : c, 6, gfx);
+    }
+}
+
 DWORD render_loop(void *loop_)
 {
     Render_Loop *loop = (Render_Loop *)loop_;
@@ -207,66 +328,27 @@ DWORD render_loop(void *loop_)
                 unlock_mutex(loop->mutex);
                 break;
             }
-
-
-
                 
             // Draw UI
             
-            for(int i = 0; i < ui->elements.n; i++)
+            for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
             {
-                UI_ID id      = ui->element_ids[i];
-                UI_Element *e = &ui->elements[i];
+                UI_ID id      = ui->elements_in_depth_order[i];
+                UI_Element *e = find_ui_element(id, ui);
+                Assert(e);
 
-                Assert(e->type == BUTTON);
-                auto &btn = e->button;
-                auto a = btn.a;
+                switch(e->type) {
+                    case WINDOW: {
+                        draw_window(e, &gfx);
+                    } break;
+                        
+                    case BUTTON: {
+                        draw_button(e, &gfx);
+                    } break;
 
-                v3 v[6] = {
-                    { a.x,       a.y,       0 },
-                    { a.x,       a.y + a.h, 0 },
-                    { a.x + a.w, a.y,       0 },
-
-                    { a.x + a.w, a.y,       0 },
-                    { a.x,       a.y + a.h, 0 },
-                    { a.x + a.w, a.y + a.h, 0 }
-                };
-        
-                v2 uv[6] = {0};
-
-                v4 c[6] = {
-                    { 0, 0, 1, 1 },
-                    { 1, 0, 1, 1 },
-                    { 0, 1, 1, 1 },
-                    
-                    { 0, 0, 1, 1 },
-                    { 1, 0, 1, 1 },
-                    { 0, 1, 1, 1 }
-                };
-                
-                v4 h[6] = {
-                    { 0, 0, 0.5, 1 },
-                    { 1, 0, 0.5, 1 },
-                    { 0, 1, 0.5, 1 },
-                    
-                    { 0, 0, 0.5, 1 },
-                    { 1, 0, 0.5, 1 },
-                    { 0, 1, 0.5, 1 }
-                };
-
-                v4 p[6] = {
-                    { 0, 0, 0.5, 1 },
-                    { 0.5, 0, 1.0, 1 },
-                    { 0, 1, 0.5, 1 },
-                    
-                    { 0, 0, 0.5, 1 },
-                    { 0.5, 0, 1.0, 1 },
-                    { 0, 1, 0.5, 1 }
-                };
-
-                {
-                    triangles_now(v, uv, (btn.hovered) ? ((btn.pressed) ? p : h) : c, 6, &gfx);
+                    default: Assert(false); break;
                 }
+
             }
 
 
@@ -341,11 +423,16 @@ void client_ui(UI_Context ctx, Client *client)
 
     int new_x = x;
     for(int i = 0; i < x*x; i++)
-    {
+    {   
         _CELL_();
-        if(button(PC(ctx, i))) {
-            new_x++;
+
+        UI_ID window_id;
+        { _AREA_(begin_window(PC(ctx, i), &window_id));
+            if(button(PC(ctx, i))) {
+                new_x++;
+            }
         }
+        end_window(window_id, ctx.manager);
     }
     x = new_x;
 }
@@ -441,7 +528,6 @@ int client_entry_point(int num_args, char **arguments)
     while(true)
     {
         new_input_frame(input);
-        if(!platform_process_input(main_window)) break;
         
         // TIME //
         u64 millisecond = platform_milliseconds();
@@ -456,11 +542,16 @@ int client_entry_point(int num_args, char **arguments)
         // //////////////////////////////////// //
         
         lock_mutex(render_loop.mutex);
-        {   
-            // BUILD UI //
-            ui_build_begin(ui);
-            {
+        {
+            // NOTE: Get input as close as possible to the UI update.
+            if(!platform_process_input(main_window)) {
+                unlock_mutex(render_loop.mutex);
+                break;
+            }
             
+            // BUILD UI //
+            new_ui_build(ui, &client.input);
+            {
                 push_area_layout(window_a, layout);
             
                 client_ui(P(ui_ctx), &client);
@@ -477,9 +568,9 @@ int client_entry_point(int num_args, char **arguments)
                 pop_layout(layout);
 
             }
-            ui_build_end(ui, &client.input);
             // //////// //
-            
+
+            reset_temporary_memory();
         }
         unlock_mutex(render_loop.mutex);
         

@@ -420,10 +420,8 @@ HGLRC _win32_init_opengl(HWND Window)
     SetPixelFormat(WindowDeviceContext, PixelFormatIndex, &PixelFormat);
 
 
-    // nocheckin
-#if 0
-    HGLRC OpenGLContext = wglCreateContext(WindowDeviceContext);
-#else
+
+    // STUPID STUFF BELOW: We create a context to get the proc that we need to create our actual context........
 
     //FROM: https://gist.github.com/nickrolfe/1127313ed1dbf80254b614a721b3ee9c
     int gl33_attribs[] = {
@@ -447,7 +445,8 @@ HGLRC _win32_init_opengl(HWND Window)
 
     Assert(wglCreateContextAttribsARB);
     HGLRC OpenGLContext = wglCreateContextAttribsARB(WindowDeviceContext, 0, gl33_attribs);
-#endif
+
+    
 
     return OpenGLContext;
 }

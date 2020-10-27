@@ -222,7 +222,6 @@ int gpu_max_num_multisample_samples()
 inline
 bool gpu_update_or_create_multisample_texture(GPU_Texture_ID *id, u32 width, u32 height, int num_samples, GPU_Error_Code *_error_code)
 {
-    bool did_exist = *id != 0; // nocheckin
     if(*id == 0) {
         glGenTextures(1, id);
     }            
