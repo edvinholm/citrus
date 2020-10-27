@@ -554,8 +554,6 @@ Rect begin_window(UI_Context ctx, UI_ID *_id)
 void end_window(UI_ID id, UI_Manager *manager)
 {
     put_ui_element_on_bottom(id, manager);
-
-    // TODO set depth etc... nocheckin
 }
 
 void update_window(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
