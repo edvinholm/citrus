@@ -29,7 +29,7 @@ REM Debug:
 cl -D OS_WINDOWS=1 -D DEBUG=1  /EHsc main.cpp /Fecitrus.exe /Z7 /link Shcore.lib ws2_32.lib kernel32.lib user32.lib gdi32.lib opengl32.lib Shell32.lib Comdlg32.lib -incremental:no /opt:ref /opt:icf /nologo
 
 
-IF %ERRORLEVEL% NEQ 0 EXIT 1
+IF %ERRORLEVEL% NEQ 0 goto end
 echo Done.
 
 REM echo ----------------------------------------------------------------
@@ -37,7 +37,7 @@ REM echo ----------------------------------------------------------------
 REM echo ############# COMPILING SERVER #############
 REM cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib opengl32.lib gdi32.lib -incremental:no /opt:ref /opt:icf /nologo
 
-REM IF %ERRORLEVEL% NEQ 0 EXIT 1
+REM IF %ERRORLEVEL% NEQ 0 goto end
 REM echo Done.
 
 echo ----------------------------------------------------------------
@@ -51,4 +51,4 @@ echo Done.
 
 echo ----------------------------------------------------------------
 
-IF %ERRORLEVEL% NEQ 0 EXIT 1
+:end
