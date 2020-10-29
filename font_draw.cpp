@@ -203,7 +203,8 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    // nocheckin
+    
+    //@Temporary!!!!!!!!!! @Cleanup
     gpu_bind_texture(gfx->textures.ids[TEX_FONT_TITLE]);
     gpu_set_uniform_int(gfx->fragment_shader.texture_uniform, 0);
     gpu_set_uniform_int(gfx->fragment_shader.texture_present_uniform, 1);
@@ -273,7 +274,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Graphics *gfx,
         *previous_codepoint = codepoint;
     }
 
-    //nocheckin
+    //@Temporary!!!!!!!!!! @Cleanup
     gpu_set_uniform_int(gfx->fragment_shader.texture_present_uniform, 0);
 
     return rect(p, V2(max_x - p.x, pp.y - p.y - font->descent * scale));

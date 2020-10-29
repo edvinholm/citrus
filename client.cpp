@@ -234,13 +234,12 @@ void draw_window(UI_Element *e, Graphics *gfx)
 
     const float visible_border_w = 2;
     Rect r = shrunken(a, window_border_width-visible_border_w);
-    const v4 c_purple = { 0.25, 0, 1, 1 };
+    const v4 c_purple = { 0.3, 0, 0.9, 1 };
     quad_now(r, c_purple, gfx);
 
-    gfx->current_color = {1, 1, 1, 1}; // nocheckin
+    gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
-    String_Builder sb = {0}; // nocheckin
-    draw_string_in_rect_centered(concat_tmp("", (u64)wglGetCurrentContext(), sb), title_a, FS_28, FONT_TITLE, gfx);
+    draw_string_in_rect_centered(STRING("Window Title"), title_a, FS_20, FONT_TITLE, gfx);
     
 
     const v4 c_white = { 1, 1, 1, 1 };
@@ -272,6 +271,7 @@ void draw_button(UI_Element *e, Graphics *gfx)
         
     v2 uv[6] = {0};
 
+    /* Cool gradient:
     v4 c[6] = {
         { 0, 0, 1, 1 },
         { 1, 0, 1, 1 },
@@ -281,7 +281,7 @@ void draw_button(UI_Element *e, Graphics *gfx)
         { 1, 0, 1, 1 },
         { 0, 1, 1, 1 }
     };
-                
+       
     v4 h[6] = {
         { 0, 0, 0.5, 1 },
         { 1, 0, 0.5, 1 },
@@ -301,10 +301,45 @@ void draw_button(UI_Element *e, Graphics *gfx)
         { 0.5, 0, 1.0, 1 },
         { 0, 1, 0.5, 1 }
     };
+    */
+    
+    v4 c[6] = {
+        { 0.05, 0.6, 0.3, 1 },
+        { 0.05, 0.6, 0.3, 1 },
+        { 0.05, 0.6, 0.3, 1 },
+        
+        { 0.05, 0.6, 0.3, 1 },
+        { 0.05, 0.6, 0.3, 1 },
+        { 0.05, 0.6, 0.3, 1 },
+    };
+    
+    v4 h[6] = {
+        { 0.00, 0.65, 0.225, 1 },
+        { 0.00, 0.65, 0.225, 1 },
+        { 0.00, 0.65, 0.225, 1 },
+        
+        { 0.00, 0.65, 0.225, 1 },
+        { 0.00, 0.65, 0.225, 1 },
+        { 0.00, 0.65, 0.225, 1 },
+    };
+    
+    v4 p[6] = {
+        { 0.00, 0.5, 0.20, 1 },
+        { 0.00, 0.5, 0.20, 1 },
+        { 0.00, 0.5, 0.20, 1 },
+        
+        { 0.00, 0.5, 0.20, 1 },
+        { 0.00, 0.5, 0.20, 1 },
+        { 0.00, 0.5, 0.20, 1 },
+    };
 
-    {
-        triangles_now(v, uv, (btn.state & HOVERED) ? ((btn.state & PRESSED) ? p : h) : c, 6, gfx);
-    }
+
+    v4 *color = c;
+    if(btn.state & PRESSED)      color = p;
+    else if(btn.state & HOVERED) color = h;
+
+    triangles_now(v, uv, color, 6, gfx);
+    draw_string_in_rect_centered(STRING("BUTTON"), a, FS_24, FONT_TITLE, gfx);
 }
 
 DWORD render_loop(void *loop_)
@@ -464,23 +499,38 @@ void stop_render_loop(Render_Loop *loop)
 }
 
 
+// @Temporary
 void foo_window(UI_Context ctx)
 {
     U(ctx);
 
-    // nocheckin
     static float x = 0;
+    static int hidden = -1;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id));
-
-        _BOTTOM_(32);
-
-        { _RIGHT_SLIDE_(96 + x);
+        
+        {_BOTTOM_CUT_(32); _RIGHT_(96 + x);
+            
             if(button(P(ctx)) & CLICKED) {
                 x += 32;
             }
         }
+        cut_bottom(window_default_padding, ctx.layout);
+
+        
+        { _GRID_(6, 4, window_default_padding);
+            for(int i = 0; i < 6 * 4; i++) {
+                _CELL_();
+
+                if(i == hidden) continue;
+                
+                if(button(PC(ctx, i)) & CLICKED) {
+                    hidden = i;
+                }
+            }   
+        }
+
     }
     end_window(window_id, ctx.manager);
 }
@@ -501,7 +551,7 @@ void client_ui(UI_Context ctx, Client *client)
     {   
         _CELL_();
 
-        if(i == 0) {
+        if(i == 0 || i == 3) {
             foo_window(PC(ctx, i));
         }
     }
