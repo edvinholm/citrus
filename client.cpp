@@ -633,7 +633,7 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // CREATE WINDOW //
-    platform_create_window(main_window, "Citrus", 1200, 900);
+    platform_create_window(main_window, "Citrus", 800, 600);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
@@ -678,7 +678,6 @@ int client_entry_point(int num_args, char **arguments)
 
         // NOTE: Get input as close as possible to the UI update.
         if(!platform_process_input(main_window)) {
-//            unlock_mutex(render_loop.mutex);
             break;
         }
         
