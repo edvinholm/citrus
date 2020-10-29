@@ -545,10 +545,11 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
 }
 
 
-const float window_border_width =  8;
-const float window_title_height = 24;
+const float window_default_padding =  4;
+const float window_border_width    =  8;
+const float window_title_height    = 24;
 
-Rect begin_window(UI_Context ctx, UI_ID *_id)
+Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
 {
     U(ctx);
 
@@ -562,12 +563,16 @@ Rect begin_window(UI_Context ctx, UI_ID *_id)
         win->current_a = win->initial_a;
 
     *_id = id;
+
+    float to_shrink = window_border_width;
+    if(use_default_padding)
+        to_shrink += window_default_padding;
     
     return shrunken(win->current_a,
-                    window_border_width,  // Left
-                    window_border_width,  // Right
-                    window_border_width + window_title_height, // Top
-                    window_border_width); // Bottom
+                    to_shrink,  // Left
+                    to_shrink,  // Right
+                    to_shrink + window_title_height, // Top
+                    to_shrink); // Bottom
 }
 
 void end_window(UI_ID id, UI_Manager *manager)
