@@ -173,7 +173,7 @@ void gpu_set_viewport(float x, float y, float w, float h)
 
 //TODO @Robustness: Pass min/mag filters
 inline
-bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture_ID *_id, GPU_Error_Code *_error_code)
+bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture_ID *_id, GPU_Error_Code *_error_code = NULL)
 {
     //TODO @Incomplete: Use params
     
@@ -183,8 +183,9 @@ bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    *_error_code = glGetError();    
-    return (*_error_code == 0);
+    auto err = glGetError();
+    if(_error_code) *_error_code = err;
+    return (err == 0);
 }
 
 
@@ -254,10 +255,15 @@ inline
 void gpu_set_texture_data(GPU_Texture_ID texture, void *data, u32 w, u32 h,
                           GPU_Texture_Parameters params)
 {
+    Assert(texture != 0);
+    
     glBindTexture(GL_TEXTURE_2D, texture);
+    auto gl_error = glGetError();
+    Assert(gl_error == 0);
+
     glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
                  params.pixel_format, params.pixel_data_type, data);
 
-    auto gl_error = glGetError();
+    gl_error = glGetError();
     Assert(gl_error == 0);
 }

@@ -368,11 +368,18 @@ LPARAM LParam
 //NOTE: Returns false if the window should close.
 bool platform_process_input(Window *window)
 {
+    bool any_messages = false;
+    
     MSG Message;
     while(PeekMessage(&Message, window->Handle, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&Message);
         DispatchMessage(&Message);
+        any_messages = true;
+    }
+
+    if(!any_messages) {
+        Sleep(1);
     }
 
     return !window->CloseButtonClicked;
@@ -385,11 +392,8 @@ bool platform_make_gpu_context_current(Window *window)
 
 
 inline
-HGLRC _win32_init_opengl(HWND Window)
-{
-    HDC WindowDeviceContext = GetDC(Window);
-    Assert(WindowDeviceContext);
-    
+void platform_init_gl_for_window(Window *window)
+{    
     PIXELFORMATDESCRIPTOR DesiredPixelFormat =
     {
         sizeof(PIXELFORMATDESCRIPTOR),
@@ -411,13 +415,13 @@ HGLRC _win32_init_opengl(HWND Window)
     };
     
     int PixelFormatIndex = ChoosePixelFormat(
-        WindowDeviceContext,
+        window->DeviceContext,
         &DesiredPixelFormat
                                              );
     PIXELFORMATDESCRIPTOR PixelFormat;
-    DescribePixelFormat(WindowDeviceContext, PixelFormatIndex, sizeof(PixelFormat), &PixelFormat);
+    DescribePixelFormat(window->DeviceContext, PixelFormatIndex, sizeof(PixelFormat), &PixelFormat);
     
-    SetPixelFormat(WindowDeviceContext, PixelFormatIndex, &PixelFormat);
+    SetPixelFormat(window->DeviceContext, PixelFormatIndex, &PixelFormat);
 
 
 
@@ -432,28 +436,27 @@ HGLRC _win32_init_opengl(HWND Window)
     typedef HGLRC (*wgl_create_context_attribs_arb)(HDC hDC, HGLRC hshareContext, const int *attribList);
     wgl_create_context_attribs_arb wglCreateContextAttribsARB;
     { // STUUUUPIIIIIIIIIIIIIIIIIIIIID
-        HGLRC dummy_context = wglCreateContext(WindowDeviceContext);
+        HGLRC dummy_context = wglCreateContext(window->DeviceContext);
         Assert(dummy_context);
-        if (!wglMakeCurrent(WindowDeviceContext, dummy_context)) { Assert(false); return 0; }
+        if (!wglMakeCurrent(window->DeviceContext, dummy_context)) { Assert(false); return; }
 
         // Just to be able to do this.....
         wglCreateContextAttribsARB = (wgl_create_context_attribs_arb)wglGetProcAddress("wglCreateContextAttribsARB");    
         
-        wglMakeCurrent(WindowDeviceContext, 0);
+        wglMakeCurrent(window->DeviceContext, 0);
         wglDeleteContext(dummy_context);
     } // /////////////////////////////
 
     Assert(wglCreateContextAttribsARB);
-    HGLRC OpenGLContext = wglCreateContextAttribsARB(WindowDeviceContext, 0, gl33_attribs);
+    HGLRC OpenGLContext = wglCreateContextAttribsARB(window->DeviceContext, 0, gl33_attribs);
 
-    
-
-    return OpenGLContext;
+    window->GLContext = OpenGLContext;
+    Assert(window->GLContext);
 }
 
 //TODO: When destroying window:
 /*
-  ReleaseDC(WindowHandle, WindowDeviceContext);
+  ReleaseDC(WindowHandle, window->DeviceContext);
 */
 
 
@@ -466,8 +469,8 @@ void platform_get_dpi(Window *window, u32 *_x, u32 *_y)
 
 
 
-void platform_create_gl_window(Window *_window, const char *Title = "",
-                               int Width = 640, int Height = 480, int X = CW_USEDEFAULT, int Y = CW_USEDEFAULT)
+void platform_create_window(Window *_window, const char *Title = "",
+                            int Width = 640, int Height = 480, int X = CW_USEDEFAULT, int Y = CW_USEDEFAULT)
 {
     HINSTANCE Instance = GetModuleHandle(0);
     
@@ -498,13 +501,10 @@ void platform_create_gl_window(Window *_window, const char *Title = "",
         
         if (WindowHandle)
         {
-            HGLRC OpenGLContext = _win32_init_opengl(WindowHandle);
             HDC WindowDeviceContext = GetDC(WindowHandle);
-
-            Assert(OpenGLContext);
             
-            HANDLE Icon = LoadImage(Instance, "res/icon.ico", IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
-            SendMessage(WindowHandle, (UINT)WM_SETICON, ICON_BIG, (LPARAM)Icon);
+//            HANDLE Icon = LoadImage(Instance, "res/icon.ico", IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+//            SendMessage(WindowHandle, (UINT)WM_SETICON, ICON_BIG, (LPARAM)Icon);
             
             //TODO @CPort: Do what nCmdShow says!
             ShowWindow(WindowHandle, SW_SHOW);
@@ -513,7 +513,6 @@ void platform_create_gl_window(Window *_window, const char *Title = "",
             Zero(*_window);
             
             _window->Handle = WindowHandle;
-            _window->GLContext = OpenGLContext;
             _window->DeviceContext = WindowDeviceContext;
             
             if(!WIN32_DEFAULT_INPUT_WINDOW) WIN32_DEFAULT_INPUT_WINDOW = _window;
@@ -541,7 +540,6 @@ void platform_get_window_position(Window *win, float *_x, float *_y)
     *_y = rect.top;
 }
 
-inline
 void platform_get_window_rect(Window *win, float *_x, float *_y, float *_w, float *_h)
 {
     RECT rect;
@@ -581,13 +579,14 @@ bool platform_set_window_size_and_position(Window *window, int x, int y, int w, 
 inline
 void platform_begin_frame(Window *window)
 {
-    
+    wglMakeCurrent(window->DeviceContext, window->GLContext);
 }
 
 inline
 void platform_end_frame(Window *window)
 {
     SwapBuffers(window->DeviceContext);
+    wglMakeCurrent(window->DeviceContext, 0);
 }
 
 

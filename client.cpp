@@ -6,6 +6,7 @@ struct Client
     Input_Manager input;
 
     Window main_window;
+    Rect main_window_a;
 };
 
 // @Temporary
@@ -15,18 +16,20 @@ int ups = 0;
 int updates_this_second = 0;
 
 
-bool update_framebuffers(Graphics *gfx)
+bool update_gpu_resources(Graphics *gfx)
 {
+    
+    GPU_Texture_Parameters default_texture_params = {0};
+    default_texture_params.pixel_components = GPU_PIX_COMP_RGBA;
+    default_texture_params.pixel_format     = GPU_PIX_FORMAT_RGBA;
+    default_texture_params.pixel_data_type  = GPU_PIX_DATA_UNSIGNED_BYTE;
+    
     // GET MAX NUM MULTISAMPLE SAMPLES //
     int max_num_samples = gpu_max_num_multisample_samples();
-    int num_samples = min(16, max_num_samples);
+    int num_samples = min(TWEAK_max_multisample_samples, max_num_samples);
     // 
 
     // UPDATE OR CREATE MULTISAMPLE TEXTURE //
-    GPU_Texture_Parameters multisample_texture_params = {0};
-    multisample_texture_params.pixel_components = GPU_PIX_COMP_RGBA;
-    multisample_texture_params.pixel_format     = GPU_PIX_FORMAT_RGBA;
-    multisample_texture_params.pixel_data_type  = GPU_PIX_DATA_UNSIGNED_BYTE;
     GPU_Error_Code gpu_error;
     if(!gpu_update_or_create_multisample_texture(&gfx->multisample_texture, (u64)gfx->frame_s.w, (u64)gfx->frame_s.h, num_samples, &gpu_error)) {
         Debug_Print("Failed to create multisample texture.\n");
@@ -40,10 +43,12 @@ bool update_framebuffers(Graphics *gfx)
     gpu_update_framebuffer(gfx->multisample_framebuffer, gfx->multisample_texture, true);
     //
 
+
     return true;
 }
 
-void frame_begin(Window *window, bool first_frame, Graphics *gfx)
+// REMEMBER to lock the mutex before calling this, since we access stuff in client.
+void frame_begin(Window *window, bool first_frame, Graphics *gfx, Client *client)
 {
     platform_begin_frame(window);
     gpu_frame_init();
@@ -51,15 +56,14 @@ void frame_begin(Window *window, bool first_frame, Graphics *gfx)
     u64 old_frame_w = (u64)gfx->frame_s.w;
     u64 old_frame_h = (u64)gfx->frame_s.h;
 
-    float window_x, window_y;
-    platform_get_window_rect(window, &window_x, &window_y, &gfx->frame_s.w, &gfx->frame_s.h);
+    gfx->frame_s = client->main_window_a.s;
 
     if(first_frame ||
        old_frame_w != (u64)gfx->frame_s.w || // @Robustness: Maybe frame w and h should be floats.
        old_frame_h != (u64)gfx->frame_s.h)
     {
-        bool framebuffer_update_result = update_framebuffers(gfx);
-        Assert(framebuffer_update_result);
+        bool gpu_resources_update_result = update_gpu_resources(gfx);
+        Assert(gpu_resources_update_result);
     }
 }
 
@@ -73,18 +77,20 @@ void frame_end(Window *window, Graphics *gfx)
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     //
-    
-    platform_end_frame(window);
 
     // Switch buffer set //
     gfx->buffer_set_index++;
     gfx->buffer_set_index %= ARRLEN(gfx->vertex_shader.buffer_sets);
     gpu_set_buffer_set(gfx->buffer_set_index, &gfx->vertex_shader);
     //--
+        
+    platform_end_frame(window);
 }
 
 bool init_graphics(Window *window, Graphics *gfx)
-{    
+{
+    platform_init_gl_for_window(window);
+    
     if(!wglMakeCurrent(window->DeviceContext, window->GLContext)) {
         Debug_Print("wglMakeCurrent error: %d\n", GetLastError());
         Assert(false);
@@ -170,7 +176,15 @@ void quad_now(Rect a, v4 color, Graphics *gfx)
         { a.x + a.w, a.y + a.h, 0 }
     };
     
-    v2 uv[6] = {0};
+    v2 uv[6] = {
+        0, 0,
+        0, 1,
+        1, 0,
+
+        1, 0,
+        0, 1,
+        1, 1
+    };
     
     v4 c[6] = {
         color,
@@ -215,14 +229,29 @@ void draw_window(UI_Element *e, Graphics *gfx)
     };
     */
 
-    const v4 c = { 0.25, 0, 1, 1 };
-    quad_now(a, c, gfx);
+    const v4 shadow_c = { 0, 0, 0, 0.05 };
+    quad_now(a, shadow_c, gfx);
 
-    const v4 c_red = { 1, 0, 0, 1 };
+    const float visible_border_w = 2;
+    Rect r = shrunken(a, window_border_width-visible_border_w);
+    const v4 c_purple = { 0.25, 0, 1, 1 };
+    quad_now(r, c_purple, gfx);
+
+    gfx->current_color = {1, 1, 1, 1}; // nocheckin
+    Rect title_a = cut_top_off(&r, window_title_height);
+    String_Builder sb = {0}; // nocheckin
+    draw_string_in_rect_centered(concat_tmp("", (u64)wglGetCurrentContext(), sb), title_a, FS_28, FONT_TITLE, gfx);
+    
+
+    const v4 c_white = { 1, 1, 1, 1 };
+    quad_now(shrunken(r, visible_border_w), c_white, gfx);
+
+    const v4 c_red    = { 1, 0, 0, 1 };
     if(win.resize_dir_x < 0) quad_now(left_of(  a, window_border_width), c_red, gfx);
     if(win.resize_dir_x > 0) quad_now(right_of( a, window_border_width), c_red, gfx);
     if(win.resize_dir_y < 0) quad_now(top_of(   a, window_border_width), c_red, gfx);
     if(win.resize_dir_y > 0) quad_now(bottom_of(a, window_border_width), c_red, gfx);
+
 }
 
 void draw_button(UI_Element *e, Graphics *gfx)
@@ -274,7 +303,7 @@ void draw_button(UI_Element *e, Graphics *gfx)
     };
 
     {
-        triangles_now(v, uv, (btn.hovered) ? ((btn.pressed) ? p : h) : c, 6, gfx);
+        triangles_now(v, uv, (btn.state & HOVERED) ? ((btn.state & PRESSED) ? p : h) : c, 6, gfx);
     }
 }
 
@@ -300,6 +329,16 @@ DWORD render_loop(void *loop_)
         bool graphics_init_result = init_graphics(main_window, &gfx);
         Assert(graphics_init_result);
 
+        init_fonts(&gfx);
+
+        // CREATE FONT GLYPH TEXTURES ON GPU //
+        for(int f = 0; f < NUM_FONTS; f++){
+            GPU_Error_Code error_code = 0;
+            create_gpu_texture_for_sprite_map(&gfx.glyph_maps[f], &gfx, &error_code);
+            Assert(error_code == 0);
+        }
+        //
+
         // INITIALIZATION DONE //        
         loop->state = Render_Loop::RUNNING;
     }
@@ -310,30 +349,41 @@ DWORD render_loop(void *loop_)
     u64 last_second = platform_milliseconds() / 1000;
     
     while(true)
-    {
-        u64 second = platform_milliseconds() / 1000;
-        frame_begin(main_window, first_frame, &gfx);
-
-        m4x4 ui_projection = make_m4x4(
-            2.0/gfx.frame_s.w,  0, 0, -1,
-            0, -2.0/gfx.frame_s.h, 0,  1,
-            0,  0, 1,  0,
-            0,  0, 0,  1);
-
-        gpu_set_uniform_m4x4(gfx.vertex_shader.projection_uniform, ui_projection);
-        gpu_set_uniform_m4x4(gfx.vertex_shader.transform_uniform,  M_IDENTITY);
-            
-        gpu_set_viewport(0, 0, gfx.frame_s.w, gfx.frame_s.h);
-        
+    {   
         lock_mutex(loop->mutex);
         {
             if(loop->state == Render_Loop::SHOULD_EXIT) {
                 unlock_mutex(loop->mutex);
                 break;
             }
+
+            u64 second = platform_milliseconds() / 1000;
+            
+            frame_begin(main_window, first_frame, &gfx, client);
+
+            // Window size things //
+            m4x4 ui_projection = make_m4x4(
+                2.0/gfx.frame_s.w,  0, 0, -1,
+                0, -2.0/gfx.frame_s.h, 0,  1,
+                0,  0, 1,  0,
+                0,  0, 0,  1);
+
+            gpu_set_uniform_m4x4(gfx.vertex_shader.projection_uniform, ui_projection);
+            gpu_set_uniform_m4x4(gfx.vertex_shader.transform_uniform,  M_IDENTITY);
+            
+            gpu_set_viewport(0, 0, gfx.frame_s.w, gfx.frame_s.h);
+            // //////// //
+
+            for(int i = 0; i < ARRLEN(gfx.glyph_maps); i++)
+            {
+                update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
+            }
+
+            const v4 background_color = { 0.3, 0.36, 0.42, 1 };
+            quad_now(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
+        
                 
             // Draw UI
-            
             for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
             {
                 UI_ID id      = ui->elements_in_depth_order[i];
@@ -362,13 +412,13 @@ DWORD render_loop(void *loop_)
             
             frames_this_second++;
             
+            last_second = second;
+            first_frame = false;
         }
         unlock_mutex(loop->mutex);
-
+        
         
         frame_end(main_window, &gfx);
-        last_second = second;
-        first_frame = false;
     }
 
     return 0;
@@ -413,6 +463,28 @@ void stop_render_loop(Render_Loop *loop)
     delete_mutex(loop->mutex);
 }
 
+
+void foo_window(UI_Context ctx)
+{
+    U(ctx);
+
+    // nocheckin
+    static float x = 0;
+
+    UI_ID window_id;
+    { _AREA_(begin_window(P(ctx), &window_id));
+
+        _BOTTOM_(32);
+
+        { _RIGHT_SLIDE_(96 + x);
+            if(button(P(ctx)) & CLICKED) {
+                x += 32;
+            }
+        }
+    }
+    end_window(window_id, ctx.manager);
+}
+
 void client_ui(UI_Context ctx, Client *client)
 {
     U(ctx);
@@ -429,13 +501,9 @@ void client_ui(UI_Context ctx, Client *client)
     {   
         _CELL_();
 
-        UI_ID window_id;
-        { _AREA_(begin_window(PC(ctx, i), &window_id));
-            if(button(PC(ctx, i))) {
-                new_x++;
-            }
+        if(i == 0) {
+            foo_window(PC(ctx, i));
         }
-        end_window(window_id, ctx.manager);
     }
     x = new_x;
 }
@@ -504,8 +572,9 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // CREATE WINDOW //
-    platform_create_gl_window(main_window, "Citrus", 960, 720);
+    platform_create_window(main_window, "Citrus", 1200, 900);
     client_set_window_delegate(main_window, &client);
+    platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
 
     // START RENDER THREAD //
@@ -531,6 +600,8 @@ int client_entry_point(int num_args, char **arguments)
     while(true)
     {
         new_input_frame(input);
+
+        Assert((u64)wglGetCurrentContext() == 0);
         
         // TIME //
         u64 millisecond = platform_milliseconds();
@@ -543,14 +614,17 @@ int client_entry_point(int num_args, char **arguments)
         platform_get_window_rect(main_window, &window_a.x, &window_a.y, &window_a.w, &window_a.h);
         layout->root_size = window_a.s;
         // //////////////////////////////////// //
+
+        // NOTE: Get input as close as possible to the UI update.
+        if(!platform_process_input(main_window)) {
+//            unlock_mutex(render_loop.mutex);
+            break;
+        }
         
         lock_mutex(render_loop.mutex);
         {
-            // NOTE: Get input as close as possible to the UI update.
-            if(!platform_process_input(main_window)) {
-                unlock_mutex(render_loop.mutex);
-                break;
-            }
+            client.main_window_a = window_a;
+            
             
             // BUILD UI //
             new_ui_build(ui, &client.input);
