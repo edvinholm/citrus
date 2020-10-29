@@ -72,9 +72,9 @@ void frame_end(Window *window, Graphics *gfx)
     // BLIT MULTISAMPLE TO DEFAULT FRAMEBUFFER //
     auto w = gfx->frame_s.w;
     auto h = gfx->frame_s.h;
-	//@Temporary: Move to GPU layer
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->multisample_framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    //@Temporary: Move to GPU layer
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->multisample_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     //
 
@@ -572,7 +572,7 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // CREATE WINDOW //
-    platform_create_window(main_window, "Citrus", 1200, 900);
+    platform_create_window(main_window, "Citrus", 800, 600);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
@@ -617,7 +617,6 @@ int client_entry_point(int num_args, char **arguments)
 
         // NOTE: Get input as close as possible to the UI update.
         if(!platform_process_input(main_window)) {
-//            unlock_mutex(render_loop.mutex);
             break;
         }
         
