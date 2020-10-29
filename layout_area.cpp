@@ -207,30 +207,30 @@ Rect slide_right(float w, Layout_Manager *manager)
 
 
 #define _TOP_SLIDE_(H) \
-    _AREA_(slide_top(H));
+    _AREA_(slide_top(H, ctx.layout));
 
 #define _BOTTOM_SLIDE_(H) \
-    _AREA_(slide_bottom(H));
+    _AREA_(slide_bottom(H, ctx.layout));
 
 #define _LEFT_SLIDE_(W) \
-    _AREA_(slide_left(W));
+    _AREA_(slide_left(W, ctx.layout));
 
 #define _RIGHT_SLIDE_(W) \
-    _AREA_(slide_right(W));
+    _AREA_(slide_right(W, ctx.layout));
     
 
 
 #define _TOP_SQUARE_() \
-    _AREA_(top_square_of(area()));
+    _AREA_(top_square_of(area(ctx.layout)));
 
 #define _BOTTOM_SQUARE_() \
-    _AREA_(bottom_square_of(area()));
+    _AREA_(bottom_square_of(area(ctx.layout)));
 
 #define _LEFT_SQUARE_() \
-    _AREA_(left_square_of(area()));
+    _AREA_(left_square_of(area(ctx.layout)));
 
 #define _RIGHT_SQUARE_() \
-    _AREA_(right_square_of(area()));
+    _AREA_(right_square_of(area(ctx.layout)));
 
 
 

@@ -1,5 +1,4 @@
 
-
 struct Graphics
 {
     GPU_Context gpu_ctx;
@@ -13,4 +12,12 @@ struct Graphics
     Fragment_Shader fragment_shader;
 
     v2 frame_s;
+
+    Texture_Catalog textures;
+    
+    Sprite_Map glyph_maps[NUM_FONTS];
+    Font       fonts[NUM_FONTS] = {0};
+
+    v4      current_color;
+    Font_ID current_font;
 };

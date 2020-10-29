@@ -106,6 +106,21 @@ enum UI_Element_Type
     BUTTON
 };
 
+enum UI_Button_State_
+{
+    IDLE                = 0b000000000000,
+    HOVERED             = 0b000000000001,
+    //HOVERED_NOW         = 0b000000000010,
+    //UNHOVERED_NOW       = 0b000000000100, // This element was unhovered this frame
+    PRESSED             = 0b000000001000, // State has been PRESSED_NOW and the mouse button is still down.
+    CLICKED             = 0b000000010000, // Clicked this frame.
+    //CLICKED_AND_ENABLED = 0b000000100000, // Clicked this frame AND the element was enabled.
+    //PRESSED_NOW         = 0b000001000000, // Pressed this frame.
+    //RELEASED_NOW        = 0b000010000000, // It was pressed before, and it was released this frame.
+    //MOUSE_UP_ON_NOW     = 0b000100000000, // The mouse was released this frame, and the cursor was over the element.
+};
+typedef u16 UI_Button_State; //In @JAI, this can probably be just an enum.
+
 struct UI_Window
 {
     Rect initial_a;
@@ -124,9 +139,7 @@ struct UI_Window
 struct UI_Button
 {
     Rect a;
-    bool hovered; // TODO @Cleanup: Make bools into bitfield
-    bool pressed;
-    bool clicked;
+    UI_Button_State state;
 };
 
 struct UI_Element
@@ -490,7 +503,7 @@ private:
 
 
 
-bool button(UI_Context ctx)
+UI_Button_State button(UI_Context ctx)
 {    
     U(ctx);
     
@@ -499,35 +512,41 @@ bool button(UI_Context ctx)
     auto *btn = &e->button;
     btn->a = area(ctx.layout);
 
-    return btn->clicked;
+    return btn->state;
 }
 
 void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
 {
     Assert(e->type == BUTTON);
     
-    UI_Button &btn = e->button;
+    auto &btn   = e->button;
+    auto &state = btn.state;
 
     auto &mouse = input->mouse;
 
-    btn.clicked = false;
-    btn.hovered = (e == hovered_element);
+    state &= ~CLICKED;
+    if(e == hovered_element) {
+        state |= HOVERED;
+        
+        if(mouse.buttons_down & MB_PRIMARY)
+            state |= PRESSED;
 
-    if(mouse.buttons_down & MB_PRIMARY) {
-        if(btn.hovered) btn.pressed = true;
-    }
-    else if(!(mouse.buttons & MB_PRIMARY)) {
-
-        if(mouse.buttons_up & MB_PRIMARY) {
-            if(btn.pressed && btn.hovered) btn.clicked = true;
+        if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
+            state |= CLICKED;
         }
-        btn.pressed = false;
+    }
+    else {
+        state &= ~HOVERED;
+    }
+    
+    if(!(mouse.buttons & MB_PRIMARY)) {
+        state &= ~PRESSED;
     }
 }
 
 
-const float window_border_width =  4;
-const float window_title_height = 16;
+const float window_border_width =  8;
+const float window_title_height = 24;
 
 Rect begin_window(UI_Context ctx, UI_ID *_id)
 {
@@ -608,21 +627,27 @@ void update_window(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     
     // RESIZE IF RESIZING //
     if(win.resize_dir_x == 1) {
-        win.current_a.w = mouse.p.x - win.current_a.x + right_border.w/2.0f;
+        win.current_a.w = round(mouse.p.x - win.current_a.x + right_border.w/2.0f);
     }
     else if(win.resize_dir_x == -1) {
         float delta = (win.current_a.x + left_border.w/2.0f) - mouse.p.x;
         win.current_a.w += delta;
         win.current_a.x -= delta;
+        
+        win.current_a.w = round(win.current_a.w);
+        win.current_a.x = round(win.current_a.x);
     }
     
     if(win.resize_dir_y == 1) {
-        win.current_a.h = mouse.p.y - win.current_a.y + bottom_border.h/2.0f;
+        win.current_a.h = round(mouse.p.y - win.current_a.y + bottom_border.h/2.0f);
     }
     else if(win.resize_dir_y == -1) {
         float delta = (win.current_a.y + top_border.h/2.0f) - mouse.p.y;
         win.current_a.h += delta;
         win.current_a.y -= delta;
+        
+        win.current_a.h = round(win.current_a.h);
+        win.current_a.y = round(win.current_a.y);
     }
     // //////////////// //
 

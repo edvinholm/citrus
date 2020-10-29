@@ -9,7 +9,7 @@ REM --------
 
 
 echo ----------------------------------------------------------------
-Taskkill /IM citrus.exe /F
+Taskkill /IM citrus.exe /F 
 Taskkill /IM citrus_release.exe /F
 echo ----------------------------------------------------------------
 DEL vc140.pdb
