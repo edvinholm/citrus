@@ -72,10 +72,21 @@ void frame_end(Window *window, Graphics *gfx)
     // BLIT MULTISAMPLE TO DEFAULT FRAMEBUFFER //
     auto w = gfx->frame_s.w;
     auto h = gfx->frame_s.h;
-	//@Temporary: Move to GPU layer
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->multisample_framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    //@Temporary: Move to GPU layer
+#if 0
+    glBlitNamedFramebuffer(gfx->multisample_framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+#else
+    GLint old_framebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_framebuffer);
+    
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->multisample_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    auto err = glGetError();
+    Assert(err == 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, old_framebuffer);
+#endif
     //
 
     // Switch buffer set //
@@ -392,10 +403,10 @@ DWORD render_loop(void *loop_)
                 break;
             }
 
-            u64 second = platform_milliseconds() / 1000;
-            
             frame_begin(main_window, first_frame, &gfx, client);
 
+            u64 second = platform_milliseconds() / 1000;
+            
             // Window size things //
             m4x4 ui_projection = make_m4x4(
                 2.0/gfx.frame_s.w,  0, 0, -1,

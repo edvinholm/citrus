@@ -579,14 +579,12 @@ bool platform_set_window_size_and_position(Window *window, int x, int y, int w, 
 inline
 void platform_begin_frame(Window *window)
 {
-    wglMakeCurrent(window->DeviceContext, window->GLContext);
 }
 
 inline
 void platform_end_frame(Window *window)
 {
     SwapBuffers(window->DeviceContext);
-    wglMakeCurrent(window->DeviceContext, 0);
 }
 
 
