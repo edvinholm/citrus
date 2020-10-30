@@ -301,7 +301,7 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     }
 }
 
-void draw_button(UI_Element *e, Graphics *gfx)
+void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {    
     Assert(e->type == BUTTON);
     auto &btn = e->button;
@@ -413,7 +413,7 @@ void draw_button(UI_Element *e, Graphics *gfx)
     else if(btn.state & HOVERED) color = h;
 
     triangles(v, uv, color, tex, 6, gfx);
-    draw_string_in_rect_centered(STRING("BUTTON"), a, FS_24, FONT_TITLE, gfx);
+    draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_24, FONT_TITLE, gfx);
 }
 
 void draw_slider(UI_Element *e, Graphics *gfx)
@@ -496,12 +496,18 @@ void draw_slider(UI_Element *e, Graphics *gfx)
 
     triangles(v, uv, color, tex, 6, gfx);
 
-    draw_string_in_rect_centered(STRING("SLIDER"), a, FS_24, FONT_TITLE, gfx);
-
     v4 handle_c   = {0, 0.25, 0.45, 1};
     v4 handle_c_p = {0.1, 0.1, 0.1, 1};
     
     quad(slider_handle_rect(a, slider->value), (slider->pressed) ? handle_c_p : handle_c, gfx);
+}
+
+void draw_dropdown(UI_Element *e, Graphics *gfx)
+{
+    Assert(e->type == DROPDOWN);
+    auto *dd = &e->dropdown;
+    
+    quad(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
 
@@ -594,8 +600,9 @@ DWORD render_loop(void *loop_)
 
                 switch(e->type) {
                     case WINDOW: draw_window(e, ui, &gfx); break;
-                    case BUTTON: draw_button(e, &gfx); break;
-                    case SLIDER: draw_slider(e, &gfx); break;
+                    case BUTTON: draw_button(e, ui, &gfx); break;
+                    case SLIDER: draw_slider(e, &gfx);     break;
+                    case DROPDOWN: draw_dropdown(e, &gfx); break;
 
                     default: Assert(false); break;
                 }
@@ -673,10 +680,18 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
 {
     U(ctx);
 
+    char *words[] = {
+        "Moo",
+        "OK",
+        "Hello",
+        "EGGPLANT",
+        "CITRUS"
+    };
+
     bool result = false;
     static int selected = -1;
     static float slider_value = 0.75f;
-    slider_value = (1.0f + cos(platform_milliseconds() / 1000.0f))/2.0f;
+    //slider_value = (1.0f + cos(platform_milliseconds() / 1000.0f))/2.0f;
 
     if((platform_milliseconds() / 1000) % 10 == 0)
         slider_disabled = true;
@@ -685,7 +700,12 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
         
         {_BOTTOM_CUT_(32);
-            slider_value = slider(slider_value, P(ctx), slider_disabled);
+            {_LEFT_HALF_();
+                dropdown(P(ctx));
+            }
+            {_RIGHT_HALF_();
+                slider_value = slider(slider_value, P(ctx), slider_disabled);
+            }   
         }
         cut_bottom(window_default_padding, ctx.layout);
 
@@ -695,7 +715,7 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
             for(int i = 0; i < rows_and_cols * rows_and_cols; i++) {
                 _CELL_();
                 
-                if(button(PC(ctx, i), (i % 2 > 0), (selected == i)) & CLICKED_ENABLED) {
+                if(button(PC(ctx, i), STRING(words[i % ARRLEN(words)]), (i % 2 > 0), (selected == i)) & CLICKED_ENABLED) {
                     selected = i;
                 }
             }   

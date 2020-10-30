@@ -110,7 +110,8 @@ enum UI_Element_Type
 {
     WINDOW,
     BUTTON,
-    SLIDER
+    SLIDER,
+    DROPDOWN
 };
 
 enum UI_Button_State_
@@ -155,6 +156,8 @@ struct UI_Button
     Rect a;
     UI_Button_State state;
 
+    UI_String label;
+    
     bool disabled;
     bool selected;
 };
@@ -169,6 +172,21 @@ struct UI_Slider
     bool disabled;
 };
 
+struct UI_Dropdown
+{
+    Rect box_a;
+    UI_Button_State box_button_state;
+    
+    Array<UI_String, ALLOC_UI> options;
+
+    bool open;
+};
+
+void clear(UI_Dropdown *dropdown)
+{
+    clear(&dropdown->options);
+}
+
 
 struct UI_Element
 {
@@ -178,6 +196,7 @@ struct UI_Element
         UI_Window window;
         UI_Button button;
         UI_Slider slider;
+        UI_Dropdown dropdown;
     };
 };
 
@@ -365,8 +384,23 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
         case WINDOW:
         case BUTTON:
         case SLIDER:
+        case DROPDOWN:
             break;
             
+        default: Assert(false); break;
+    }
+}
+
+void clear_ui_element(UI_Element *e)
+{
+    switch(e->type) {
+        case DROPDOWN: clear(&e->dropdown); break;
+
+        case WINDOW:
+        case BUTTON:
+        case SLIDER:
+            break;
+
         default: Assert(false); break;
     }
 }
@@ -584,7 +618,7 @@ UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input
 
 
 
-UI_Button_State button(UI_Context ctx, bool disabled = false, bool selected = false)
+UI_Button_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled = false, bool selected = false)
 {    
     U(ctx);
     
@@ -592,6 +626,7 @@ UI_Button_State button(UI_Context ctx, bool disabled = false, bool selected = fa
     
     auto *btn = &e->button;
     btn->a = area(ctx.layout);
+    btn->label = push_ui_string(label, ctx.manager);
     btn->disabled = disabled;
     btn->selected = selected;
 
@@ -658,6 +693,56 @@ void update_slider(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
         slider->value = min(1.0f, max(0.0f, (mouse.p.x - a.x - handle_a.w/2.0f) / (a.w - handle_a.w)));
     }
 }
+
+
+float dropdown_list_height()
+{
+    return 256;
+}
+
+Rect dropdown_rect(Rect box_a, bool open)
+{
+    Rect a = box_a;
+    if(open)
+        a.h += dropdown_list_height();
+
+    return a;
+}
+
+void dropdown(UI_Context ctx)
+{    
+    U(ctx);
+    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), DROPDOWN, ctx.manager);
+    
+    auto *dd = &e->dropdown;
+    dd->box_a = area(ctx.layout);
+
+    //TODO nocheckin: Options
+}
+
+void update_dropdown(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    auto &mouse = input->mouse;
+    
+    Assert(e->type == DROPDOWN);
+    auto *dd = &e->dropdown;
+    auto &box_a = dd->box_a;
+
+    bool box_hovered = false;
+    if(e == hovered_element) {
+        box_hovered = point_inside_rect(mouse.p, dd->box_a);
+    }
+
+    dd->box_button_state = evaluate_button_state(dd->box_button_state, box_hovered, input);
+    
+    if(dd->box_button_state & CLICKED_ENABLED) dd->open = !dd->open;
+    else if(dd->open && !(dd->box_button_state & HOVERED)) {
+        if(mouse.buttons_down & MB_PRIMARY) dd->open = false;
+    }
+}
+
+
 
 
 const float window_default_padding =  4;
@@ -893,6 +978,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         }
 
         // Dead -- remove it.
+        clear_ui_element(ui->elements.e + i);
+        
         s64 window_index;
         if(in_array(ui->window_stack, ui->element_ids[i], &window_index)) {
             array_ordered_remove(ui->window_stack, window_index);
@@ -986,6 +1073,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             case WINDOW: mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
             case BUTTON: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
             case SLIDER: mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
+            case DROPDOWN: mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
 
             default: Assert(false); break;
         }
@@ -1006,6 +1094,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
             case BUTTON: update_button(e, input, hovered_element); break;
             case SLIDER: update_slider(e, input, hovered_element); break;
+            case DROPDOWN: update_dropdown(e, input, hovered_element); break;
 
             default: Assert(false); break;
         }

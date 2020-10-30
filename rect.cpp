@@ -299,35 +299,11 @@ Rect Bottomhalf(Rect Rect)
 }
 
 inline
-Rect Lefthalf(Rect Rect)
+Rect right_half_of(Rect a)
 {
-    Rect.w *= 0.5f;
-    return Rect;
-}
-
-//NOTE: half of SpacingBetweenhalfs will be removed from the right side of the Rect.
-inline
-Rect Lefthalf(Rect Rect, float SpacingBetweenhalfs)
-{
-    Rect.w = Rect.w * 0.5f - SpacingBetweenhalfs * 0.5f;
-    return Rect;
-}
-
-inline
-Rect Righthalf(Rect Rect)
-{
-    Rect.w *= 0.5f;
-    Rect.x += Rect.w;
-    return Rect;
-}
-
-//NOTE: half of SpacingBetweenhalfs will be removed from the left side of the Rect.
-inline
-Rect Righthalf(Rect Rect, float SpacingBetweenhalfs)
-{
-    Rect.w = Rect.w * 0.5f - SpacingBetweenhalfs * 0.5f;
-    Rect.x += Rect.w + SpacingBetweenhalfs;
-    return Rect;
+    a.w *= 0.5f;
+    a.x += a.w;
+    return a;
 }
 
 
@@ -336,6 +312,13 @@ Rect left_of(Rect Rect, float w)
 {
     Rect.w = w;
     return Rect;
+}
+
+inline
+Rect left_half_of(Rect a)
+{
+    a.w *= 0.5f;
+    return a;
 }
 
 inline

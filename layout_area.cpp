@@ -217,7 +217,16 @@ Rect slide_right(float w, Layout_Manager *manager)
 
 #define _RIGHT_SLIDE_(W) \
     _AREA_(slide_right(W, ctx.layout));
-    
+
+
+
+#define _LEFT_HALF_() \
+    _AREA_(left_half_of(area(ctx.layout)));
+
+#define _RIGHT_HALF_() \
+    _AREA_(right_half_of(area(ctx.layout)));
+
+
 
 
 #define _TOP_SQUARE_() \
