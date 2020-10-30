@@ -81,7 +81,7 @@ void array_set(Array<T, A> &dest, Array<T, B> &src)
 
 
 template<typename T, Allocator_ID A>
-T *array_insert(Array<T, A> &array, T *elements, int index, s64 num_elements = 1)
+T *array_insert(Array<T, A> &array, T *elements, s64 index, s64 num_elements = 1)
 {
     Assert(index <= array.n);
     Assert(index >= 0);

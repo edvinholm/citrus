@@ -134,6 +134,8 @@ struct UI_Window
     v2 mouse_offset_on_move_start;
     
     bool was_resized_or_moved; // This is set to true when a resize/move begins, and will remain false even if the user sets current_a back to initial_a.
+
+    u32 num_children_above; // A window's children_above should always (after end_window()) be right before the window in UI_Manager.elements_in_depth_order.
 };
 
 struct UI_Button
@@ -162,7 +164,12 @@ struct UI_Manager
     Array<bool,       ALLOC_UI> element_alives;
     Array<UI_ID,      ALLOC_UI> element_ids;
     Array<UI_Element, ALLOC_UI> elements;
-    Array<UI_ID,      ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
+    
+    Array<UI_ID, ALLOC_UI> window_stack;
+
+    // This is reset before every build //
+    Array<UI_ID, ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
+    // ////////////////////////////////// //
 };
 
 
@@ -361,22 +368,7 @@ UI_Element *find_or_create_ui_element(UI_ID id, UI_Element_Type type, UI_Manager
     return e;
 }
 
-// NOTE: The element must exist.
-void put_ui_element_on_bottom(UI_ID id, UI_Manager *ui)
-{
-    assert_state_valid(ui);
 
-    for(s64 i = 0; i < ui->elements_in_depth_order.n; i++)
-    {
-        if(ui->elements_in_depth_order[i] == id) {
-            array_add(ui->elements_in_depth_order, id);
-            array_ordered_remove(ui->elements_in_depth_order, i);
-            return;
-        }
-    }
-        
-    Assert(false);
-}
 
 
 
@@ -554,8 +546,14 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
     U(ctx);
 
     UI_ID id = ctx.get_id();
+    auto *ui = ctx.manager;
 
-    UI_Element *e = find_or_create_ui_element(id, WINDOW, ctx.manager);
+    bool was_created;
+    UI_Element *e = find_or_create_ui_element(id, WINDOW, ui, &was_created);
+
+    if(was_created) {
+        array_add(ui->window_stack, id);
+    }
 
     auto *win = &e->window;
     win->initial_a = area(ctx.layout);
@@ -575,91 +573,143 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
                     to_shrink); // Bottom
 }
 
-void end_window(UI_ID id, UI_Manager *manager)
+void end_window(UI_ID id, UI_Manager *ui)
 {
-    put_ui_element_on_bottom(id, manager);
+    UI_Element *e = find_ui_element(id, ui);
+    Assert(e);
+    Assert(e->type == WINDOW);
+    
+    s64 old_depth_index;
+    if(!in_array(ui->elements_in_depth_order, id, &old_depth_index)) {
+        Assert(false);
+    }
+
+    e->window.num_children_above = (ui->elements_in_depth_order.n-1) - old_depth_index;
+
+    array_add(ui->elements_in_depth_order, id);
+    array_ordered_remove(ui->elements_in_depth_order, old_depth_index);
 }
 
-void update_window(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_ID hovered_element_id, UI_Manager *ui)
 {
     auto &mouse = input->mouse;
     
     Assert(e->type == WINDOW);
-    UI_Window &win = e->window;
+    UI_Window *win = &e->window;
 
     // BORDER AND TITLE AREAS //
-    Rect left_border   = left_of(  win.current_a, window_border_width);
-    Rect right_border  = right_of( win.current_a, window_border_width);
-    Rect top_border    = top_of(   win.current_a, window_border_width);
-    Rect bottom_border = bottom_of(win.current_a, window_border_width);
+    Rect left_border   = left_of(  win->current_a, window_border_width);
+    Rect right_border  = right_of( win->current_a, window_border_width);
+    Rect top_border    = top_of(   win->current_a, window_border_width);
+    Rect bottom_border = bottom_of(win->current_a, window_border_width);
     
-    Rect title_a       = top_of(win.current_a, window_title_height);
-    title_a.y += window_border_width;
     //
 
     if(!(mouse.buttons & MB_PRIMARY)) {
         // PRESS END //
-        win.pressed = false;
-        win.resize_dir_x = 0;
-        win.resize_dir_y = 0;
-        win.moving = false;
+        win->pressed = false;
+        win->resize_dir_x = 0;
+        win->resize_dir_y = 0;
+        win->moving = false;
     }
-    
-    if(e == hovered_element) {
-        if(!win.pressed && (mouse.buttons_down & MB_PRIMARY))
-        {
-            // PRESS START //
-            win.pressed = true;
-            
-            if(point_inside_rect(mouse.p, left_border))  win.resize_dir_x -= 1;
-            if(point_inside_rect(mouse.p, right_border)) win.resize_dir_x += 1;
-        
-            if(point_inside_rect(mouse.p, top_border))    win.resize_dir_y -= 1;
-            if(point_inside_rect(mouse.p, bottom_border)) win.resize_dir_y += 1;
 
+    bool move_to_top = false;
+    
+    if(!win->pressed && (mouse.buttons_down & MB_PRIMARY))
+    {       
+        if(e == hovered_element) {
+            
+            // PRESS START //    
+            win->pressed = true;
+                        
+            Rect title_a = top_of(win->current_a, window_title_height);
+            title_a.y += window_border_width;
+
+            if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
+            if(point_inside_rect(mouse.p, right_border)) win->resize_dir_x += 1;
+                
+            if(point_inside_rect(mouse.p, top_border))    win->resize_dir_y -= 1;
+            if(point_inside_rect(mouse.p, bottom_border)) win->resize_dir_y += 1;
+            
             if(point_inside_rect(mouse.p, title_a)) {
-                win.moving = true;
-                win.mouse_offset_on_move_start = mouse.p - win.current_a.p;
+                // Move Start //
+                win->moving = true;
+                win->mouse_offset_on_move_start = mouse.p - win->current_a.p;
             }
+        }
+
+        // MOVE TO TOP //
+        Rect inner_a_title_included = shrunken(win->current_a, window_border_width);
+        if(point_inside_rect(mouse.p, inner_a_title_included)) {
+            if(e == hovered_element) {
+                move_to_top = true;
+            }
+            else
+            {
+                // Check if a child is hovered.
+                s64 depth_index;
+                if(!in_array(ui->elements_in_depth_order, id, &depth_index)) { Assert(false); return; }
+
+                for(int c = depth_index; c >= depth_index - win->num_children_above; c--)
+                {
+                    if(hovered_element_id == ui->elements_in_depth_order[c]) {
+                        move_to_top = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // /////// //
+    }
+
+
+    // MOVE TO TOP //
+    if(move_to_top) {
+        s64 index_in_stack;
+        if(in_array(ui->window_stack, id, &index_in_stack)) {
+            array_ordered_remove(ui->window_stack, index_in_stack);
+            array_add(ui->window_stack, id);
+        } else {
+            Assert(false);
         }
     }
 
     
     // Remember that we moved or resized.
-    if(win.moving || win.resize_dir_x != 0 || win.resize_dir_y != 0)
-        win.was_resized_or_moved = true;
+    if(win->moving || win->resize_dir_x != 0 || win->resize_dir_y != 0)
+        win->was_resized_or_moved = true;
 
     
     // RESIZE IF RESIZING //
-    if(win.resize_dir_x == 1) {
-        win.current_a.w = round(mouse.p.x - win.current_a.x + right_border.w/2.0f);
+    if(win->resize_dir_x == 1) {
+        win->current_a.w = round(mouse.p.x - win->current_a.x + right_border.w/2.0f);
     }
-    else if(win.resize_dir_x == -1) {
-        float delta = (win.current_a.x + left_border.w/2.0f) - mouse.p.x;
-        win.current_a.w += delta;
-        win.current_a.x -= delta;
+    else if(win->resize_dir_x == -1) {
+        float delta = (win->current_a.x + left_border.w/2.0f) - mouse.p.x;
+        win->current_a.w += delta;
+        win->current_a.x -= delta;
         
-        win.current_a.w = round(win.current_a.w);
-        win.current_a.x = round(win.current_a.x);
+        win->current_a.w = round(win->current_a.w);
+        win->current_a.x = round(win->current_a.x);
     }
     
-    if(win.resize_dir_y == 1) {
-        win.current_a.h = round(mouse.p.y - win.current_a.y + bottom_border.h/2.0f);
+    if(win->resize_dir_y == 1) {
+        win->current_a.h = round(mouse.p.y - win->current_a.y + bottom_border.h/2.0f);
     }
-    else if(win.resize_dir_y == -1) {
-        float delta = (win.current_a.y + top_border.h/2.0f) - mouse.p.y;
-        win.current_a.h += delta;
-        win.current_a.y -= delta;
+    else if(win->resize_dir_y == -1) {
+        float delta = (win->current_a.y + top_border.h/2.0f) - mouse.p.y;
+        win->current_a.h += delta;
+        win->current_a.y -= delta;
         
-        win.current_a.h = round(win.current_a.h);
-        win.current_a.y = round(win.current_a.y);
+        win->current_a.h = round(win->current_a.h);
+        win->current_a.y = round(win->current_a.y);
     }
     // //////////////// //
 
     // MOVE IF MOVING //
-    if(win.moving)
+    if(win->moving)
     {
-        win.current_a.p = mouse.p - win.mouse_offset_on_move_start;
+        win->current_a.p = mouse.p - win->mouse_offset_on_move_start;
     }
     // ////////////// //
 }
@@ -668,19 +718,107 @@ void update_window(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
 
 
 
+void begin_ui_build(UI_Manager *ui)
+{    
+    Assert(ui->elements.n == ui->elements_in_depth_order.n);
+    ui->elements_in_depth_order.n = 0;
 
+    ui->id_manager.used_ids_this_build.n = 0;
+}
 
-void new_ui_build(UI_Manager *ui, Input_Manager *input)
+void end_ui_build(UI_Manager *ui, Input_Manager *input)
 {
     Assert(ui->current_path_length == 0);
+    
+    s64 num_removed = 0;
 
+    Assert(ui->element_alives.n == ui->elements.n);
+    Assert(ui->element_alives.n == ui->element_ids.n);
+        
+    // Remove elements that were not built (a.k.a. not alive) this time.
+    for(s64 i = 0; i < ui->element_alives.n; i++)
+    {
+        // Alive -- reset it.
+        if(ui->element_alives[i]) {
+            ui->element_alives[i] = false;
+            continue;
+        }
+
+        // Dead -- remove it.
+        s64 window_index;
+        if(in_array(ui->window_stack, ui->element_ids[i], &window_index)) {
+            array_ordered_remove(ui->window_stack, window_index);
+        }
+                    
+        array_ordered_remove(ui->elements,       i);
+        array_ordered_remove(ui->element_ids,    i);
+        array_ordered_remove(ui->element_alives, i);
+        i--;
+
+        num_removed++;
+    }
+
+
+    // SORT WINDOWS //
+    for(s64 i = 0; i < ui->elements_in_depth_order.n; i++)
+    {
+        UI_ID id = ui->elements_in_depth_order[i];
+        
+        s64 index_in_stack;
+        if(!in_array(ui->window_stack, id, &index_in_stack)) continue; // Not a window.
+
+        // Found a window.
+
+        // If someone is below us (> index) in depth, but over us (> index) in stack, we want to move ourself down in depth(> index)
+
+        s64 depth_index_to_move_to = i;
+        
+        for(s64 j = i+1; j < ui->elements_in_depth_order.n; j++)
+        {
+            UI_ID other_id = ui->elements_in_depth_order[j];
+                
+            s64 other_index_in_stack;
+            if(!in_array(ui->window_stack, other_id, &other_index_in_stack)) continue; // Not a window.
+
+            // Found a window below us.
+
+            Assert(other_index_in_stack != index_in_stack);
+            if(other_index_in_stack < index_in_stack) continue; // It should be below us, so skip.
+
+            depth_index_to_move_to = j+1;
+        }
+
+        if(depth_index_to_move_to != i) {
+            Assert(depth_index_to_move_to > i);
+            
+            UI_Element *e = find_ui_element(id, ui);
+            Assert(e);
+            Assert(e->type == WINDOW);
+            auto *win = &e->window;
+            Assert(i >= win->num_children_above);
+
+            array_insert(ui->elements_in_depth_order,
+                         ui->elements_in_depth_order.e + i - win->num_children_above,
+                         depth_index_to_move_to,
+                         win->num_children_above + 1);
+            
+            array_ordered_remove(ui->elements_in_depth_order, i - win->num_children_above, win->num_children_above + 1);
+
+            i -= win->num_children_above;
+        }
+    }
+
+
+    
     auto &mouse = input->mouse;
 
     // FIND HOVERED ELEMENT //
     UI_Element *hovered_element = NULL;
+    UI_ID hovered_element_id = 0;
     for(s64 i = 0; i < ui->elements_in_depth_order.n; i++)
     {
-        UI_Element *e = find_ui_element(ui->elements_in_depth_order[i], ui); // TODO @Speed
+        UI_ID id = ui->elements_in_depth_order[i];
+        UI_Element *e = find_ui_element(id, ui); // TODO @Speed
         Assert(e);
 
         bool mouse_over = false;
@@ -694,51 +832,21 @@ void new_ui_build(UI_Manager *ui, Input_Manager *input)
 
         if(mouse_over) {
             hovered_element = e;
+            hovered_element_id = id;
             break;
         }
     }
 
+    // UPDATE ELEMENTS //
     for(s64 i = 0; i < ui->elements.n; i++)
     {
         UI_Element *e = &ui->elements[i];
 
         switch(e->type) {
-            case WINDOW: update_window(e, input, hovered_element); break;
+            case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
             case BUTTON: update_button(e, input, hovered_element); break;
 
             default: Assert(false); break;
         }
     }
-    
-    s64 num_removed = 0;
-
-    Assert(ui->element_alives.n == ui->elements.n);
-    Assert(ui->element_alives.n == ui->element_ids.n);
-        
-    // Remove elements that were not built (a.k.a. not alive) this time.
-    for(s64 i = 0; i < ui->element_alives.n; i++)
-    {
-        
-        // Alive -- reset it.
-        if(ui->element_alives[i]) {
-            ui->element_alives[i] = false;
-            continue;
-        }
-
-        // Dead -- remove it.
-        array_ordered_remove(ui->elements,       i);
-        array_ordered_remove(ui->element_ids,    i);
-        array_ordered_remove(ui->element_alives, i);
-        i--;
-
-        num_removed++;
-
-    }
-
-    Assert(ui->elements.n == ui->elements_in_depth_order.n);
-    ui->elements_in_depth_order.n = 0;
-
-    //if(num_removed > 0) Debug_Print("Removed %lld dead elements.\n", num_removed);
-
-    ui->id_manager.used_ids_this_build.n = 0;
 }

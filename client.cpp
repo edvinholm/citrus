@@ -1,4 +1,5 @@
 
+
 struct Client
 {
     Layout_Manager layout;
@@ -292,7 +293,9 @@ void draw_window(UI_Element *e, Graphics *gfx)
 
     gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
+    
     draw_string_in_rect_centered(STRING("EGGPLANT"), title_a, FS_20, FONT_TITLE, gfx);
+    //---------
     
 
     const v4 c_white = { 1, 1, 1, 1 };
@@ -567,20 +570,20 @@ void stop_render_loop(Render_Loop *loop)
 
 
 // @Temporary
-void foo_window(UI_Context ctx)
+bool foo_window(UI_Context ctx)
 {
     U(ctx);
 
-    static float x = 0;
+    bool result = false;
     static int hidden = -1;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id));
         
-        {_BOTTOM_CUT_(32); _RIGHT_(96 + x);
+        {_BOTTOM_CUT_(32); _RIGHT_(96);
             
             if(button(P(ctx)) & CLICKED) {
-                x += 32;
+                result = true;;
             }
         }
         cut_bottom(window_default_padding, ctx.layout);
@@ -600,6 +603,8 @@ void foo_window(UI_Context ctx)
 
     }
     end_window(window_id, ctx.manager);
+
+    return result;
 }
 
 void client_ui(UI_Context ctx, Client *client)
@@ -609,6 +614,7 @@ void client_ui(UI_Context ctx, Client *client)
     Rect a = area(ctx.layout);
 
     static int x = 2;
+    static int hidden = -1;
 
     _SHRINK_(10);
     _GRID_(x, x, 10);
@@ -618,9 +624,9 @@ void client_ui(UI_Context ctx, Client *client)
     {   
         _CELL_();
 
-        if(i == 0 || i == 3) {
-            foo_window(PC(ctx, i));
-        }
+        if(hidden == i) continue;
+
+        if(foo_window(PC(ctx, i))) hidden = i;
     }
     x = new_x;
 }
@@ -689,7 +695,7 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // CREATE WINDOW //
-    platform_create_window(main_window, "Citrus", 800, 600);
+    platform_create_window(main_window, "Citrus", 1440, 1000);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
@@ -743,7 +749,7 @@ int client_entry_point(int num_args, char **arguments)
             
             
             // BUILD UI //
-            new_ui_build(ui, &client.input);
+            begin_ui_build(ui);
             {
                 push_area_layout(window_a, layout);
             
@@ -761,6 +767,7 @@ int client_entry_point(int num_args, char **arguments)
                 pop_layout(layout);
 
             }
+            end_ui_build(ui, &client.input);
             // //////// //
 
             reset_temporary_memory();
