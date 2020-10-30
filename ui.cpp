@@ -127,6 +127,8 @@ struct UI_Window
     Rect current_a;
     
     bool pressed;
+    UI_Button_State close_button_state;
+    bool has_close_button;
 
     s8 resize_dir_x;
     s8 resize_dir_y;
@@ -578,18 +580,28 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
                     to_shrink); // Bottom
 }
 
-void end_window(UI_ID id, UI_Manager *ui)
-{    
+void end_window(UI_ID id, UI_Manager *ui, UI_Button_State *_close_button_state = NULL)
+{
     UI_Element *e = find_ui_element(id, ui);
     Assert(e);
     Assert(e->type == WINDOW);
+    auto *win = &e->window;
+
+    if(_close_button_state) {
+        *_close_button_state = win->close_button_state;
+        win->has_close_button = true;
+    } else {
+        win->close_button_state = IDLE;
+        win->has_close_button = false;
+    }
+    
 
     s64 old_depth_index;
     if(!in_array(ui->elements_in_depth_order, id, &old_depth_index)) {
         Assert(false);
     }
 
-    e->window.num_children_above = (ui->elements_in_depth_order.n-1) - old_depth_index;
+    win->num_children_above = (ui->elements_in_depth_order.n-1) - old_depth_index;
 
     array_add(ui->elements_in_depth_order, id);
     array_ordered_remove(ui->elements_in_depth_order, old_depth_index);
@@ -602,11 +614,25 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     Assert(e->type == WINDOW);
     UI_Window *win = &e->window;
 
-    // BORDER AND TITLE AREAS //
+    // AREAS //
     Rect left_border   = left_of(  win->current_a, window_border_width);
     Rect right_border  = right_of( win->current_a, window_border_width);
     Rect top_border    = top_of(   win->current_a, window_border_width);
     Rect bottom_border = bottom_of(win->current_a, window_border_width);
+        
+    Rect inner_a_title_included = shrunken(win->current_a, window_border_width);
+    Rect title_a = top_of(inner_a_title_included, window_title_height);
+    //
+
+    // CLOSE BUTTON //
+    if(win->has_close_button) {
+        bool close_button_hovered = false;
+        if(e == hovered_element) {
+            Rect close_button_a = right_square_of(title_a);
+            close_button_hovered = point_inside_rect(mouse.p, close_button_a);
+        }
+        win->close_button_state = evaluate_button_state(win->close_button_state, close_button_hovered, input);
+    }
     //
 
     if(!(mouse.buttons & MB_PRIMARY)) {
@@ -620,15 +646,10 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     bool move_to_top = false;
     
     if(!win->pressed && (mouse.buttons_down & MB_PRIMARY))
-    {       
-        Rect inner_a_title_included = shrunken(win->current_a, window_border_width);
-        
+    {   
         if(e == hovered_element) {
-            
             // PRESS START //    
             win->pressed = true;
-                        
-            Rect title_a = top_of(inner_a_title_included, window_title_height);
 
             if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
             if(point_inside_rect(mouse.p, right_border)) win->resize_dir_x += 1;
@@ -643,7 +664,7 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             }
         }
 
-        // MOVE TO TOP //
+        // SHOULD WE MOVE TO TOP? //
         if(point_inside_rect(mouse.p, inner_a_title_included)) {
             if(e == hovered_element) {
                 move_to_top = true;
@@ -664,9 +685,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             }
         }
         // /////// //
-    }
-
-
+    }    
+    
     // MOVE TO TOP //
     if(move_to_top) {
         s64 index_in_stack;

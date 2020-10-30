@@ -256,32 +256,8 @@ void quad(Rect a, v4 color, Graphics *gfx, Texture_ID texture = TEX_NONE_OR_NUM)
 void draw_window(UI_Element *e, Graphics *gfx)
 {
     Assert(e->type == WINDOW);
-    auto &win = e->window;
-    auto a = win.current_a;
-
-    /*
-    v3 v[6] = {
-        { a.x,       a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y,       0 },
-
-        { a.x + a.w, a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y + a.h, 0 }
-    };
-        
-    v2 uv[6] = {0};
-
-    v4 c[6] = {
-        { 0.25, 0, 1, 1 },
-        { 0.25, 0, 1, 1 },
-        { 0.25, 0, 1, 1 },
-                    
-        { 0.25, 0, 1, 1 },
-        { 0.25, 0, 1, 1 },
-        { 0.25, 0, 1, 1 }
-    };
-    */
+    auto *win = &e->window;
+    auto a = win->current_a;
 
     const v4 shadow_c = { 0, 0, 0, 0.05 };
     quad(a, shadow_c, gfx);
@@ -291,22 +267,38 @@ void draw_window(UI_Element *e, Graphics *gfx)
     const v4 c_purple = { 0.3, 0, 0.9, 1 };
     quad(r, c_purple, gfx);
 
+    r = shrunken(r, visible_border_w);
+
     gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
-    
+    const v4 c_white = { 1, 1, 1, 1 };
     draw_string_in_rect_centered(STRING("EGGPLANT"), title_a, FS_20, FONT_TITLE, gfx);
     //---------
-    
 
-    const v4 c_white = { 1, 1, 1, 1 };
-    quad(shrunken(r, visible_border_w), c_white, gfx);
+    quad(r, c_white, gfx);
 
     const v4 c_red    = { 1, 0, 0, 1 };
-    if(win.resize_dir_x < 0) quad(left_of(  a, window_border_width), c_red, gfx);
-    if(win.resize_dir_x > 0) quad(right_of( a, window_border_width), c_red, gfx);
-    if(win.resize_dir_y < 0) quad(top_of(   a, window_border_width), c_red, gfx);
-    if(win.resize_dir_y > 0) quad(bottom_of(a, window_border_width), c_red, gfx);
+    if(win->resize_dir_x < 0) quad(left_of(  a, window_border_width), c_red, gfx);
+    if(win->resize_dir_x > 0) quad(right_of( a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y < 0) quad(top_of(   a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y > 0) quad(bottom_of(a, window_border_width), c_red, gfx);
 
+    // CLOSE BUTTON //
+    if(win->has_close_button)
+    {
+        auto state = win->close_button_state;
+        
+        const v4 btn_c_hovered = { 0.85, 0, 0.15, 1 };
+        const v4 btn_c_pressed = { 0.75, 0, 0.05, 1 };
+        
+        v4 btn_c = { 0.8, 0, 0.2, 1, };
+        if(state & PRESSED)      btn_c = btn_c_pressed;
+        else if(state & HOVERED) btn_c = btn_c_hovered;
+
+        Rect btn_a = right_square_of(title_a);
+        btn_a.h -= visible_border_w;
+        quad(btn_a, btn_c, gfx);
+    }
 }
 
 void draw_button(UI_Element *e, Graphics *gfx)
@@ -602,7 +594,10 @@ bool foo_window(UI_Context ctx)
         }
 
     }
-    end_window(window_id, ctx.manager);
+    UI_Button_State close_button_state;
+    end_window(window_id, ctx.manager, &close_button_state);
+    if(close_button_state & CLICKED)
+        result = true;
 
     return result;
 }
