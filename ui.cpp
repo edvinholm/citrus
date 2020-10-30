@@ -493,6 +493,32 @@ private:
 
 
 
+UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input_Manager *input)
+{
+    auto &mouse = input->mouse;
+    
+    state &= ~CLICKED;
+    if(hovered) {
+        state |= HOVERED;
+        
+        if(mouse.buttons_down & MB_PRIMARY)
+            state |= PRESSED;
+
+        if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
+            state |= CLICKED;
+        }
+    }
+    else {
+        state &= ~HOVERED;
+    }
+    
+    if(!(mouse.buttons & MB_PRIMARY)) {
+        state &= ~PRESSED;
+    }
+
+    return state;
+}
+
 
 
 UI_Button_State button(UI_Context ctx)
@@ -510,30 +536,9 @@ UI_Button_State button(UI_Context ctx)
 void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
 {
     Assert(e->type == BUTTON);
-    
     auto &btn   = e->button;
-    auto &state = btn.state;
-
-    auto &mouse = input->mouse;
-
-    state &= ~CLICKED;
-    if(e == hovered_element) {
-        state |= HOVERED;
-        
-        if(mouse.buttons_down & MB_PRIMARY)
-            state |= PRESSED;
-
-        if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
-            state |= CLICKED;
-        }
-    }
-    else {
-        state &= ~HOVERED;
-    }
     
-    if(!(mouse.buttons & MB_PRIMARY)) {
-        state &= ~PRESSED;
-    }
+    btn.state = evaluate_button_state(btn.state, e == hovered_element, input);
 }
 
 
@@ -574,11 +579,11 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
 }
 
 void end_window(UI_ID id, UI_Manager *ui)
-{
+{    
     UI_Element *e = find_ui_element(id, ui);
     Assert(e);
     Assert(e->type == WINDOW);
-    
+
     s64 old_depth_index;
     if(!in_array(ui->elements_in_depth_order, id, &old_depth_index)) {
         Assert(false);
@@ -602,7 +607,6 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     Rect right_border  = right_of( win->current_a, window_border_width);
     Rect top_border    = top_of(   win->current_a, window_border_width);
     Rect bottom_border = bottom_of(win->current_a, window_border_width);
-    
     //
 
     if(!(mouse.buttons & MB_PRIMARY)) {
@@ -625,7 +629,6 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             win->pressed = true;
                         
             Rect title_a = top_of(inner_a_title_included, window_title_height);
-            title_a.y += window_border_width;
 
             if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
             if(point_inside_rect(mouse.p, right_border)) win->resize_dir_x += 1;

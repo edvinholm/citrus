@@ -695,7 +695,7 @@ int client_entry_point(int num_args, char **arguments)
     //--
 
     // CREATE WINDOW //
-    platform_create_window(main_window, "Citrus", 1440, 1000);
+    platform_create_window(main_window, "Citrus", 1440, 1000, 72, 8);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
