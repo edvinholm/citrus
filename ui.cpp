@@ -100,6 +100,12 @@ struct UI_ID_Manager
     
 };
 
+struct UI_String
+{
+    u64 offset; // This is the offset from UI_Manager.string_data.e. IMPORTANT: UI_Manager.string_data is reset before every UI build, so make sure no invalid UI_Strings are stored!
+    strlength length;
+};
+
 enum UI_Element_Type
 {
     WINDOW,
@@ -125,6 +131,8 @@ struct UI_Window
 {
     Rect initial_a;
     Rect current_a;
+
+    UI_String title;
     
     bool pressed;
     UI_Button_State close_button_state;
@@ -169,10 +177,36 @@ struct UI_Manager
     
     Array<UI_ID, ALLOC_UI> window_stack;
 
-    // This is reset before every build //
+    // These are reset before every build //
     Array<UI_ID, ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
+    Array<u8, ALLOC_UI> string_data;
     // ////////////////////////////////// //
 };
+
+inline
+UI_String push_ui_string(String string, UI_Manager *ui)
+{
+    UI_String str = {0};
+    str.offset = ui->string_data.n;
+    str.length = string.length;
+    array_add(ui->string_data, string.data, string.length);
+
+    return str;
+}
+
+//IMPORTANT: This is a temporary string that will not be valid after begin_ui_build, or after push_ui_string.
+inline
+String get_ui_string(UI_String string, UI_Manager *ui)
+{
+    Assert(string.offset >= 0);
+    Assert(string.length >= 0);
+    Assert(string.offset + string.length <= ui->string_data.n);
+
+    String str = {0};
+    str.data   = ui->string_data.e + string.offset;
+    str.length = string.length;
+    return str;
+}
 
 
 void init_ui_manager(UI_Manager *manager)
@@ -548,7 +582,7 @@ const float window_default_padding =  4;
 const float window_border_width    =  8;
 const float window_title_height    = 24;
 
-Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
+Rect begin_window(UI_Context ctx, UI_ID *_id, String title = EMPTY_STRING, bool use_default_padding = true)
 {
     U(ctx);
 
@@ -566,6 +600,8 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, bool use_default_padding = true)
     win->initial_a = area(ctx.layout);
     if(!win->was_resized_or_moved)
         win->current_a = win->initial_a;
+
+    win->title = push_ui_string(title, ui);
 
     *_id = id;
 
@@ -748,6 +784,8 @@ void begin_ui_build(UI_Manager *ui)
     ui->elements_in_depth_order.n = 0;
 
     ui->id_manager.used_ids_this_build.n = 0;
+
+    ui->string_data.n = 0;
 }
 
 void end_ui_build(UI_Manager *ui, Input_Manager *input)

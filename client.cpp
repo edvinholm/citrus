@@ -253,7 +253,7 @@ void quad(Rect a, v4 color, Graphics *gfx, Texture_ID texture = TEX_NONE_OR_NUM)
     triangles(v, uv, c, tex, 6, gfx);
 }
 
-void draw_window(UI_Element *e, Graphics *gfx)
+void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == WINDOW);
     auto *win = &e->window;
@@ -272,7 +272,7 @@ void draw_window(UI_Element *e, Graphics *gfx)
     gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
     const v4 c_white = { 1, 1, 1, 1 };
-    draw_string_in_rect_centered(STRING("EGGPLANT"), title_a, FS_20, FONT_TITLE, gfx);
+    draw_string_in_rect_centered(get_ui_string(win->title, ui), title_a, FS_20, FONT_TITLE, gfx);
     //---------
 
     quad(r, c_white, gfx);
@@ -483,7 +483,7 @@ DWORD render_loop(void *loop_)
 
                 switch(e->type) {
                     case WINDOW: {
-                        draw_window(e, &gfx);
+                        draw_window(e, ui, &gfx);
                     } break;
                         
                     case BUTTON: {
@@ -570,7 +570,7 @@ bool foo_window(UI_Context ctx)
     static int hidden = -1;
 
     UI_ID window_id;
-    { _AREA_(begin_window(P(ctx), &window_id));
+    { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
         
         {_BOTTOM_CUT_(32); _RIGHT_(96);
             

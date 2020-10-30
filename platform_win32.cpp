@@ -379,7 +379,7 @@ bool platform_process_input(Window *window)
     }
 
     if(!any_messages) {
-        Sleep(1);
+        Sleep(2);
     }
 
     return !window->CloseButtonClicked;
