@@ -617,12 +617,14 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
     if(!win->pressed && (mouse.buttons_down & MB_PRIMARY))
     {       
+        Rect inner_a_title_included = shrunken(win->current_a, window_border_width);
+        
         if(e == hovered_element) {
             
             // PRESS START //    
             win->pressed = true;
                         
-            Rect title_a = top_of(win->current_a, window_title_height);
+            Rect title_a = top_of(inner_a_title_included, window_title_height);
             title_a.y += window_border_width;
 
             if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
@@ -639,7 +641,6 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
         }
 
         // MOVE TO TOP //
-        Rect inner_a_title_included = shrunken(win->current_a, window_border_width);
         if(point_inside_rect(mouse.p, inner_a_title_included)) {
             if(e == hovered_element) {
                 move_to_top = true;
