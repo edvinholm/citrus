@@ -119,11 +119,12 @@ enum UI_Button_State_
     //HOVERED_NOW         = 0b000000000010,
     //UNHOVERED_NOW       = 0b000000000100, // This element was unhovered this frame
     PRESSED             = 0b000000001000, // State has been PRESSED_NOW and the mouse button is still down.
-    CLICKED             = 0b000000010000, // Clicked this frame.
-    //CLICKED_AND_ENABLED = 0b000000100000, // Clicked this frame AND the element was enabled.
-    //PRESSED_NOW         = 0b000001000000, // Pressed this frame.
-    //RELEASED_NOW        = 0b000010000000, // It was pressed before, and it was released this frame.
-    //MOUSE_UP_ON_NOW     = 0b000100000000, // The mouse was released this frame, and the cursor was over the element.
+    CLICKED_AT_ALL      = 0b000000010000, // Clicked this frame.
+    CLICKED_ENABLED     = 0b000000100000, // Clicked this frame AND the element was enabled.
+    CLICKED_DISABLED    = 0b000001000000, // Clicked this frame AND the element was enabled.
+    //PRESSED_NOW         = 0b000010000000, // Pressed this frame.
+    //RELEASED_NOW        = 0b000100000000, // It was pressed before, and it was released this frame.
+    //MOUSE_UP_ON_NOW     = 0b001000000000, // The mouse was released this frame, and the cursor was over the element.
 };
 typedef u16 UI_Button_State; //In @JAI, this can probably be just an enum.
 
@@ -152,6 +153,9 @@ struct UI_Button
 {
     Rect a;
     UI_Button_State state;
+
+    bool disabled;
+    bool selected;
 };
 
 struct UI_Element
@@ -529,11 +533,13 @@ private:
 
 
 
-UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input_Manager *input)
+UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input_Manager *input, bool disabled = false)
 {
     auto &mouse = input->mouse;
     
-    state &= ~CLICKED;
+    state &= ~CLICKED_AT_ALL;
+    state &= ~CLICKED_DISABLED;
+    state &= ~CLICKED_ENABLED;
     if(hovered) {
         state |= HOVERED;
         
@@ -541,7 +547,13 @@ UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input
             state |= PRESSED;
 
         if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
-            state |= CLICKED;
+            if(disabled) {
+                state |= CLICKED_DISABLED;
+                state |= CLICKED_AT_ALL;
+            } else {
+                state |= CLICKED_ENABLED;
+                state |= CLICKED_AT_ALL;
+            }
         }
     }
     else {
@@ -557,7 +569,7 @@ UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input
 
 
 
-UI_Button_State button(UI_Context ctx)
+UI_Button_State button(UI_Context ctx, bool disabled = false, bool selected = false)
 {    
     U(ctx);
     
@@ -565,6 +577,8 @@ UI_Button_State button(UI_Context ctx)
     
     auto *btn = &e->button;
     btn->a = area(ctx.layout);
+    btn->disabled = disabled;
+    btn->selected = selected;
 
     return btn->state;
 }
@@ -574,7 +588,7 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     Assert(e->type == BUTTON);
     auto &btn   = e->button;
     
-    btn.state = evaluate_button_state(btn.state, e == hovered_element, input);
+    btn.state = evaluate_button_state(btn.state, e == hovered_element, input, btn.disabled);
 }
 
 

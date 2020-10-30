@@ -380,6 +380,26 @@ void draw_button(UI_Element *e, Graphics *gfx)
         { 0.00, 0.5, 0.20, 1 },
         { 0.00, 0.5, 0.20, 1 },
     };
+    
+    v4 d[6] = {
+        { 0.30, 0.5, 0.35, 1 },
+        { 0.30, 0.5, 0.35, 1 },
+        { 0.30, 0.5, 0.35, 1 },
+        
+        { 0.30, 0.5, 0.35, 1 },
+        { 0.30, 0.5, 0.35, 1 },
+        { 0.30, 0.5, 0.35, 1 },
+    };
+    
+    v4 s[6] = {
+        { 0.00, 0.85, 0.35, 1 },
+        { 0.00, 0.85, 0.35, 1 },
+        { 0.00, 0.85, 0.35, 1 },
+        
+        { 0.00, 0.85, 0.35, 1 },
+        { 0.00, 0.85, 0.35, 1 },
+        { 0.00, 0.85, 0.35, 1 },
+    };
 
     float tex[6] = {
         0, 0, 0,
@@ -387,7 +407,9 @@ void draw_button(UI_Element *e, Graphics *gfx)
     };
 
     v4 *color = c;
-    if(btn.state & PRESSED)      color = p;
+    if(btn.disabled)             color = d;
+    else if(btn.selected)        color = s;
+    else if(btn.state & PRESSED) color = p;
     else if(btn.state & HOVERED) color = h;
 
     triangles(v, uv, color, tex, 6, gfx);
@@ -567,14 +589,14 @@ bool foo_window(UI_Context ctx)
     U(ctx);
 
     bool result = false;
-    static int hidden = -1;
+    static int selected = -1;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
         
         {_BOTTOM_CUT_(32); _RIGHT_(96);
             
-            if(button(P(ctx)) & CLICKED) {
+            if(button(P(ctx)) & CLICKED_ENABLED) {
                 result = true;;
             }
         }
@@ -584,11 +606,9 @@ bool foo_window(UI_Context ctx)
         { _GRID_(6, 4, window_default_padding);
             for(int i = 0; i < 6 * 4; i++) {
                 _CELL_();
-
-                if(i == hidden) continue;
                 
-                if(button(PC(ctx, i)) & CLICKED) {
-                    hidden = i;
+                if(button(PC(ctx, i), (i % 2 > 0), (selected == i)) & CLICKED_ENABLED) {
+                    selected = i;
                 }
             }   
         }
@@ -596,7 +616,7 @@ bool foo_window(UI_Context ctx)
     }
     UI_Button_State close_button_state;
     end_window(window_id, ctx.manager, &close_button_state);
-    if(close_button_state & CLICKED)
+    if(close_button_state & CLICKED_ENABLED)
         result = true;
 
     return result;
