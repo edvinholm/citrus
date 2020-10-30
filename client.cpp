@@ -416,6 +416,95 @@ void draw_button(UI_Element *e, Graphics *gfx)
     draw_string_in_rect_centered(STRING("BUTTON"), a, FS_24, FONT_TITLE, gfx);
 }
 
+void draw_slider(UI_Element *e, Graphics *gfx)
+{    
+    Assert(e->type == SLIDER);
+    auto *slider = &e->slider;
+    auto a = slider->a;
+
+    v3 v[6] = {
+        { a.x,       a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y,       0 },
+
+        { a.x + a.w, a.y,       0 },
+        { a.x,       a.y + a.h, 0 },
+        { a.x + a.w, a.y + a.h, 0 }
+    };
+        
+    v2 uv[6] = {0};
+
+    /* Cool gradient:
+       v4 c[6] = {
+       { 0, 0, 1, 1 },
+       { 1, 0, 1, 1 },
+       { 0, 1, 1, 1 },
+                    
+       { 0, 0, 1, 1 },
+       { 1, 0, 1, 1 },
+       { 0, 1, 1, 1 }
+       };
+       
+       v4 h[6] = {
+       { 0, 0, 0.5, 1 },
+       { 1, 0, 0.5, 1 },
+       { 0, 1, 0.5, 1 },
+                    
+       { 0, 0, 0.5, 1 },
+       { 1, 0, 0.5, 1 },
+       { 0, 1, 0.5, 1 }
+       };
+
+       v4 p[6] = {
+       { 0, 0, 0.5, 1 },
+       { 0.5, 0, 1.0, 1 },
+       { 0, 1, 0.5, 1 },
+                    
+       { 0, 0, 0.5, 1 },
+       { 0.5, 0, 1.0, 1 },
+       { 0, 1, 0.5, 1 }
+       };
+    */
+    
+    v4 c[6] = {
+        { 0.05, 0.4, 0.5, 1 },
+        { 0.05, 0.4, 0.5, 1 },
+        { 0.05, 0.4, 0.5, 1 },
+        
+        { 0.05, 0.4, 0.5, 1 },
+        { 0.05, 0.4, 0.5, 1 },
+        { 0.05, 0.4, 0.5, 1 },
+    };
+     
+    v4 d[6] = {
+        { 0.30, 0.35, 0.45, 1 },
+        { 0.30, 0.35, 0.45, 1 },
+        { 0.30, 0.35, 0.45, 1 },
+        
+        { 0.30, 0.35, 0.45, 1 },
+        { 0.30, 0.35, 0.45, 1 },
+        { 0.30, 0.35, 0.45, 1 },
+    };
+
+    float tex[6] = {
+        0, 0, 0,
+        0, 0, 0
+    };
+
+    v4 *color = c;
+    if(slider->disabled)  color = d;
+
+    triangles(v, uv, color, tex, 6, gfx);
+
+    draw_string_in_rect_centered(STRING("SLIDER"), a, FS_24, FONT_TITLE, gfx);
+
+    v4 handle_c   = {0, 0.25, 0.45, 1};
+    v4 handle_c_p = {0.1, 0.1, 0.1, 1};
+    
+    quad(slider_handle_rect(a, slider->value), (slider->pressed) ? handle_c_p : handle_c, gfx);
+}
+
+
 DWORD render_loop(void *loop_)
 {
     Render_Loop *loop = (Render_Loop *)loop_;
@@ -504,13 +593,9 @@ DWORD render_loop(void *loop_)
                 Assert(e);
 
                 switch(e->type) {
-                    case WINDOW: {
-                        draw_window(e, ui, &gfx);
-                    } break;
-                        
-                    case BUTTON: {
-                        draw_button(e, &gfx);
-                    } break;
+                    case WINDOW: draw_window(e, ui, &gfx); break;
+                    case BUTTON: draw_button(e, &gfx); break;
+                    case SLIDER: draw_slider(e, &gfx); break;
 
                     default: Assert(false); break;
                 }
@@ -590,21 +675,22 @@ bool foo_window(UI_Context ctx)
 
     bool result = false;
     static int selected = -1;
+    static float slider_value = 0.75f;
+    slider_value = (1.0f + cos(platform_milliseconds() / 1000.0f))/2.0f;
+
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
         
-        {_BOTTOM_CUT_(32); _RIGHT_(96);
-            
-            if(button(P(ctx)) & CLICKED_ENABLED) {
-                result = true;;
-            }
+        {_BOTTOM_CUT_(32);
+            slider_value = slider(slider_value, P(ctx));
         }
         cut_bottom(window_default_padding, ctx.layout);
 
+        int rows_and_cols = 1 + round(slider_value * 5);
         
-        { _GRID_(6, 4, window_default_padding);
-            for(int i = 0; i < 6 * 4; i++) {
+        { _GRID_(rows_and_cols, rows_and_cols, window_default_padding);
+            for(int i = 0; i < rows_and_cols * rows_and_cols; i++) {
                 _CELL_();
                 
                 if(button(PC(ctx, i), (i % 2 > 0), (selected == i)) & CLICKED_ENABLED) {

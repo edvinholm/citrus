@@ -109,7 +109,8 @@ struct UI_String
 enum UI_Element_Type
 {
     WINDOW,
-    BUTTON
+    BUTTON,
+    SLIDER
 };
 
 enum UI_Button_State_
@@ -158,6 +159,17 @@ struct UI_Button
     bool selected;
 };
 
+struct UI_Slider
+{
+    Rect a;
+    bool pressed;
+    
+    float value;
+
+    bool disabled;
+};
+
+
 struct UI_Element
 {
     UI_Element_Type type;
@@ -165,6 +177,7 @@ struct UI_Element
     union {
         UI_Window window;
         UI_Button button;
+        UI_Slider slider;
     };
 };
 
@@ -350,7 +363,9 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
 
     switch(_e->type) {
         case WINDOW:
-        case BUTTON: break;
+        case BUTTON:
+        case SLIDER:
+            break;
             
         default: Assert(false); break;
     }
@@ -592,6 +607,55 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
 }
 
 
+Rect slider_handle_rect(Rect slider_a, float value)
+{
+    Rect handle_a = left_square_of(slider_a);
+    handle_a.x += (slider_a.w - handle_a.w) * value;
+
+    return handle_a;
+}
+
+float slider(float value, UI_Context ctx, bool disabled = false, bool selected = false)
+{    
+    U(ctx);
+
+    bool was_created;
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), SLIDER, ctx.manager, &was_created);
+    
+    auto *slider = &e->slider;
+    slider->a = area(ctx.layout);
+    slider->disabled = disabled;
+    
+    if(!slider->pressed) slider->value = value;
+
+    return slider->value;
+}
+
+void update_slider(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    auto &mouse = input->mouse;
+    
+    Assert(e->type == SLIDER);
+    auto *slider = &e->slider;
+    auto &a = slider->a;
+    
+    Rect handle_a = slider_handle_rect(slider->a, slider->value);
+    
+    if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
+        if(point_inside_rect(mouse.p, handle_a)) {
+            slider->pressed = true;
+        }
+    }
+    
+    if(!(mouse.buttons & MB_PRIMARY))
+        slider->pressed = false;
+
+    if(slider->pressed) {
+        slider->value = min(1.0f, max(0.0f, (mouse.p.x - a.x - handle_a.w/2.0f) / (a.w - handle_a.w)));
+    }
+}
+
+
 const float window_default_padding =  4;
 const float window_border_width    =  8;
 const float window_title_height    = 24;
@@ -804,6 +868,10 @@ void begin_ui_build(UI_Manager *ui)
 
 void end_ui_build(UI_Manager *ui, Input_Manager *input)
 {
+    Array<u8, ALLOC_TMP> temp = {0};
+
+
+    
     Assert(ui->current_path_length == 0);
     
     s64 num_removed = 0;
@@ -833,6 +901,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
 
         num_removed++;
     }
+
+    Assert(ui->elements_in_depth_order.n == ui->elements.n);
 
 
     // SORT WINDOWS //
@@ -873,12 +943,21 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             auto *win = &e->window;
             Assert(i >= win->num_children_above);
 
-            array_insert(ui->elements_in_depth_order,
-                         ui->elements_in_depth_order.e + i - win->num_children_above,
-                         depth_index_to_move_to,
-                         win->num_children_above + 1);
+            s64 old_n = ui->elements_in_depth_order.n;
+
+            s64 num_ids_to_move = win->num_children_above + 1;
+            s64 first_id_index = i - win->num_children_above;
             
-            array_ordered_remove(ui->elements_in_depth_order, i - win->num_children_above, win->num_children_above + 1);
+            array_set(temp, (u8 *)(ui->elements_in_depth_order.e + first_id_index), sizeof(UI_ID) * num_ids_to_move);
+            array_insert(ui->elements_in_depth_order, (UI_ID *)temp.e, depth_index_to_move_to, num_ids_to_move);
+            array_ordered_remove(ui->elements_in_depth_order, first_id_index, num_ids_to_move);
+
+            Assert(old_n = ui->elements_in_depth_order.n);
+#if DEBUG
+            for (s64 k = 0; k < ui->elements_in_depth_order.n; k++) {
+                Assert(find_ui_element(ui->elements_in_depth_order[k], ui));
+            }
+#endif
 
             i -= win->num_children_above;
         }
@@ -902,6 +981,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         switch(e->type) {
             case WINDOW: mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
             case BUTTON: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
+            case SLIDER: mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
 
             default: Assert(false); break;
         }
@@ -921,6 +1001,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         switch(e->type) {
             case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
             case BUTTON: update_button(e, input, hovered_element); break;
+            case SLIDER: update_slider(e, input, hovered_element); break;
 
             default: Assert(false); break;
         }
