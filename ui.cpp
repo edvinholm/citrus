@@ -615,7 +615,7 @@ Rect slider_handle_rect(Rect slider_a, float value)
     return handle_a;
 }
 
-float slider(float value, UI_Context ctx, bool disabled = false, bool selected = false)
+float slider(float value, UI_Context ctx, bool disabled = false)
 {    
     U(ctx);
 
@@ -640,16 +640,20 @@ void update_slider(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     auto &a = slider->a;
     
     Rect handle_a = slider_handle_rect(slider->a, slider->value);
-    
-    if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
-        if(point_inside_rect(mouse.p, handle_a)) {
-            slider->pressed = true;
+
+        
+    if(slider->disabled || !(mouse.buttons & MB_PRIMARY))
+        slider->pressed = false;
+
+    if(!slider->disabled)
+    {
+        if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
+            if(point_inside_rect(mouse.p, handle_a)) {
+                slider->pressed = true;
+            }
         }
     }
     
-    if(!(mouse.buttons & MB_PRIMARY))
-        slider->pressed = false;
-
     if(slider->pressed) {
         slider->value = min(1.0f, max(0.0f, (mouse.p.x - a.x - handle_a.w/2.0f) / (a.w - handle_a.w)));
     }

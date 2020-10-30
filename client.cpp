@@ -669,7 +669,7 @@ void stop_render_loop(Render_Loop *loop)
 
 
 // @Temporary
-bool foo_window(UI_Context ctx)
+bool foo_window(bool slider_disabled, UI_Context ctx)
 {
     U(ctx);
 
@@ -678,12 +678,14 @@ bool foo_window(UI_Context ctx)
     static float slider_value = 0.75f;
     slider_value = (1.0f + cos(platform_milliseconds() / 1000.0f))/2.0f;
 
+    if((platform_milliseconds() / 1000) % 10 == 0)
+        slider_disabled = true;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
         
         {_BOTTOM_CUT_(32);
-            slider_value = slider(slider_value, P(ctx));
+            slider_value = slider(slider_value, P(ctx), slider_disabled);
         }
         cut_bottom(window_default_padding, ctx.layout);
 
@@ -727,7 +729,7 @@ void client_ui(UI_Context ctx, Client *client)
 
         if(hidden == i) continue;
 
-        if(foo_window(PC(ctx, i))) hidden = i;
+        if(foo_window((i % 2 == 0), PC(ctx, i))) hidden = i;
     }
     x = new_x;
 }
