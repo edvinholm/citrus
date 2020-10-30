@@ -1,13 +1,14 @@
 
 
 //NOTE: n is number of vertices
-void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, u64 n, Graphics *gfx)
+void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *textures, u64 n, Graphics *gfx)
 {
     auto &set = gfx->vertex_shader.buffer_sets[gfx->buffer_set_index];
     
     gpu_set_vertex_buffer_data(set.position_buffer, positions, sizeof(v3) * n);
     gpu_set_vertex_buffer_data(set.uv_buffer,       uvs,       sizeof(v2) * n);
     gpu_set_vertex_buffer_data(set.color_buffer,    colors,    sizeof(v4) * n);
+    gpu_set_vertex_buffer_data(set.texture_buffer,  textures,  sizeof(float) * n);
     
     gpu_draw(GPU_TRIANGLES, n);
 
@@ -17,9 +18,9 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, u64 n, G
 }
 
 inline
-void triangles(v3 *p, v2 *uv, v4 *c, u32 n, Graphics *gfx)
+void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 {
-    add_vertices(p, uv, c, n, &gfx->vertex_buffer);
+    add_vertices(p, uv, c, tex, n, &gfx->vertex_buffer);
     //triangles_now(vertices, uvs, colors, n, gfx);
 }
 
@@ -39,7 +40,7 @@ void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
 
 
 
-void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL)
+void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
 
     v3 v[6] = {
@@ -71,10 +72,22 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL)
         gfx->current_color, gfx->current_color, gfx->current_color
     };
 
+    float t = 0;
+    if(texture != TEX_NONE_OR_NUM)
+    {
+        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
+        t = (float)texture+1;
+    }
+
+    float tex[6] = {
+        t, t, t,
+        t, t, t
+    };
+
     if(uvs == NULL)
         uvs = (v2 *)default_uvs;
 
-    triangles(v, uvs, colors, 6, gfx);
+    triangles(v, uvs, colors, tex, 6, gfx);
     
 }
 
@@ -116,7 +129,8 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 
         if(buffer_slice_index == slice_buffer_size - 1)
         {
-            triangles(vertices, uvs, colors, num_vertices_in_slice_buffer, gfx);
+            // nocheckin: We want to be able to pass a Texture_ID as tex.
+            triangles(vertices, uvs, colors, 0, num_vertices_in_slice_buffer, gfx);
         }
 
         a0 = a1;
@@ -124,19 +138,20 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 
     if(num_slices % slice_buffer_size > 0)
     {
-        triangles(vertices, uvs, colors, (num_slices % slice_buffer_size) * vertices_per_slice, gfx);
+            // nocheckin: We want to be able to pass a Texture_ID as tex.
+        triangles(vertices, uvs, colors, 0, (num_slices % slice_buffer_size) * vertices_per_slice, gfx);
     }
 }
 
 
 inline
-void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL)
+void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
 {
     v3 a = p0;
     v3 b = p0 + d1;
     v3 c = p0 + d2;
     v3 d = b + d2;
-    draw_quad_abs(a, b, c, d, gfx, uvs);
+    draw_quad_abs(a, b, c, d, gfx, uvs, tex);
 }
 
 
@@ -160,7 +175,8 @@ void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)
     if(uvs == NULL)
         uvs = default_uvs;
 
-    triangles(v, uvs, colors, 3, gfx);
+    // nocheckin: We want to be able to pass a Texture_ID as tex.
+    triangles(v, uvs, colors, 0, 3, gfx);
 }
 
 inline
@@ -176,9 +192,9 @@ void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL)
 }
 
 inline
-void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL)
+void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_quad(V3(p0), V3(d1), V3(d2), gfx, uvs);
+    draw_quad(V3(p0), V3(d1), V3(d2), gfx, uvs, texture);
 }
 
 inline

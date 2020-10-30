@@ -1,8 +1,3 @@
-/*
-
-  IMPORTANT: Must call begin_font_rendering for glyph rendering functions to work.
-
- */
 
 /*
 #define Ensure_Drawer(Ptr) Body_Text_Drawer default_drawer; \
@@ -81,7 +76,7 @@ Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, bool do_w
 }
 
 //NOTE: Returns size of rendered glyph
-v2 draw_glyph(Sized_Glyph *glyph, v2 p, Graphics *gfx, bool do_draw = true)
+v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx, bool do_draw = true)
 {
     v2 uvs[6];
     quad_uvs(uvs, glyph->sprite_frame_p0, glyph->sprite_frame_p1);
@@ -89,7 +84,7 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Graphics *gfx, bool do_draw = true)
     v2 s = V2(glyph->pixel_s) / TWEAK_font_oversampling_rate;
     
     if(do_draw)
-        draw_rect_d(p, V2_X * s.w, V2_Y * s.h, gfx, uvs);
+        draw_rect_d(p, V2_X * s.w, V2_Y * s.h, gfx, uvs, font_texture);
 
     return s;
 }
@@ -116,9 +111,11 @@ Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics 
 
     Rect glyph_a;
     glyph_a.p = *p + ((offset) ? glyph->offset : V2_ZERO);
-                      
-    if(glyph)
-        glyph_a.s = draw_glyph(glyph, glyph_a.p, gfx, do_draw);
+    
+    if(glyph) {
+        Texture_ID font_texture = gfx->glyph_maps[current_font_id(gfx)].texture;
+        glyph_a.s = draw_glyph(glyph, glyph_a.p, font_texture, gfx, do_draw);
+    }
     else
         glyph_a.s = V2_ZERO;
     
@@ -199,19 +196,14 @@ v2 string_size(String string, Font_Size size, Graphics *gfx)
 }
 
 //NOTE: Returns rect of drawn string
-Rect draw_string(String string, v2 p, Font_Size size, Font *font, Graphics *gfx,
+Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_id, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    
-    //@Temporary!!!!!!!!!! @Cleanup
-    gpu_bind_texture(gfx->textures.ids[TEX_FONT_TITLE]);
-    gpu_set_uniform_int(gfx->fragment_shader.texture_uniform, 0);
-    gpu_set_uniform_int(gfx->fragment_shader.texture_present_uniform, 1);
+    Texture_ID font_texture = gfx->glyph_maps[font_id].texture;
     
     int default_previous_codepoint = 0;
     if(!previous_codepoint) previous_codepoint = &default_previous_codepoint;
-
 
     if(h_align == HA_LEFT && v_align == VA_TOP)
     {
@@ -263,7 +255,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Graphics *gfx,
                 if(previous_codepoint != 0)
                     p.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
 
-                draw_glyph(glyph, pp + glyph->offset, gfx);
+                draw_glyph(glyph, pp + glyph->offset, font_texture, gfx);
 
                 pp.x += glyph->advance_width;
                 if(pp.x > max_x)
@@ -274,9 +266,6 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Graphics *gfx,
         *previous_codepoint = codepoint;
     }
 
-    //@Temporary!!!!!!!!!! @Cleanup
-    gpu_set_uniform_int(gfx->fragment_shader.texture_present_uniform, 0);
-
     return rect(p, V2(max_x - p.x, pp.y - p.y - font->descent * scale));
 }
 
@@ -285,7 +274,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    return draw_string(string, p, size, current_font(gfx), gfx, h_align, v_align, previous_codepoint);
+    return draw_string(string, p, size, current_font(gfx), current_font_id(gfx), gfx, h_align, v_align, previous_codepoint);
 }
 
 
@@ -335,7 +324,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics 
     Assert(font_id < ARRLEN(gfx->fonts));
     
     Font *font = &gfx->fonts[font_id];
-    return draw_string(string, p, size, font, gfx, h_align, v_align, previous_codepoint);
+    return draw_string(string, p, size, font, font_id, gfx, h_align, v_align, previous_codepoint);
 }
 
 #if 0 // @Cleanup: This should be part of the UI build now when we separated UI build and UI draw.

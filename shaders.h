@@ -11,8 +11,9 @@ struct Vertex_Shader
             GPU_Attribute_ID position_attr;
             GPU_Attribute_ID texcoord_attr;
             GPU_Attribute_ID color_attr;
+            GPU_Attribute_ID texture_attr;
         };
-        GPU_Attribute_ID buffer_attributes[3];
+        GPU_Attribute_ID buffer_attributes[4];
     };
         
 #endif
@@ -29,8 +30,9 @@ struct Vertex_Shader
                     GPU_Buffer_ID position_buffer;
                     GPU_Buffer_ID uv_buffer;
                     GPU_Buffer_ID color_buffer;
+                    GPU_Buffer_ID texture_buffer;
                 };
-                GPU_Buffer_ID buffers[3];
+                GPU_Buffer_ID buffers[4];
             };
         };
         
@@ -41,8 +43,10 @@ struct Vertex_Shader
 
 struct Fragment_Shader
 {
-    GPU_Uniform_ID texture_uniform;
-    GPU_Uniform_ID texture_present_uniform;
+    GPU_Uniform_ID texture_1_uniform;
+    GPU_Uniform_ID texture_2_uniform;
+    GPU_Uniform_ID texture_3_uniform;
+    GPU_Uniform_ID texture_4_uniform;
 
 };
 

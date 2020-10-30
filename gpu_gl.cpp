@@ -34,11 +34,12 @@ void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader)
 
         // @Hack
         GLint element_size = 0;
-        switch(b % 3) {
+        switch(b % 4) {
             
             case 0: { element_size = 3; } break;
             case 1: { element_size = 2; } break;
             case 2: { element_size = 4; } break;
+            case 3: { element_size = 1; } break;
 
             default: Assert(false); break;
         }
@@ -64,6 +65,7 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     vertex_shader->position_attr = glGetAttribLocation(program, "aVertexPosition");
     vertex_shader->texcoord_attr = glGetAttribLocation(program, "aTexCoord");
     vertex_shader->color_attr = glGetAttribLocation(program, "color");
+    vertex_shader->texture_attr = glGetAttribLocation(program, "texture");
     //@Normals: shader->normal_attr = glGetAttribLocation(program, "aNormal");
 
 
@@ -83,8 +85,10 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     gpu_set_buffer_set(0, vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
     // //////////////// //
         
-    fragment_shader->texture_uniform = glGetUniformLocation(program, "texture_");
-    fragment_shader->texture_present_uniform = glGetUniformLocation(program, "texture_present");
+    fragment_shader->texture_1_uniform = glGetUniformLocation(program, "texture_1");
+    fragment_shader->texture_2_uniform = glGetUniformLocation(program, "texture_2");
+    fragment_shader->texture_3_uniform = glGetUniformLocation(program, "texture_3");
+    fragment_shader->texture_4_uniform = glGetUniformLocation(program, "texture_4");
 
     return (glGetError()) ? false : true;
 }
@@ -109,8 +113,9 @@ void gpu_set_uniform_int(GPU_Uniform_ID uniform, int i)
 }
 
 inline
-void gpu_bind_texture(GPU_Texture_ID tex)
+void gpu_bind_texture(GPU_Texture_ID tex, int active_texture = 0)
 {
+    glActiveTexture(GL_TEXTURE0 + active_texture);
     glBindTexture(GL_TEXTURE_2D, tex);
 }
 

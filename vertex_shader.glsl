@@ -12,12 +12,14 @@ in vec3 aVertexPosition;
 in vec2 aTexCoord;
 in vec3 aNormal;
 in vec4 color;
+in float texture;
 
 out vec3 vertex_position;
 out vec2 fragment_texcoord;
 out vec3 fragment_position;
 out vec3 fragment_world_position;
 out vec4 fragment_color;
+out float fragment_texture;
 
 void main() {
 
@@ -35,5 +37,7 @@ void main() {
     vertex_position = gl_Position.xyz;
     fragment_position = gl_Position.xyz;
     fragment_world_position = world_position.xyz;
+
+    fragment_texture = texture;
 }
 

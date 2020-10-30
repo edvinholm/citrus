@@ -66,6 +66,29 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 
 
     gfx->vertex_buffer.n = 0;
+
+    // BIND TEXTURES //
+    Assert(ARRLEN(gfx->bound_textures) >= TEX_NONE_OR_NUM);
+    for(int t = 0; t < TEX_NONE_OR_NUM; t++)
+    {
+        if(gfx->num_bound_textures <= t || gfx->bound_textures[t] != (Texture_ID)t)
+        {
+            gpu_bind_texture(gfx->textures.ids[t], t);
+            switch(t) {
+                
+                case 0: gpu_set_uniform_int(gfx->fragment_shader.texture_1_uniform, t); break;
+                case 1: gpu_set_uniform_int(gfx->fragment_shader.texture_2_uniform, t); break;
+                case 2: gpu_set_uniform_int(gfx->fragment_shader.texture_3_uniform, t); break;
+                case 3: gpu_set_uniform_int(gfx->fragment_shader.texture_4_uniform, t); break;
+
+                default: Assert(false); break;
+            }
+
+            gfx->bound_textures[t] = (Texture_ID)t;
+            gfx->num_bound_textures = max(t+1, gfx->num_bound_textures);
+        }
+    }
+    // 
     
 
     #if DEBUG
@@ -180,7 +203,7 @@ struct Render_Loop
 };
 
 
-void quad(Rect a, v4 color, Graphics *gfx)
+void quad(Rect a, v4 color, Graphics *gfx, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v3 v[6] = {
         { a.x,       a.y,       0 },
@@ -212,7 +235,21 @@ void quad(Rect a, v4 color, Graphics *gfx)
         color
     };
 
-    triangles(v, uv, c, 6, gfx);
+
+    float t = 0;
+
+    if(texture != TEX_NONE_OR_NUM)
+    {
+        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
+        t = (float)texture+1;
+    }
+             
+    float tex[6] = {
+        t, t, t,
+        t, t, t
+    };
+
+    triangles(v, uv, c, tex, 6, gfx);
 }
 
 void draw_window(UI_Element *e, Graphics *gfx)
@@ -349,12 +386,16 @@ void draw_button(UI_Element *e, Graphics *gfx)
         { 0.00, 0.5, 0.20, 1 },
     };
 
+    float tex[6] = {
+        0, 0, 0,
+        0, 0, 0
+    };
 
     v4 *color = c;
     if(btn.state & PRESSED)      color = p;
     else if(btn.state & HOVERED) color = h;
 
-    triangles(v, uv, color, 6, gfx);
+    triangles(v, uv, color, tex, 6, gfx);
     draw_string_in_rect_centered(STRING("BUTTON"), a, FS_24, FONT_TITLE, gfx);
 }
 
@@ -475,6 +516,7 @@ DWORD render_loop(void *loop_)
         triangles_now(gfx.vertex_buffer.p,
                       gfx.vertex_buffer.uv,
                       gfx.vertex_buffer.c,
+                      gfx.vertex_buffer.tex,
                       gfx.vertex_buffer.n,
                       &gfx);
         

@@ -9,9 +9,10 @@ struct Vertex_Buffer
     u64 capacity;
     u64 n;
 
-    v3 *p;
-    v2 *uv;
-    v4 *c;
+    v3    *p;
+    v2    *uv;
+    v4    *c;
+    float *tex;
 };
 
 struct Graphics
@@ -31,6 +32,8 @@ struct Graphics
     v2 frame_s;
 
     Texture_Catalog textures;
+    Texture_ID bound_textures[4]; // In fragment shader
+    u8 num_bound_textures;
     
     Sprite_Map glyph_maps[NUM_FONTS];
     Font       fonts[NUM_FONTS] = {0};
