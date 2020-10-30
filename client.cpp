@@ -64,6 +64,10 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
         Assert(gpu_resources_update_result);
     }
 
+
+    gfx->vertex_buffer.n = 0;
+    
+
     #if DEBUG
     gfx->debug.num_draw_calls = 0;
     #endif
@@ -149,7 +153,6 @@ bool init_graphics(Window *window, Graphics *gfx)
 
     // Create multisample framebuffer
     gpu_create_framebuffers(1, &gfx->multisample_framebuffer);
-    
 
     return true;
 }
@@ -177,7 +180,7 @@ struct Render_Loop
 };
 
 
-void quad_now(Rect a, v4 color, Graphics *gfx)
+void quad(Rect a, v4 color, Graphics *gfx)
 {
     v3 v[6] = {
         { a.x,       a.y,       0 },
@@ -209,7 +212,7 @@ void quad_now(Rect a, v4 color, Graphics *gfx)
         color
     };
 
-    triangles_now(v, uv, c, 6, gfx);
+    triangles(v, uv, c, 6, gfx);
 }
 
 void draw_window(UI_Element *e, Graphics *gfx)
@@ -243,12 +246,12 @@ void draw_window(UI_Element *e, Graphics *gfx)
     */
 
     const v4 shadow_c = { 0, 0, 0, 0.05 };
-    quad_now(a, shadow_c, gfx);
+    quad(a, shadow_c, gfx);
 
     const float visible_border_w = 2;
     Rect r = shrunken(a, window_border_width-visible_border_w);
     const v4 c_purple = { 0.3, 0, 0.9, 1 };
-    quad_now(r, c_purple, gfx);
+    quad(r, c_purple, gfx);
 
     gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
@@ -256,13 +259,13 @@ void draw_window(UI_Element *e, Graphics *gfx)
     
 
     const v4 c_white = { 1, 1, 1, 1 };
-    quad_now(shrunken(r, visible_border_w), c_white, gfx);
+    quad(shrunken(r, visible_border_w), c_white, gfx);
 
     const v4 c_red    = { 1, 0, 0, 1 };
-    if(win.resize_dir_x < 0) quad_now(left_of(  a, window_border_width), c_red, gfx);
-    if(win.resize_dir_x > 0) quad_now(right_of( a, window_border_width), c_red, gfx);
-    if(win.resize_dir_y < 0) quad_now(top_of(   a, window_border_width), c_red, gfx);
-    if(win.resize_dir_y > 0) quad_now(bottom_of(a, window_border_width), c_red, gfx);
+    if(win.resize_dir_x < 0) quad(left_of(  a, window_border_width), c_red, gfx);
+    if(win.resize_dir_x > 0) quad(right_of( a, window_border_width), c_red, gfx);
+    if(win.resize_dir_y < 0) quad(top_of(   a, window_border_width), c_red, gfx);
+    if(win.resize_dir_y > 0) quad(bottom_of(a, window_border_width), c_red, gfx);
 
 }
 
@@ -351,7 +354,7 @@ void draw_button(UI_Element *e, Graphics *gfx)
     if(btn.state & PRESSED)      color = p;
     else if(btn.state & HOVERED) color = h;
 
-    triangles_now(v, uv, color, 6, gfx);
+    triangles(v, uv, color, 6, gfx);
     draw_string_in_rect_centered(STRING("BUTTON"), a, FS_24, FONT_TITLE, gfx);
 }
 
@@ -404,6 +407,10 @@ DWORD render_loop(void *loop_)
                 unlock_mutex(loop->mutex);
                 break;
             }
+            
+#if DEBUG
+            draw_calls_last_frame = gfx.debug.num_draw_calls;
+#endif
 
             frame_begin(main_window, first_frame, client->main_window_a.s, &gfx);
 
@@ -428,7 +435,7 @@ DWORD render_loop(void *loop_)
             }
 
             const v4 background_color = { 0.3, 0.36, 0.42, 1 };
-            quad_now(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
+            quad(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
         
                 
             // Draw UI
@@ -462,13 +469,14 @@ DWORD render_loop(void *loop_)
             
             last_second = second;
             first_frame = false;
-
-            #if DEBUG
-            draw_calls_last_frame = gfx.debug.num_draw_calls;
-            #endif
         }
         unlock_mutex(loop->mutex);
-        
+
+        triangles_now(gfx.vertex_buffer.p,
+                      gfx.vertex_buffer.uv,
+                      gfx.vertex_buffer.c,
+                      gfx.vertex_buffer.n,
+                      &gfx);
         
         frame_end(main_window, &gfx);
     }

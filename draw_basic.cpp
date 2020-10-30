@@ -17,9 +17,10 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, u64 n, G
 }
 
 inline
-void triangles(v3 *vertices, v2 *uvs, v4 *colors, u32 n, Graphics *gfx)
+void triangles(v3 *p, v2 *uv, v4 *c, u32 n, Graphics *gfx)
 {
-    triangles_now(vertices, uvs, colors, n, gfx);
+    add_vertices(p, uv, c, n, &gfx->vertex_buffer);
+    //triangles_now(vertices, uvs, colors, n, gfx);
 }
 
 
@@ -171,11 +172,11 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 inline
 void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL)
 {
-    draw_quad_abs(V3(p0), V3(p1.x, p0.y, 0), V3(p0.x, p1.y, 0), V3(p1), gfx, uvs);
+    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, gfx, uvs);
 }
 
 inline
-void draw_rect(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL)
+void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL)
 {
     draw_quad(V3(p0), V3(d1), V3(d2), gfx, uvs);
 }
@@ -188,7 +189,7 @@ void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL)
 }
 
 inline
-void draw_rect_a(Rect a, Graphics *gfx, v2 *uvs /* = NULL*/)
+void draw_rect(Rect a, Graphics *gfx, v2 *uvs /* = NULL*/)
 {
     return draw_rect_ps(a.p, a.s, gfx, uvs);
 }

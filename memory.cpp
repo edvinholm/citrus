@@ -520,6 +520,58 @@ void clear_and_set_to_copy_of(T *dest, T &to_copy, Allocator_ID allocator)
 }
 
 
+u64 next_power_of(u64 x, u64 power)
+{
+    auto mod = x % power;
+    if(mod > 0)
+        x += (power - mod);
+    return x;
+}
+
+void ensure_buffer_set_capacity(u64 required_capacity, u64 *capacity,
+                                void ***buffers, size_t *element_sizes,
+                                u64 num_buffers, Allocator_ID allocator,
+                                u64 min_capacity = 1)
+{
+    Assert(num_buffers <= 8);
+    u8 *new_buffers[8] = {0};
+    
+    u64 old_capacity = *capacity;
+
+    if(!realloc_needed(*capacity, required_capacity, capacity, min_capacity)) return;
+    
+    size_t total_size = 0;
+
+    for(u64 i = 0; i < num_buffers; i++) {
+        size_t element_size = element_sizes[i];
+        size_t buffer_size  = next_power_of(element_size * (*capacity), 64);
+
+        new_buffers[i] = (u8 *)total_size; // NOTE Temporarily store offset for each buffer.
+        total_size += buffer_size;
+    }
+
+    u8 *memory = alloc(total_size, allocator);
+
+    for(u64 i = 0; i < num_buffers; i++) {
+        new_buffers[i] += (u64)memory;
+        memcpy(new_buffers[i], *(buffers[i]), element_sizes[i] * old_capacity);
+    }
+
+    if(old_capacity != 0) {
+        Assert(*(buffers[0]) != NULL);
+        dealloc(*(buffers[0]), allocator);
+    }
+    else {
+        Assert(*(buffers[0]) == NULL);
+    }
+    
+    for(u64 i = 0; i < num_buffers; i++) {
+        *(buffers[i]) = new_buffers[i];
+    }
+}
+
+
+
 
 void init_memory()
 {

@@ -28,6 +28,7 @@
 #include "font.h"
 
 #include "graphics.h"
+#include "graphics.cpp"
 
 #include "bitmap.cpp"
 #include "sprite.cpp"

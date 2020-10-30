@@ -89,7 +89,7 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Graphics *gfx, bool do_draw = true)
     v2 s = V2(glyph->pixel_s) / TWEAK_font_oversampling_rate;
     
     if(do_draw)
-        draw_rect(p, V2_X * s.w, V2_Y * s.h, gfx, uvs);
+        draw_rect_d(p, V2_X * s.w, V2_Y * s.h, gfx, uvs);
 
     return s;
 }
