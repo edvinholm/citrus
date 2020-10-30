@@ -14,6 +14,7 @@ int fps = 0;
 int frames_this_second = 0;
 int ups = 0;
 int updates_this_second = 0;
+u64 draw_calls_last_frame = 0;
 
 
 bool update_gpu_resources(Graphics *gfx)
@@ -47,24 +48,25 @@ bool update_gpu_resources(Graphics *gfx)
     return true;
 }
 
-// REMEMBER to lock the mutex before calling this, since we access stuff in client.
-void frame_begin(Window *window, bool first_frame, Graphics *gfx, Client *client)
+void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 {
     platform_begin_frame(window);
     gpu_frame_init();
 
-    u64 old_frame_w = (u64)gfx->frame_s.w;
-    u64 old_frame_h = (u64)gfx->frame_s.h;
-
-    gfx->frame_s = client->main_window_a.s;
+    v2 old_frame_s = gfx->frame_s;
+    gfx->frame_s = frame_s;
 
     if(first_frame ||
-       old_frame_w != (u64)gfx->frame_s.w || // @Robustness: Maybe frame w and h should be floats.
-       old_frame_h != (u64)gfx->frame_s.h)
+       (u64)old_frame_s.w != (u64)gfx->frame_s.w || // @Robustness: Maybe frame w and h should be floats.
+       (u64)old_frame_s.h != (u64)gfx->frame_s.h)
     {
         bool gpu_resources_update_result = update_gpu_resources(gfx);
         Assert(gpu_resources_update_result);
     }
+
+    #if DEBUG
+    gfx->debug.num_draw_calls = 0;
+    #endif
 }
 
 void frame_end(Window *window, Graphics *gfx)
@@ -250,7 +252,7 @@ void draw_window(UI_Element *e, Graphics *gfx)
 
     gfx->current_color = {1, 1, 1, 1}; // @Temporary
     Rect title_a = cut_top_off(&r, window_title_height);
-    draw_string_in_rect_centered(STRING("Window Title"), title_a, FS_20, FONT_TITLE, gfx);
+    draw_string_in_rect_centered(STRING("EGGPLANT"), title_a, FS_20, FONT_TITLE, gfx);
     
 
     const v4 c_white = { 1, 1, 1, 1 };
@@ -403,7 +405,7 @@ DWORD render_loop(void *loop_)
                 break;
             }
 
-            frame_begin(main_window, first_frame, &gfx, client);
+            frame_begin(main_window, first_frame, client->main_window_a.s, &gfx);
 
             u64 second = platform_milliseconds() / 1000;
             
@@ -460,6 +462,10 @@ DWORD render_loop(void *loop_)
             
             last_second = second;
             first_frame = false;
+
+            #if DEBUG
+            draw_calls_last_frame = gfx.debug.num_draw_calls;
+            #endif
         }
         unlock_mutex(loop->mutex);
         
@@ -700,7 +706,7 @@ int client_entry_point(int num_args, char **arguments)
                 }
                 updates_this_second++;
             
-                platform_set_window_title(main_window, concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS", sb));
+                platform_set_window_title(main_window, concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws", sb));
 #endif
                 pop_layout(layout);
 

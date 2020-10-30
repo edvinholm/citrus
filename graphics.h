@@ -1,4 +1,9 @@
 
+struct Graphics_Debug
+{
+    u64 num_draw_calls;
+};
+
 struct Graphics
 {
     GPU_Context gpu_ctx;
@@ -20,4 +25,8 @@ struct Graphics
 
     v4      current_color;
     Font_ID current_font;
+
+#if DEBUG
+    Graphics_Debug debug;
+#endif
 };

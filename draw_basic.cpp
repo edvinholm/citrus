@@ -10,6 +10,10 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, u64 n, G
     gpu_set_vertex_buffer_data(set.color_buffer,    colors,    sizeof(v4) * n);
     
     gpu_draw(GPU_TRIANGLES, n);
+
+    #if DEBUG
+    gfx->debug.num_draw_calls++;
+    #endif
 }
 
 inline
