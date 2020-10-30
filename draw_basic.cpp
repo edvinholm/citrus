@@ -91,7 +91,8 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Textur
     
 }
 
-
+#if 0
+// See @Incomplete notes in func.
 void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 {
     const int slice_buffer_size = 36;
@@ -129,7 +130,7 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 
         if(buffer_slice_index == slice_buffer_size - 1)
         {
-            // nocheckin: We want to be able to pass a Texture_ID as tex.
+            // @Incomplete: Pass texture!!!
             triangles(vertices, uvs, colors, 0, num_vertices_in_slice_buffer, gfx);
         }
 
@@ -138,11 +139,11 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 
     if(num_slices % slice_buffer_size > 0)
     {
-            // nocheckin: We want to be able to pass a Texture_ID as tex.
+        // @Incomplete: Pass texture!!!
         triangles(vertices, uvs, colors, 0, (num_slices % slice_buffer_size) * vertices_per_slice, gfx);
     }
 }
-
+#endif
 
 inline
 void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
@@ -155,6 +156,8 @@ void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID te
 }
 
 
+#if 0
+// @Incomplete!! Can't pass null as tex to triangles()
 void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)
 {
     v3 v[3] = { p0, p1, p2 };
@@ -175,15 +178,15 @@ void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)
     if(uvs == NULL)
         uvs = default_uvs;
 
-    // nocheckin: We want to be able to pass a Texture_ID as tex.
     triangles(v, uvs, colors, 0, 3, gfx);
 }
-
 inline
 void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 {
     draw_triangle(V3(p0), V3(p1), V3(p2), gfx, uvs);
 }
+
+#endif
 
 inline
 void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL)
