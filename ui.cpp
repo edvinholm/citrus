@@ -134,6 +134,7 @@ struct UI_Window
 {
     Rect initial_a;
     Rect current_a;
+    Rect next_a; // NOTE: We wait until the next frame to move/resize windows, so that we move the window and its contents at the same time... Resize happens after begin_window() but the caller uses the rect from begin_window to layout the window contents.
 
     UI_String title;
     
@@ -906,39 +907,43 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     if(win->moving || win->resize_dir_x != 0 || win->resize_dir_y != 0)
         win->was_resized_or_moved = true;
 
+    Rect next_a = win->next_a;
+    win->next_a = win->current_a;
     
     // RESIZE IF RESIZING //
     if(win->resize_dir_x == 1) {
-        win->current_a.w = round(mouse.p.x - win->current_a.x + right_border.w/2.0f);
+        win->next_a.w = round(mouse.p.x - win->next_a.x + right_border.w/2.0f);
     }
     else if(win->resize_dir_x == -1) {
-        float delta = (win->current_a.x + left_border.w/2.0f) - mouse.p.x;
-        win->current_a.w += delta;
-        win->current_a.x -= delta;
+        float delta = (win->next_a.x + left_border.w/2.0f) - mouse.p.x;
+        win->next_a.w += delta;
+        win->next_a.x -= delta;
         
-        win->current_a.w = round(win->current_a.w);
-        win->current_a.x = round(win->current_a.x);
+        win->next_a.w = round(win->next_a.w);
+        win->next_a.x = round(win->next_a.x);
     }
     
     if(win->resize_dir_y == 1) {
-        win->current_a.h = round(mouse.p.y - win->current_a.y + bottom_border.h/2.0f);
+        win->next_a.h = round(mouse.p.y - win->next_a.y + bottom_border.h/2.0f);
     }
     else if(win->resize_dir_y == -1) {
-        float delta = (win->current_a.y + top_border.h/2.0f) - mouse.p.y;
-        win->current_a.h += delta;
-        win->current_a.y -= delta;
+        float delta = (win->next_a.y + top_border.h/2.0f) - mouse.p.y;
+        win->next_a.h += delta;
+        win->next_a.y -= delta;
         
-        win->current_a.h = round(win->current_a.h);
-        win->current_a.y = round(win->current_a.y);
+        win->next_a.h = round(win->next_a.h);
+        win->next_a.y = round(win->next_a.y);
     }
     // //////////////// //
 
     // MOVE IF MOVING //
     if(win->moving)
     {
-        win->current_a.p = mouse.p - win->mouse_offset_on_move_start;
+        win->next_a.p = mouse.p - win->mouse_offset_on_move_start;
     }
     // ////////////// //
+
+    win->current_a = next_a;
 }
 
 
