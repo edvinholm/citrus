@@ -314,7 +314,7 @@ Rect area_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int *_
     return codepoint_area(cp, a.p, bt.font_size, &gfx->fonts[bt.font], bt.glyph_scale);
 }
 
-void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = false)
+void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL)
 {
     Font *font = &gfx->fonts[bt.font];
     Texture_ID font_texture = gfx->glyph_maps[bt.font].texture;
@@ -340,6 +340,19 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
 
         float line_x0 = pp.x;
 
+        bool do_draw_line = true;
+        Rect *line_clip_rect = NULL;
+        if(clip_rect) {
+            if(pp.y + bt.line_height < clip_rect->y) {
+                do_draw_line = false; // Past top border of clip rect.
+            }
+            else if(pp.y >= clip_rect->y + clip_rect->h) {
+                break; // Past bottom border of clip rect.
+            }
+            else if(pp.y < clip_rect->y || pp.y + bt.line_height > clip_rect->y + clip_rect->h)
+               line_clip_rect = clip_rect;
+        }
+
         // Draw glyphs //
         u8 *at = line_start;
         int prev_cp = 0;
@@ -350,6 +363,8 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
             int cp = eat_codepoint(&at);
             if(cp != '\n' && cp != '\r')
             {
+                Rect *glyph_clip_rect = line_clip_rect;
+                
                 // Get glyph and area
                 Sized_Glyph *glyph;
                 Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp, &glyph);
@@ -359,9 +374,15 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
                     glyph_a.x += delta;
                     pp.x += delta;
                 }
+
+                // Clip?
+                if(clip_rect && !glyph_clip_rect) {
+                    if(glyph_a.x < clip_rect->x || glyph_a.x + glyph_a.w > clip_rect->x + clip_rect->w)
+                        glyph_clip_rect = clip_rect;
+                }
                 
                 // Draw glyph in that area.
-                if(glyph) draw_glyph(glyph, glyph_a.p, font_texture, gfx);
+                if(glyph) draw_glyph(glyph, glyph_a.p, font_texture, gfx, glyph_clip_rect, do_draw_line);
 
                 cp_index++;
             }
@@ -562,9 +583,9 @@ float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx)
 }
 
 
-
-void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, Graphics *gfx,
-                    Body_Text *_bt = NULL, V_Align v_align = VA_TOP, bool lines_centered = false, float start_x = 0)
+// NOTE: clip_rect is a pointer just so we can set it to NULL.
+void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL,
+                    Body_Text *_bt = NULL, V_Align v_align = VA_TOP, float start_x = 0)
 {
     Body_Text body_text = create_body_text(text, a, font_size, font, gfx, start_x);
 
@@ -574,7 +595,7 @@ void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, Grap
     else if(v_align == VA_CENTER)
         p.y += a.h * 0.5f - body_text_height(body_text) * 0.5f;
     
-    draw_body_text(body_text, p, gfx, lines_centered); //TODO @Robustness: @Incomplete: lines_centered should be taken into account in create_body_text
+    draw_body_text(body_text, p, gfx, lines_centered, clip_rect); //TODO @Robustness: @Incomplete: lines_centered should be taken into account in create_body_text
 
     if(_bt) *_bt = body_text;
 }

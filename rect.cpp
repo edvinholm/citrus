@@ -55,26 +55,28 @@ Rect rect(v2 P, v2 S)
 inline
 Rect rect_intersection(Rect A, Rect B)
 {
-    float x1A = A.x + A.w;
-    float y1A = A.y + A.h;
+    float a_x1 = A.x + A.w;
+    float a_y1 = A.y + A.h;
     
-    float x1B = B.x + B.w;
-    float y1B = B.y + B.h;
+    float b_x1 = B.x + B.w;
+    float b_y1 = B.y + B.h;
 
-    if(A.x >= x1B || A.y >= y1B ||
-       B.x >= x1A || B.y >= y1A)
-        return rect(0, 0, 0, 0);
+    if(A.x >= b_x1 || A.y >= b_y1 ||
+       B.x >= a_x1 || B.y >= a_y1)
+        return {0, 0, 0, 0};
 
     float x0 = max(A.x, B.x);
     float y0 = max(A.y, B.y);
 
-    float x1 = min(x1A, x1B);
-    float y1 = min(y1A, y1B);
+    float x1 = min(a_x1, b_x1);
+    float y1 = min(a_y1, b_y1);
 
-    float w = max(0, x1 - x0);
-    float h = max(0, y1 - y0);
+    float w = x1 - x0;
+    float h = y1 - y0;
+
+    Assert(w >= 0 && h >= 0);
     
-    return rect(x0, y0, w, h);
+    return { x0, y0, w, h };
 }
 
 
@@ -284,14 +286,14 @@ Rect round_rect(Rect a)
 }
 
 inline
-Rect Tophalf(Rect Rect)
+Rect top_half_of(Rect Rect)
 {
     Rect.h *= 0.5f;
     return Rect;
 }
 
 inline
-Rect Bottomhalf(Rect Rect)
+Rect bottom_half_of(Rect Rect)
 {
     Rect.h *= 0.5f;
     Rect.y += Rect.h;

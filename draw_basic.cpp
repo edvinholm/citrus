@@ -189,9 +189,9 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 #endif
 
 inline
-void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL)
+void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, gfx, uvs);
+    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, gfx, uvs, texture);
 }
 
 inline
@@ -201,14 +201,14 @@ void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID 
 }
 
 inline
-void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL)
+void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v2 p1 = p + s;
-    draw_rect_pp(p, p1, gfx, uvs);
+    draw_rect_pp(p, p1, gfx, uvs, texture);
 }
 
 inline
-void draw_rect(Rect a, Graphics *gfx, v2 *uvs /* = NULL*/)
+void draw_rect(Rect a, Graphics *gfx, v2 *uvs /* = NULL*/, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    return draw_rect_ps(a.p, a.s, gfx, uvs);
+    return draw_rect_ps(a.p, a.s, gfx, uvs, texture);
 }

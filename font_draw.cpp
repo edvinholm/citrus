@@ -75,18 +75,48 @@ Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, bool do_w
     return body_text_drawer(p, font_height(size, font), font_descent(size, font), line_height_multiplier, do_wrap, centered);
 }
 
-//NOTE: Returns size of rendered glyph
-v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx, bool do_draw = true)
+//NOTE: Returns size of rendered glyph. clip_rect does not affect this.
+v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx,
+              Rect *clip_rect = NULL, bool do_draw = true)
 {
-    v2 uvs[6];
-    quad_uvs(uvs, glyph->sprite_frame_p0, glyph->sprite_frame_p1);
-
-    v2 s = V2(glyph->pixel_s) / TWEAK_font_oversampling_rate;
+    Rect a;
+    a.p = p;
+    a.s = V2(glyph->pixel_s) / TWEAK_font_oversampling_rate;
     
-    if(do_draw)
-        draw_rect_d(p, V2_X * s.w, V2_Y * s.h, gfx, uvs, font_texture);
+    if(do_draw) {
+        
+        if(clip_rect) { // @Speed
 
-    return s;
+            Rect clip_a = rect_intersection(a, *clip_rect);
+
+            float clip_x1 = clip_a.x + clip_a.w;
+            float clip_y1 = clip_a.y + clip_a.h;
+
+            v2 uv0 = glyph->sprite_frame_p0;
+            v2 uv1 = glyph->sprite_frame_p1;
+
+            float uv_dx = (uv1.x - uv0.x);
+            float uv_dy = (uv1.y - uv0.y);
+
+            uv0.x += uv_dx * ((clip_a.x - a.x)/a.w);
+            uv0.y += uv_dy * ((clip_a.y - a.y)/a.h);
+
+            uv1.x += uv_dx * (clip_x1 - (a.x + a.w))/a.w;
+            uv1.y += uv_dy * (clip_y1 - (a.y + a.h))/a.h;
+            
+            v2 uvs[6];
+            quad_uvs(uvs, uv0, uv1);
+            draw_rect(clip_a, gfx, uvs, font_texture);
+        }
+        else {
+            v2 uvs[6];
+            quad_uvs(uvs, glyph->sprite_frame_p0, glyph->sprite_frame_p1);
+            draw_rect_d(p, V2_X * a.w, V2_Y * a.h, gfx, uvs, font_texture);
+        }
+        
+    }
+
+    return a.s;
 }
 
 
@@ -96,7 +126,8 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx, 
 //NOTE: This should be given as much info as possible. The other overload is for doing things implicitly.
 inline
 Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics *gfx,
-                    bool offset = false, int previous_codepoint = 0, bool do_draw = true)
+                    bool offset = false, int previous_codepoint = 0, Rect *clip_rect = NULL,
+                    bool do_draw = true)
 {
     Font *font = current_font(gfx);
     
@@ -114,7 +145,7 @@ Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics 
     
     if(glyph) {
         Texture_ID font_texture = gfx->glyph_maps[current_font_id(gfx)].texture;
-        glyph_a.s = draw_glyph(glyph, glyph_a.p, font_texture, gfx, do_draw);
+        glyph_a.s = draw_glyph(glyph, glyph_a.p, font_texture, gfx, clip_rect, do_draw);
     }
     else
         glyph_a.s = V2_ZERO;
@@ -253,7 +284,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_i
             if(glyph)
             {
                 if(previous_codepoint != 0)
-					pp.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
+                    pp.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
 
                 draw_glyph(glyph, pp + glyph->offset, font_texture, gfx);
 

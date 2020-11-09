@@ -547,6 +547,9 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     Assert(e->type == WINDOW);
     auto *win = &e->window;
 
+    if(!win->moving && win->resize_dir_x == 0 && win->resize_dir_y == 0)
+        return;
+    
     // NOTE: (@Speed?) Processing input for every window. (This is to get the absolute latest mouse position..)
     //       IMPORTANT: (@Robustness) When we are doing this, the mouse can be at a different location during window resize/move
     //                                than during the update phase.
