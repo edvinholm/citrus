@@ -460,13 +460,6 @@ void platform_init_gl_for_window(Window *window)
 */
 
 
-void platform_get_dpi(Window *window, u32 *_x, u32 *_y)
-{
-    HMONITOR monitor = MonitorFromWindow(window->Handle, MONITOR_DEFAULTTONEAREST);
-    HRESULT fetch_result = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, _x, _y);
-    Assert(fetch_result == S_OK);
-}
-
 
 
 void platform_create_window(Window *_window, const char *Title = "",
@@ -656,13 +649,6 @@ void platform_delete_mutex(Mutex *mutex)
     CloseHandle(mutex->handle);
 }
 
-
-bool platform_open_url(char *url)
-{
-    HINSTANCE instance = ShellExecute(NULL, "open", url, NULL, NULL, SW_SHOWMAXIMIZED);
-
-    return instance > (HINSTANCE)32;
-}
 
 bool platform_sync_filesystem(bool load)
 {

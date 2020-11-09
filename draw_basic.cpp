@@ -29,13 +29,13 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 inline
 void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
 {
-    _uvs[0] = V2(uv0.x, uv0.y);
-    _uvs[1] = V2(uv1.x, uv1.y);
-    _uvs[2] = V2(uv0.x, uv1.y);
+    _uvs[0] = { uv0.x, uv0.y };
+    _uvs[1] = { uv1.x, uv1.y };
+    _uvs[2] = { uv0.x, uv1.y };
     
-    _uvs[3] = V2(uv0.x, uv0.y);
-    _uvs[4] = V2(uv1.x, uv1.y);
-    _uvs[5] = V2(uv1.x, uv0.y);
+    _uvs[3] = { uv0.x, uv0.y };
+    _uvs[4] = { uv1.x, uv1.y };
+    _uvs[5] = { uv1.x, uv0.y };
 }
 
 

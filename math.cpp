@@ -218,8 +218,8 @@ bool PointInsideTriangle(v2 P, v2 A, v2 B, v2 C)
 bool PointInsideTriangle(float Px, float Py,
                          float Ax, float Ay, float Bx, float By, float Cx, float Cy)
 {
-    return PointInsideTriangle(V2(Px, Py), V2(Ax, Ay),
-                               V2(Bx, By), V2(Cx, Cy));
+    return PointInsideTriangle({ Px, Py }, { Ax, Ay },
+                               { Bx, By }, { Cx, Cy });
 }
 
 

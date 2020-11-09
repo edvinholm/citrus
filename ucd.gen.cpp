@@ -128,31 +128,694 @@ UCD_Codepoint_Interval Sentence_Terminal_codepoints[74] = {
 
 bool is_whitespace(int cp)
 {
-    for(int i = 0; i < ARRLEN(White_Space_codepoints); i++){
-        UCD_Codepoint_Interval &interval = White_Space_codepoints[i];
-        if(interval.cp0 <= cp && interval.cp1 >= cp) return true;
+    if(cp < 8192) {
+        if(cp < 133) {
+            if(cp < 9) {
+                return false;
+            }
+            else if(cp > 13) {
+                if(cp < 32) {
+                    return false;
+                }
+                else if(cp > 32) {
+                    return false;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 133) {
+            if(cp < 160) {
+                return false;
+            }
+            else if(cp > 160) {
+                if(cp < 5760) {
+                    return false;
+                }
+                else if(cp > 5760) {
+                    return false;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
     }
-
-    return false;
+    else if(cp > 8202) {
+        if(cp < 8239) {
+            if(cp < 8232) {
+                return false;
+            }
+            else if(cp > 8232) {
+                if(cp < 8233) {
+                    return false;
+                }
+                else if(cp > 8233) {
+                    return false;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 8239) {
+            if(cp < 8287) {
+                return false;
+            }
+            else if(cp > 8287) {
+                if(cp < 12288) {
+                    return false;
+                }
+                else if(cp > 12288) {
+                    return false;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
+    }
+    else return true;
 }
 
 bool is_quotation_mark(int cp)
 {
-    for(int i = 0; i < ARRLEN(Quotation_Mark_codepoints); i++){
-        UCD_Codepoint_Interval &interval = Quotation_Mark_codepoints[i];
-        if(interval.cp0 <= cp && interval.cp1 >= cp) return true;
+    if(cp < 11842) {
+        if(cp < 8218) {
+            if(cp < 171) {
+                if(cp < 34) {
+                    return false;
+                }
+                else if(cp > 34) {
+                    if(cp < 39) {
+                        return false;
+                    }
+                    else if(cp > 39) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 171) {
+                if(cp < 8216) {
+                    if(cp < 187) {
+                        return false;
+                    }
+                    else if(cp > 187) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else if(cp > 8216) {
+                    if(cp < 8217) {
+                        return false;
+                    }
+                    else if(cp > 8217) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 8218) {
+            if(cp < 8222) {
+                if(cp < 8219) {
+                    return false;
+                }
+                else if(cp > 8220) {
+                    if(cp < 8221) {
+                        return false;
+                    }
+                    else if(cp > 8221) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 8222) {
+                if(cp < 8249) {
+                    if(cp < 8223) {
+                        return false;
+                    }
+                    else if(cp > 8223) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else if(cp > 8249) {
+                    if(cp < 8250) {
+                        return false;
+                    }
+                    else if(cp > 8250) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
     }
-
-    return false;
+    else if(cp > 11842) {
+        if(cp < 65089) {
+            if(cp < 12302) {
+                if(cp < 12300) {
+                    return false;
+                }
+                else if(cp > 12300) {
+                    if(cp < 12301) {
+                        return false;
+                    }
+                    else if(cp > 12301) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 12302) {
+                if(cp < 12317) {
+                    if(cp < 12303) {
+                        return false;
+                    }
+                    else if(cp > 12303) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else if(cp > 12317) {
+                    if(cp < 12318) {
+                        return false;
+                    }
+                    else if(cp > 12319) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 65089) {
+            if(cp < 65282) {
+                if(cp < 65091) {
+                    if(cp < 65090) {
+                        return false;
+                    }
+                    else if(cp > 65090) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else if(cp > 65091) {
+                    if(cp < 65092) {
+                        return false;
+                    }
+                    else if(cp > 65092) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 65282) {
+                if(cp < 65378) {
+                    if(cp < 65287) {
+                        return false;
+                    }
+                    else if(cp > 65287) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else if(cp > 65378) {
+                    if(cp < 65379) {
+                        return false;
+                    }
+                    else if(cp > 65379) {
+                        return false;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
+    }
+    else return true;
 }
 
 bool is_sentence_terminal(int cp)
 {
-    for(int i = 0; i < ARRLEN(Sentence_Terminal_codepoints); i++){
-        UCD_Codepoint_Interval &interval = Sentence_Terminal_codepoints[i];
-        if(interval.cp0 <= cp && interval.cp1 >= cp) return true;
+    if(cp < 43311) {
+        if(cp < 6147) {
+            if(cp < 2103) {
+                if(cp < 1417) {
+                    if(cp < 46) {
+                        if(cp < 33) {
+                            return false;
+                        }
+                        else if(cp > 33) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 46) {
+                        if(cp < 63) {
+                            return false;
+                        }
+                        else if(cp > 63) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 1417) {
+                    if(cp < 1748) {
+                        if(cp < 1566) {
+                            return false;
+                        }
+                        else if(cp > 1567) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 1748) {
+                        if(cp < 1792) {
+                            return false;
+                        }
+                        else if(cp > 1794) {
+                            if(cp < 2041) {
+                                return false;
+                            }
+                            else if(cp > 2041) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 2103) {
+                if(cp < 4170) {
+                    if(cp < 2109) {
+                        if(cp < 2105) {
+                            return false;
+                        }
+                        else if(cp > 2105) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 2110) {
+                        if(cp < 2404) {
+                            return false;
+                        }
+                        else if(cp > 2405) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 4171) {
+                    if(cp < 4967) {
+                        if(cp < 4962) {
+                            return false;
+                        }
+                        else if(cp > 4962) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 4968) {
+                        if(cp < 5742) {
+                            return false;
+                        }
+                        else if(cp > 5742) {
+                            if(cp < 5941) {
+                                return false;
+                            }
+                            else if(cp > 5942) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 6147) {
+            if(cp < 8263) {
+                if(cp < 7002) {
+                    if(cp < 6468) {
+                        if(cp < 6153) {
+                            return false;
+                        }
+                        else if(cp > 6153) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 6469) {
+                        if(cp < 6824) {
+                            return false;
+                        }
+                        else if(cp > 6827) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 7003) {
+                    if(cp < 7227) {
+                        if(cp < 7006) {
+                            return false;
+                        }
+                        else if(cp > 7007) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 7228) {
+                        if(cp < 7294) {
+                            return false;
+                        }
+                        else if(cp > 7295) {
+                            if(cp < 8252) {
+                                return false;
+                            }
+                            else if(cp > 8253) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 8265) {
+                if(cp < 42510) {
+                    if(cp < 11836) {
+                        if(cp < 11822) {
+                            return false;
+                        }
+                        else if(cp > 11822) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 11836) {
+                        if(cp < 12290) {
+                            return false;
+                        }
+                        else if(cp > 12290) {
+                            if(cp < 42239) {
+                                return false;
+                            }
+                            else if(cp > 42239) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 42511) {
+                    if(cp < 42743) {
+                        if(cp < 42739) {
+                            return false;
+                        }
+                        else if(cp > 42739) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 42743) {
+                        if(cp < 43126) {
+                            return false;
+                        }
+                        else if(cp > 43127) {
+                            if(cp < 43214) {
+                                return false;
+                            }
+                            else if(cp > 43215) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
     }
-
-    return false;
+    else if(cp > 43311) {
+        if(cp < 70200) {
+            if(cp < 65311) {
+                if(cp < 44011) {
+                    if(cp < 43613) {
+                        if(cp < 43464) {
+                            return false;
+                        }
+                        else if(cp > 43465) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 43615) {
+                        if(cp < 43760) {
+                            return false;
+                        }
+                        else if(cp > 43761) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 44011) {
+                    if(cp < 65110) {
+                        if(cp < 65106) {
+                            return false;
+                        }
+                        else if(cp > 65106) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 65111) {
+                        if(cp < 65281) {
+                            return false;
+                        }
+                        else if(cp > 65281) {
+                            if(cp < 65294) {
+                                return false;
+                            }
+                            else if(cp > 65294) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 65311) {
+                if(cp < 69822) {
+                    if(cp < 68182) {
+                        if(cp < 65377) {
+                            return false;
+                        }
+                        else if(cp > 65377) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 68183) {
+                        if(cp < 69461) {
+                            return false;
+                        }
+                        else if(cp > 69465) {
+                            if(cp < 69703) {
+                                return false;
+                            }
+                            else if(cp > 69704) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 69825) {
+                    if(cp < 70085) {
+                        if(cp < 69953) {
+                            return false;
+                        }
+                        else if(cp > 69955) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 70086) {
+                        if(cp < 70093) {
+                            return false;
+                        }
+                        else if(cp > 70093) {
+                            if(cp < 70110) {
+                                return false;
+                            }
+                            else if(cp > 70111) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else if(cp > 70201) {
+            if(cp < 72347) {
+                if(cp < 71106) {
+                    if(cp < 70313) {
+                        if(cp < 70203) {
+                            return false;
+                        }
+                        else if(cp > 70204) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 70313) {
+                        if(cp < 70731) {
+                            return false;
+                        }
+                        else if(cp > 70732) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 71107) {
+                    if(cp < 71233) {
+                        if(cp < 71113) {
+                            return false;
+                        }
+                        else if(cp > 71127) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 71234) {
+                        if(cp < 71484) {
+                            return false;
+                        }
+                        else if(cp > 71486) {
+                            if(cp < 72258) {
+                                return false;
+                            }
+                            else if(cp > 72259) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else if(cp > 72348) {
+                if(cp < 92983) {
+                    if(cp < 73463) {
+                        if(cp < 72769) {
+                            return false;
+                        }
+                        else if(cp > 72770) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 73464) {
+                        if(cp < 92782) {
+                            return false;
+                        }
+                        else if(cp > 92783) {
+                            if(cp < 92917) {
+                                return false;
+                            }
+                            else if(cp > 92917) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else if(cp > 92984) {
+                    if(cp < 93848) {
+                        if(cp < 92996) {
+                            return false;
+                        }
+                        else if(cp > 92996) {
+                            return false;
+                        }
+                        else return true;
+                    }
+                    else if(cp > 93848) {
+                        if(cp < 113823) {
+                            return false;
+                        }
+                        else if(cp > 113823) {
+                            if(cp < 121480) {
+                                return false;
+                            }
+                            else if(cp > 121480) {
+                                return false;
+                            }
+                            else return true;
+                        }
+                        else return true;
+                    }
+                    else return true;
+                }
+                else return true;
+            }
+            else return true;
+        }
+        else return true;
+    }
+    else return true;
 }
 

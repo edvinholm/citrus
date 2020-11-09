@@ -28,24 +28,17 @@ const v2 V2_ONE =  {1, 1};
 const v2 V2_XY  =  {1, 1};
 const v2 V2_XY_NORM = { 0.7071067811865475244, 0.7071067811865475244 };
 
-inline
-v2 V2(float x, float y)
-{
-    v2 V = {x, y};
-    return V;
-}
 
 inline
-
 v2 compmul(v2 a, v2 b)
 {
-    return V2(a.x * b.x, a.y * b.y);
+    return { a.x * b.x, a.y * b.y };
 }
 
 inline
 v2 compdiv(v2 a, v2 b)
 {
-    return V2(a.x / b.x, a.y / b.y);
+    return { a.x / b.x, a.y / b.y };
 }
 
 inline

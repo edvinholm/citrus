@@ -37,6 +37,7 @@
 #include "platform.h"
 
 #if OS_WINDOWS
+#include <xmmintrin.h>
 #include <Windows.h>
 #include <shellscalingapi.h>
 #include "platform_win32.h"
@@ -77,6 +78,10 @@
 #endif
 
 
+#if UNICODE_DB_PARSER
+#include "unicode_db.cpp"
+#endif
+
 
 int main(int num_arguments, char **arguments)
 {
@@ -86,8 +91,10 @@ int main(int num_arguments, char **arguments)
         machine_is_big_endian = (*(u8 *)&x == 0);
         Debug_Print("machine_is_big_endian: %d\n", machine_is_big_endian);
     }
-    
-#if SERVER
+
+#if UNICODE_DB_PARSER
+    return unicode_db_entry_point(num_arguments, arguments);
+#elif SERVER
     return server_entry_point(num_arguments, arguments);
 #else
     return client_entry_point(num_arguments, arguments);    

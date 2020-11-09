@@ -5,8 +5,10 @@ Rect grid_cell(int col, int row, Rect grid_a, int cols, int rows, float spacing,
     if(is_zero(row_h))
         row_h = (grid_a.h - (rows-1) * spacing)/rows;
     
-    v2 s = V2((grid_a.w - (cols-1) * spacing)/cols, row_h);
-    return rect(grid_a.p + compmul(V2(col, row), s + V2_XY * spacing), s);
+    v2 s = { (grid_a.w - (cols-1) * spacing)/cols, row_h };
+    v2 cell_p_rel = { (float)col * (s.w + spacing),
+                      (float)row * (s.h + spacing) };
+    return rect(grid_a.p + cell_p_rel, s);
 }
 
 Rect grid_cell(int cell_index, Rect grid_a, int cols, int rows, float spacing)

@@ -14,14 +14,14 @@ enum Direction
 //IMPORTANT: This DOES NOT set the texture.
 // NOTE: What is referred to as the 'slice' here, is the center rect created by the four cuts.
 // NOTE: Scale obviously only works with slicing.
-void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2s texture_size, Graphics *gfx, Sprite_Frame *slicing = NULL, float scale = 1.0,
+void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics *gfx, Sprite_Frame *slicing = NULL, float scale = 1.0,
                        int sides_to_do = ALL_DIRECTIONS)
 {
     Assert(slicing || floats_equal(scale, 1.0f)); // Scale obviously only works with slicing.
     
     v2 uvs[3*2];
 
-    v2 map_s = V2(texture_size);
+    v2 map_s = texture_size;
 
     // Map UVs ( For convenience :-) )
     v2 muv0 = V2_ZERO;
@@ -84,14 +84,14 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2s texture_size, Graphics
             }
 
             // Top
-            quad_uvs(uvs, V2(suv0.x, fuv0.y), V2(suv1.x, suv0.y));
-            draw_rect_pp(V2(sp0.x, rp0.y), V2(sp1.x, sp0.y), gfx, uvs);
+            quad_uvs(uvs, {suv0.x, fuv0.y}, {suv1.x, suv0.y});
+            draw_rect_pp({sp0.x, rp0.y}, {sp1.x, sp0.y}, gfx, uvs);
 
             if(sides_to_do & RIGHT)
             {    
                 // Top right
-                quad_uvs(uvs, V2(suv1.x, fuv0.y), V2(fuv1.x, suv0.y));
-                draw_rect_pp(V2(sp1.x, rp0.y), V2(rp1.x, sp0.y), gfx, uvs);
+                quad_uvs(uvs, {suv1.x, fuv0.y}, {fuv1.x, suv0.y});
+                draw_rect_pp({sp1.x, rp0.y}, {rp1.x, sp0.y}, gfx, uvs);
             }
         }
         
@@ -100,13 +100,13 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2s texture_size, Graphics
             if(sides_to_do & LEFT)
             {
                 // Bottom left
-                quad_uvs(uvs, V2(fuv0.x, suv1.y), V2(suv0.x, fuv1.y));
-                draw_rect_pp(V2(rp0.x, sp1.y), V2(sp0.x, rp1.y), gfx, uvs);
+                quad_uvs(uvs, {fuv0.x, suv1.y}, {suv0.x, fuv1.y});
+                draw_rect_pp({rp0.x, sp1.y}, {sp0.x, rp1.y}, gfx, uvs);
             }
     
             // Bottom
-            quad_uvs(uvs, V2(suv0.x, suv1.y), V2(suv1.x, fuv1.y));
-            draw_rect_pp(V2(sp0.x, sp1.y), V2(sp1.x, rp1.y), gfx, uvs);
+            quad_uvs(uvs, {suv0.x, suv1.y}, {suv1.x, fuv1.y});
+            draw_rect_pp({sp0.x, sp1.y}, {sp1.x, rp1.y}, gfx, uvs);
             
             if(sides_to_do & RIGHT)
             {
@@ -119,15 +119,15 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2s texture_size, Graphics
         if(sides_to_do & LEFT)
         {
             // Left
-            quad_uvs(uvs, V2(fuv0.x, suv0.y), V2(suv0.x, suv1.y));
-            draw_rect_pp(V2(rp0.x, sp0.y), V2(sp0.x, sp1.y), gfx, uvs);
+            quad_uvs(uvs, {fuv0.x, suv0.y}, {suv0.x, suv1.y});
+            draw_rect_pp({rp0.x, sp0.y}, {sp0.x, sp1.y}, gfx, uvs);
         }
         
         if(sides_to_do & RIGHT)
         {
             // Right
-            quad_uvs(uvs, V2(suv1.x, suv0.y), V2(fuv1.x, suv1.y));
-            draw_rect_pp(V2(sp1.x, sp0.y), V2(rp1.x, sp1.y), gfx, uvs);
+            quad_uvs(uvs, {suv1.x, suv0.y}, {fuv1.x, suv1.y});
+            draw_rect_pp({sp1.x, sp0.y}, {rp1.x, sp1.y}, gfx, uvs);
         }
     }
     
@@ -139,7 +139,7 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2s texture_size, Graphics
 //IMPORTANT: This DOES NOT set the texture.
 // NOTE: Scale obviously only works with slicing.
 inline
-void draw_sprite(Sprite &sprite, Rect rect, v2s texture_size, Graphics *gfx, float scale = 1.0f, int sides_to_do = ALL_DIRECTIONS)
+void draw_sprite(Sprite &sprite, Rect rect, v2 texture_size, Graphics *gfx, float scale = 1.0f, int sides_to_do = ALL_DIRECTIONS)
 {
     draw_sprite_frame(sprite.frame, rect, texture_size, gfx, (sprite.has_slicing) ? &sprite.slicing : NULL, scale, sides_to_do);
 }

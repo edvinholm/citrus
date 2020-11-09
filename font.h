@@ -91,7 +91,7 @@ struct Sized_Glyph //@Cleanup: @BadName
 
     v2 sprite_frame_p0; //In sprite map, 0.0 - 1.0
     v2 sprite_frame_p1; //In sprite map, 0.0 - 1.0
-    v2u pixel_s;
+    v2 pixel_s;
 
     //TODO @Cleanup: @Memory: unbake scale and put these in Glyph_Info.
     float advance_width; // Scale is baked in
@@ -117,11 +117,27 @@ struct Glyph_Table
     Bucket buckets[256];
 };
 
+struct Glyph_Index_Table
+{
+    struct Bucket
+    {
+        Array<int, ALLOC_GFX> codepoints;
+        Array<int, ALLOC_GFX> indices;
+    };
+
+    Bucket buckets[256];
+};
+
 struct Font
 {
     Sprite_Map *sprite_map;
     
     Glyph_Table glyphs;
+
+    // NOTE: This are our cache of mappings from codepoints to glyph indices
+    //       If we don't find our index here, we ask stbtt.
+    Glyph_Index_Table glyph_indices;
+    // ///////////////
 
     float ascent;   // Scale SHOULD NOT BE baked in
     float descent;  // Scale SHOULD NOT BE baked in
@@ -130,4 +146,3 @@ struct Font
     //@Temporary ?
     stbtt_fontinfo stb_info;
 };
-

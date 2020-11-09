@@ -125,13 +125,13 @@ Rect center_y(Rect a, float h)
 inline
 v2 left_bottom_of(Rect a)
 {
-    return V2(a.x, a.y + a.h);
+    return { a.x, a.y + a.h };
 }
 
 inline
 v2 center_right_of(Rect a)
 {
-    return V2(right_x(a), center_y(a));
+    return { right_x(a), center_y(a) };
 }
 
 inline
@@ -146,14 +146,14 @@ Rect center_right_of(Rect a, v2 s, float offset_from_right = 0)
 inline
 v2 center_left_of(Rect a)
 {
-    return V2(a.x, center_y(a));
+    return { a.x, center_y(a) };
 }
 
 
 inline
 v2 center_top_of(Rect a)
 {
-    return V2(center_x(a), a.y);
+    return { center_x(a), a.y };
 }
 
 inline
@@ -177,7 +177,7 @@ Rect center_top_of(Rect a, v2 s, float offset_from_top = 0)
 inline
 v2 center_bottom_of(Rect a)
 {
-    return V2(center_x(a), bottom_y(a));
+    return { center_x(a), bottom_y(a) };
 }
 
 inline
@@ -373,7 +373,7 @@ Rect top_square_of(Rect a)
 inline
 v2 top_right_of(Rect a)
 {
-    return V2(a.x + a.w, a.y);
+    return { a.x + a.w, a.y };
 }
 
 
@@ -565,12 +565,12 @@ bool Rect_inside_Rect(Rect inner, Rect outer)
     {
         return false;
     }
-    if(!point_inside_rect(V2(inner.x + inner.w, inner.y), outer))
+    if(!point_inside_rect({ inner.x + inner.w, inner.y }, outer))
     {
         return false;
 
     }
-    if(!point_inside_rect(V2(inner.x, inner.y + inner.h), outer))
+    if(!point_inside_rect({ inner.x, inner.y + inner.h }, outer))
     {
         return false;
     }

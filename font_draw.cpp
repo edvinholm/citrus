@@ -81,7 +81,7 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx,
 {
     Rect a;
     a.p = p;
-    a.s = V2(glyph->pixel_s) / TWEAK_font_oversampling_rate;
+    a.s = { glyph->pixel_s.x / TWEAK_font_oversampling_rate, glyph->pixel_s.y / TWEAK_font_oversampling_rate };
     
     if(do_draw) {
         
@@ -207,7 +207,7 @@ inline
 v2 string_size(String string, Font_Size size, Font *font)
 {
     // @Cleanup: @Speed: We do scale_for_font_size twice, since we do it in string_width as well.
-    return V2(string_width(string, size, font), (font->ascent - font->descent) * scale_for_font_size(size, font));
+    return { string_width(string, size, font), (font->ascent - font->descent) * scale_for_font_size(size, font) };
 }
 
 
@@ -297,7 +297,9 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_i
         *previous_codepoint = codepoint;
     }
 
-    return rect(p, V2(max_x - p.x, pp.y - p.y - font->descent * scale));
+    return { p.x, p.y,
+            max_x - p.x,
+            pp.y - p.y - font->descent * scale };
 }
 
 inline

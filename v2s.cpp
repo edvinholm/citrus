@@ -22,12 +22,3 @@ v2s V2S(s32 x, s32 y)
     return {x, y};
 }
 
-
-inline
-v2 V2(v2s u)
-{
-    v2 v;
-    v.x = u.x;
-    v.y = u.y;
-    return v;
-}

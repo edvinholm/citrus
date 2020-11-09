@@ -18,8 +18,11 @@ v2 sprite_size(Sprite_ID sprite)
 inline
 void sprite_frame_uvs(Sprite_Frame &frame, Texture_ID texture, Graphics *gfx, v2 *_uv0, v2 *_uv1)
 {
-    *_uv0 = compdiv(frame.p0, V2(gfx->textures.sizes[texture]));
-    *_uv1 = compdiv(frame.p1, V2(gfx->textures.sizes[texture]));
+    float texture_w = gfx->textures.sizes[texture].w;
+    float texture_h = gfx->textures.sizes[texture].h;
+    
+    *_uv0 = { frame.p0.x / texture_w, frame.p0.y / texture_h };
+    *_uv1 = { frame.p1.x / texture_w, frame.p1.y / texture_h };
 }
 
 

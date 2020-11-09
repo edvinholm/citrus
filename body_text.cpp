@@ -37,30 +37,48 @@ struct Body_Text
 
 float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx);
 
+Rect glyph_area(Sized_Glyph *glyph, int glyph_index, v2 p, int last_glyph_index, Font *font,
+                float scale, v2 *_new_p, int previous_codepoint = 0)
+{
+    if(last_glyph_index != -1)
+        p.x += glyph_kerning(&font->stb_info, last_glyph_index, glyph_index) * scale;
+
+    Rect glyph_a;
+
+    glyph_a.x = p.x + glyph->offset.x;
+    glyph_a.y = p.y + glyph->offset.y + font_ascent(scale, font);
+    glyph_a.s = { glyph->pixel_s.w, glyph->pixel_s.h };
+    
+    p.x += glyph->advance_width;
+
+    *_new_p = p;
+    return glyph_a;
+}
 
 // IMPORTANT: *_glyph can be set to NULL
-Rect codepoint_area(int cp, v2 p, Font_Size size, Font *font, float scale, v2 *_new_p = NULL,
+Rect codepoint_area(int cp, v2 p, Font_Size size, Font *font, float scale, v2 *_new_p,
                     int previous_codepoint = 0, Sized_Glyph **_glyph = NULL)
 {
     int glyph_index;
     Sized_Glyph *glyph = find_or_load_glyph(cp, size, font, &glyph_index);
 
+    int last_glyph_index = -1;
     if(previous_codepoint != 0)
-        p.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(previous_codepoint, font), glyph_index) * scale;
+        last_glyph_index = glyph_index_for_codepoint(previous_codepoint, font);
 
-    Rect glyph_a = {0};
-    glyph_a.p = p + glyph->offset + V2_Y * font_ascent(size, font);
-                      
+    Rect glyph_a;
+    
+    if(_glyph) *_glyph = glyph;
+
     if(glyph)
-        glyph_a.s = V2(glyph->pixel_s);
+    {
+        return glyph_area(glyph, glyph_index, p, last_glyph_index, font, scale, _new_p);
+    }
     else
-        glyph_a.s = V2_ZERO;
-
-    if(_new_p)
-        *_new_p = p + V2_X * glyph->advance_width;
-
-    if(_glyph)
-        *_glyph = glyph;
+    {
+        glyph_a = {p.x, p.y, 0, 0};
+        *_new_p = p;
+    }
 
     return glyph_a;
 }
@@ -132,8 +150,7 @@ int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text bt, Graphics *
         int cp = eat_codepoint(&at);
 
         // Get glyph and area
-        Sized_Glyph *glyph;
-        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp, &glyph);
+        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
 
         // Calculate center x of glyph
         float glyph_mid_x = center_x(glyph_a);
@@ -171,8 +188,7 @@ float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text
         }
                         
         // Get glyph and area
-        Sized_Glyph *glyph;
-        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp, &glyph);
+        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
 
         // Set previous codepoint
         prev_cp = cp;
@@ -301,7 +317,7 @@ v2 position_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int 
 
     if(_line_index) *_line_index = line_index;
     
-    return V2(x, y_from_line_index(line_index, bt));
+    return { x, y_from_line_index(line_index, bt) };
 }
 
 Rect area_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int *_cp = NULL)
@@ -310,8 +326,9 @@ Rect area_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int *_
     int cp = 0;
     a.p = position_from_codepoint_index(cp_index, bt, gfx, &cp);
 
-    if(_cp) *_cp = cp;    
-    return codepoint_area(cp, a.p, bt.font_size, &gfx->fonts[bt.font], bt.glyph_scale);
+    if(_cp) *_cp = cp;
+    v2 unused;
+    return codepoint_area(cp, a.p, bt.font_size, &gfx->fonts[bt.font], bt.glyph_scale, &unused);
 }
 
 void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL)
@@ -463,7 +480,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
         }
         else
         {
-            if(is_whitespace(cp) || cp == '-')
+            if(cp == ' ' || cp == '-' || is_whitespace(cp))
             {
                 whitespace_or_hyphen_cp_index = cp_index;
                 whitespace_or_hyphen_end = cp_end;
@@ -562,8 +579,7 @@ float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx)
         int cp = eat_codepoint(&at);
         if(cp != '\n' && cp != '\r'){
 
-            Sized_Glyph *glyph;
-            Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp, &glyph);
+            Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
             if (cp_index == 0)
             {
                 float delta = x0 - glyph_a.x;

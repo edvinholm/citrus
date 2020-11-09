@@ -1,7 +1,7 @@
 
 int ucd_line;
 int ucd_col;
-char *ucd_file = (char *)"tmp/PropList.txt"; //https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt
+char *ucd_file = (char *)"build_res/PropList.txt"; //https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt
 
 
 #define Error(...) { printf("%s:%d:%d: error: ", ucd_file, ucd_line, ucd_col); printf(__VA_ARGS__); return false; }
@@ -57,7 +57,7 @@ const char *ucd_codepoint_property_names[UCD_CP_PROP_NONE_OR_NUM] = {
 
 struct UCD_Registry
 {
-    Array<UCD_Codepoint_Interval> intervals_with_property[UCD_CP_PROP_NONE_OR_NUM];
+    Array<UCD_Codepoint_Interval, ALLOC_MALLOC> intervals_with_property[UCD_CP_PROP_NONE_OR_NUM];
 };
 
 void add_ucd_codepoint_interval(UCD_Codepoint_Interval interval, String property_name, UCD_Registry *registry)
@@ -151,7 +151,7 @@ bool expect_ucd_token(UCD_Token_Type expected_type, u8 **at, u8 *end)
         Error("Expected %s token, but found %s (\"%.*s\")\n",
               ucd_token_type_names[expected_type],
               ucd_token_type_names[token.type],
-              token.str.length, token.str.data);
+              (int)token.str.length, token.str.data);
     }
 
     return true;
@@ -260,17 +260,73 @@ bool parse_ucd_file(u8 **at, u8 *end, UCD_Registry *registry)
     return true;
 }
 
-void output_ucd_cp_prop_checker_function(FILE *file, char *function_name, UCD_Codepoint_Property property)
+
+void ucd_print_indentation(FILE *file, int indentation_level)
+{
+    for(int i = 0; i < indentation_level; i++) {
+        fprintf(file, "    ");
+    }
+}
+
+void ucd_cp_prop_checker_binary_search_section(FILE *file, int left, int right, Array<UCD_Codepoint_Interval, ALLOC_MALLOC> &intervals, int indentation_level)
+{
+    
+    if(right < left) {
+        ucd_print_indentation(file, indentation_level);        
+        fprintf(file, "return false;\n");
+        return;
+    }
+
+    int mid = (left + right)/2;
+
+    ucd_print_indentation(file, indentation_level);
+    fprintf(file, "if(cp < %d) {\n", intervals[mid].cp0);
+    {
+        ucd_cp_prop_checker_binary_search_section(file, left, mid-1, intervals, indentation_level+1);
+    }
+    ucd_print_indentation(file, indentation_level);
+    fprintf(file, "}\n");
+
+    ucd_print_indentation(file, indentation_level);
+    fprintf(file, "else if(cp > %d) {\n", intervals[mid].cp1);
+    {
+        ucd_cp_prop_checker_binary_search_section(file, mid+1, right, intervals, indentation_level+1);   
+    }
+    ucd_print_indentation(file, indentation_level);
+    fprintf(file, "}\n");
+    
+    ucd_print_indentation(file, indentation_level);
+    fprintf(file, "else return true;\n");
+}
+
+void output_ucd_cp_prop_checker_function(FILE *file, char *function_name, UCD_Codepoint_Property property, UCD_Registry *registry)
 {
     char *prop_name = (char *)ucd_codepoint_property_names[property];
-    
+
     fprintf(file, "bool %s(int cp)\n{\n", function_name);
+
+#if 1 // Binary search
+
+    auto &intervals = registry->intervals_with_property[property];
+    ucd_cp_prop_checker_binary_search_section(file, 0, intervals.n-1, intervals, 1);
+    
+#elif 0 // If statements
+    auto &intervals = registry->intervals_with_property[property];
+    for(int i = 0; i < intervals.n; i++) {
+        fprintf(file, "    if(%d <= cp && %d >= cp) return true;\n", intervals[i].cp0, intervals[i].cp1);
+    }
+    fprintf(file, "    return false;\n");
+    
+#else // Loop
     fprintf(file, "    for(int i = 0; i < ARRLEN(%s_codepoints); i++){\n", prop_name);
     fprintf(file, "        UCD_Codepoint_Interval &interval = %s_codepoints[i];\n", prop_name);
     fprintf(file, "        if(interval.cp0 <= cp && interval.cp1 >= cp) return true;\n");
     fprintf(file, "    }\n");
     fprintf(file, "\n");
     fprintf(file, "    return false;\n");
+#endif
+
+    
     fprintf(file, "}\n\n");
 }
 
@@ -287,7 +343,7 @@ void output_ucd_registry(UCD_Registry *registry, char *filename)
     for(int i = 0; i < UCD_CP_PROP_NONE_OR_NUM; i++)
     {
         const char *property_name = ucd_codepoint_property_names[i];
-        fprintf(file, "\nUCD_Codepoint_Interval %s_codepoints[%d] = {", property_name, registry->intervals_with_property[i].n);
+        fprintf(file, "\nUCD_Codepoint_Interval %s_codepoints[%d] = {", property_name, (int)registry->intervals_with_property[i].n);
 
         for(int j = 0; j < registry->intervals_with_property[i].n; j++)
         {
@@ -300,14 +356,14 @@ void output_ucd_registry(UCD_Registry *registry, char *filename)
         fprintf(file, "\n};\n\n");
     }
 
-    output_ucd_cp_prop_checker_function(file, "is_whitespace", UCD_CP_PROP_WHITE_SPACE);
-    output_ucd_cp_prop_checker_function(file, "is_quotation_mark", UCD_CP_PROP_QUOTATION_MARK);
-    output_ucd_cp_prop_checker_function(file, "is_sentence_terminal", UCD_CP_PROP_SENTENCE_TERMINAL);
+    output_ucd_cp_prop_checker_function(file, "is_whitespace",        UCD_CP_PROP_WHITE_SPACE, registry);
+    output_ucd_cp_prop_checker_function(file, "is_quotation_mark",    UCD_CP_PROP_QUOTATION_MARK, registry);
+    output_ucd_cp_prop_checker_function(file, "is_sentence_terminal", UCD_CP_PROP_SENTENCE_TERMINAL, registry);
     
     close_file(file);
 }
 
-int unicode_db_entry_point(int num_arguments, const char **arguments) {
+int unicode_db_entry_point(int num_arguments, char **arguments) {
 
     printf("\n");
 
@@ -318,7 +374,7 @@ int unicode_db_entry_point(int num_arguments, const char **arguments) {
     
     u8 *proplist_content;
     u32 proplist_content_length;
-    if(!read_entire_file(ucd_file, &proplist_content, &proplist_content_length))
+    if(!read_entire_file(ucd_file, &proplist_content, ALLOC_MALLOC, &proplist_content_length))
     {
         printf("Unable to read proplist file.\n");
         return 1;

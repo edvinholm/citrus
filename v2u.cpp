@@ -123,12 +123,3 @@ bool operator == (v2u u, v2u v)
 {
     return u.x == v.x && u.y == v.y;
 }
-
-inline
-v2 V2(v2u V)
-{
-    v2 Result;
-    Result.x = (float)V.x;
-    Result.y = (float)V.y;
-    return Result;
-}

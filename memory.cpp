@@ -534,11 +534,12 @@ void ensure_buffer_set_capacity(u64 required_capacity, u64 *capacity,
                                 u64 min_capacity = 1)
 {
     Assert(num_buffers <= 8);
-    u8 *new_buffers[8] = {0};
     
     u64 old_capacity = *capacity;
 
     if(!realloc_needed(*capacity, required_capacity, capacity, min_capacity)) return;
+    
+    u8 *new_buffers[8] = {0};
     
     size_t total_size = 0;
 

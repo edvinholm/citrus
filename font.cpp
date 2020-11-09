@@ -23,9 +23,15 @@ float font_height(Font_Size size, Font *font)
 }
 
 inline
+float font_ascent(float scale, Font *font)
+{
+    return font->ascent * scale;
+}
+
+inline
 float font_ascent(Font_Size size, Font *font)
 {
-    return font->ascent * scale_for_font_size(size, font);
+    return font_ascent(scale_for_font_size(size, font), font);
 }
 
 inline
@@ -166,14 +172,16 @@ bool load_glyph(int codepoint, Font_Size size, Glyph_Info *existing_glyph, Font 
     Sized_Glyph &sized = existing_glyph->sized[size];
     sized.loaded = true;
     
-    sized.sprite_frame_p0 = V2(x / (float)map.w, y / (float)map.h);
-    sized.sprite_frame_p1 = sized.sprite_frame_p0 + V2(glyph_w / (float)map.w, glyph_h / (float)map.h);
-    sized.pixel_s = V2U(glyph_w, glyph_h);
+    sized.sprite_frame_p0 = { x / (float)map.w, y / (float)map.h };
+    sized.sprite_frame_p1 = { sized.sprite_frame_p0.x + glyph_w / (float)map.w,
+                              sized.sprite_frame_p0.y + glyph_h / (float)map.h };
+    sized.pixel_s = { (float)glyph_w, (float)glyph_h };
 
     int left_side_bearing;
     int advance_width;
     stbtt_GetGlyphHMetrics(font_info, glyph_index, &advance_width, &left_side_bearing);
-    sized.offset = V2(left_side_bearing * scale, iy0) / TWEAK_font_oversampling_rate;
+    sized.offset = { left_side_bearing * scale / TWEAK_font_oversampling_rate,
+                     iy0 / TWEAK_font_oversampling_rate };
     sized.advance_width = advance_width * scale / TWEAK_font_oversampling_rate;
 
     return true;
@@ -228,7 +236,28 @@ Sized_Glyph *find_or_load_glyph(int codepoint, Font_Size size, Font *font, int *
 inline
 int glyph_index_for_codepoint(int codepoint, Font *font)
 {
-    return stbtt_FindGlyphIndex(&font->stb_info, codepoint);
+    // CHECK IF WE HAVE CACHED IT //
+    u64 bucket_ix = codepoint % ARRLEN(font->glyph_indices.buckets);
+    auto &bucket = font->glyph_indices.buckets[bucket_ix];
+    
+    Assert(bucket.codepoints.n == bucket.indices.n);
+    auto *at  = bucket.codepoints.e;
+    auto *end = at + bucket.codepoints.n;
+    while(at < end) {
+        if(*at == codepoint)
+            return bucket.indices.e[at - bucket.codepoints.e];
+        at++;
+    }
+    // //
+
+    // ASK STBTT AND ADD IT TO CACHE //
+    int index = stbtt_FindGlyphIndex(&font->stb_info, codepoint);
+    array_add(bucket.codepoints, codepoint);
+    array_add(bucket.indices,    index);
+    // //
+
+    return index;
+    
 }
 
 
