@@ -1,15 +1,4 @@
 
-
-struct Client
-{
-    Layout_Manager layout;
-    UI_Manager ui;
-    Input_Manager input;
-
-    Window main_window;
-    Rect main_window_a;
-};
-
 // @Temporary
 int fps = 0;
 int frames_this_second = 0;
@@ -836,6 +825,7 @@ int client_entry_point(int num_args, char **arguments)
     UI_Context ui_ctx = UI_Context();
     ui_ctx.manager = ui;
     ui_ctx.layout  = layout;
+    ui_ctx.client  = &client;
     //--
 
 #if DEBUG // Debug stuff for keeping track of things like FPS and UPS.
@@ -862,7 +852,7 @@ int client_entry_point(int num_args, char **arguments)
         // //////////////////////////////////// //
 
         // NOTE: Get input as close as possible to the UI update.
-        if(!platform_process_input(main_window)) {
+        if(!platform_process_input(main_window, true)) {
             break;
         }
         

@@ -366,7 +366,7 @@ LPARAM LParam
 }
 
 //NOTE: Returns false if the window should close.
-bool platform_process_input(Window *window)
+bool platform_process_input(Window *window, bool sleep_if_no_messages = false)
 {
     bool any_messages = false;
     
@@ -378,7 +378,7 @@ bool platform_process_input(Window *window)
         any_messages = true;
     }
 
-    if(!any_messages) {
+    if(!any_messages && sleep_if_no_messages) {
         Sleep(2);
     }
 

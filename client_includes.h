@@ -39,6 +39,10 @@
 
 #include "input.cpp"
 
+#include "ui.h"
+
+#include "client.h"
+
 #include "ui.cpp"
 
 #include "draw.cpp"
