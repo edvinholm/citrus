@@ -20,7 +20,7 @@ App_Version APP_version = {{
 float TWEAK_nav_key_repeat_delay = 0.1; // in seconds
 // --
 
-const int TWEAK_max_multisample_samples = 16;
+const int TWEAK_max_multisample_samples = 8;
 
 const int TWEAK_font_texture_size = 2048;
 const float TWEAK_font_oversampling_rate = 2.0f;

@@ -7,6 +7,7 @@
 #include "tweaks_client.cpp"
 
 #define STB_TRUETYPE_IMPLEMENTATION
+//#define STBTT_RASTERIZER_VERSION 1
 #include "stb_truetype.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -49,3 +50,5 @@
 
 #include "sprite_draw.cpp"
 #include "font_draw.cpp"
+
+#include "body_text.cpp"

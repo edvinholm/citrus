@@ -3,16 +3,22 @@
 enum Font_ID
 {
     FONT_TITLE = 0,
+    FONT_BODY,
+    FONT_INPUT,
 
     NUM_FONTS
 };
 
 Texture_ID font_textures[NUM_FONTS] = {
-    TEX_FONT_TITLE, // FONT_TITLE
+    TEX_FONT_TITLE,  // FONT_TITLE
+    TEX_FONT_BODY,   // FONT_BODY
+    TEX_FONT_INPUT,  // FONT_BODY
 };
 
 const char *font_filenames[NUM_FONTS] = {
-    "RussoOne-Regular.ttf", // FONT_TITLE
+    "RussoOne-Regular.ttf",    // FONT_TITLE
+    "Varela-Regular.ttf",      // FONT_BODY
+    "VarelaRound-Regular.ttf", // FONT_INPUT
 };
 
 
@@ -49,6 +55,34 @@ enum Font_Size
 
     NUM_FONT_SIZES
 };
+
+
+inline int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversampling_rate = true)
+{
+    int h;
+    
+    switch(fs)
+    {
+        case FS_10: h = 10; break;
+        case FS_12: h = 12; break;
+        case FS_14: h = 14; break;
+        case FS_16: h = 16; break;
+        case FS_20: h = 20; break;
+        case FS_24: h = 24; break;
+        case FS_28: h = 28; break;
+        case FS_36: h = 36; break;
+        case FS_48: h = 48; break;
+
+        case NUM_FONT_SIZES:
+        default:
+            Assert(false);
+            return 0;
+    }
+
+    if(multiply_by_oversampling_rate)
+        h *= TWEAK_font_oversampling_rate;
+    return h;
+}
 
 
 struct Sized_Glyph //@Cleanup: @BadName

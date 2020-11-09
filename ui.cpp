@@ -166,6 +166,7 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
         case BUTTON:
         case SLIDER:
         case DROPDOWN:
+        case UI_TEXT:
             break;
             
         default: Assert(false); break;
@@ -180,6 +181,7 @@ void clear_ui_element(UI_Element *e)
         case WINDOW:
         case BUTTON:
         case SLIDER:
+        case UI_TEXT:
             break;
 
         default: Assert(false); break;
@@ -348,7 +350,8 @@ struct UI_Context
         
         if(state != UNPACKED) {
             Debug_Print("All UI_Contexts must be UNPACKED before being destroyed! A context is being deconstructed with state set to DELIVERED, which should never happen.\n");
-            Assert(false); // All delivered contexts should be unpacked.
+            bool context_unpacked = false;
+            Assert(context_unpacked); // All delivered contexts should be unpacked.
         }
     }
 
@@ -395,6 +398,17 @@ UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input
     return state;
 }
 
+
+void ui_text(String text, UI_Context ctx)
+{
+    U(ctx);
+    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
+
+    auto *txt = &e->text;
+    txt->a    = area(ctx.layout);
+    txt->text = push_ui_string(text, ctx.manager);
+}
 
 
 UI_Button_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled = false, bool selected = false)
@@ -540,12 +554,16 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     
     auto &mouse = client->input.mouse;
 
+    v2 min_size = { 250, 250 };
+
     // RESIZE IF RESIZING //
     if(win->resize_dir_x == 1) {
         win->current_a.w = round(mouse.p.x - win->current_a.x + window_border_width/2.0f);
+        win->current_a.w = max(min_size.w, win->current_a.w);
     }
     else if(win->resize_dir_x == -1) {
         float delta = (win->current_a.x + window_border_width/2.0f) - mouse.p.x;
+        delta = max(min_size.w - win->current_a.w, delta);
         win->current_a.w += delta;
         win->current_a.x -= delta;
         
@@ -555,15 +573,18 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     
     if(win->resize_dir_y == 1) {
         win->current_a.h = round(mouse.p.y - win->current_a.y + window_border_width/2.0f);
+        win->current_a.h = max(min_size.h, win->current_a.h);
     }
     else if(win->resize_dir_y == -1) {
         float delta = (win->current_a.y + window_border_width/2.0f) - mouse.p.y;
+        delta = max(min_size.h - win->current_a.h, delta);
         win->current_a.h += delta;
         win->current_a.y -= delta;
         
         win->current_a.h = round(win->current_a.h);
         win->current_a.y = round(win->current_a.y);
     }
+
     // //////////////// //
 
     // MOVE IF MOVING //
@@ -697,25 +718,19 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
                 win->moving = true;
                 win->mouse_offset_on_move_start = mouse.p - win->current_a.p;
             }
+            
+            move_to_top = true;
         }
+        else if(point_inside_rect(mouse.p, win->current_a)) {
+            // Check if a child is hovered.
+            s64 depth_index;
+            if(!in_array(ui->elements_in_depth_order, id, &depth_index)) { Assert(false); return; }
 
-        // SHOULD WE MOVE TO TOP? //
-        if(point_inside_rect(mouse.p, inner_a_title_included)) {
-            if(e == hovered_element) {
-                move_to_top = true;
-            }
-            else
+            for(int c = depth_index; c >= depth_index - win->num_children_above; c--)
             {
-                // Check if a child is hovered.
-                s64 depth_index;
-                if(!in_array(ui->elements_in_depth_order, id, &depth_index)) { Assert(false); return; }
-
-                for(int c = depth_index; c >= depth_index - win->num_children_above; c--)
-                {
-                    if(hovered_element_id == ui->elements_in_depth_order[c]) {
-                        move_to_top = true;
-                        break;
-                    }
+                if(hovered_element_id == ui->elements_in_depth_order[c]) {
+                    move_to_top = true;
+                    break;
                 }
             }
         }
@@ -875,6 +890,9 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             case SLIDER: mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
             case DROPDOWN: mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
 
+            case UI_TEXT:
+                break;
+                
             default: Assert(false); break;
         }
 
@@ -896,6 +914,9 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             case SLIDER: update_slider(e, input, hovered_element); break;
             case DROPDOWN: update_dropdown(e, input, hovered_element); break;
 
+            case UI_TEXT:
+                break;
+                
             default: Assert(false); break;
         }
     }

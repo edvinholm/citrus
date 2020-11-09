@@ -253,7 +253,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_i
             if(glyph)
             {
                 if(previous_codepoint != 0)
-                    p.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
+					pp.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
 
                 draw_glyph(glyph, pp + glyph->offset, font_texture, gfx);
 

@@ -111,7 +111,8 @@ enum UI_Element_Type
     WINDOW,
     BUTTON,
     SLIDER,
-    DROPDOWN
+    DROPDOWN,
+    UI_TEXT
 };
 
 enum UI_Button_State_
@@ -149,6 +150,12 @@ struct UI_Window
     bool was_resized_or_moved; // This is set to true when a resize/move begins, and will remain false even if the user sets current_a back to initial_a.
 
     u32 num_children_above; // A window's children_above should always (after end_window()) be right before the window in UI_Manager.elements_in_depth_order.
+};
+
+struct UI_Text
+{
+    Rect a;
+    UI_String text;
 };
 
 struct UI_Button
@@ -194,6 +201,7 @@ struct UI_Element
 
     union {
         UI_Window window;
+        UI_Text   text;
         UI_Button button;
         UI_Slider slider;
         UI_Dropdown dropdown;

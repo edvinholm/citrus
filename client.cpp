@@ -91,7 +91,7 @@ void frame_end(Window *window, Graphics *gfx)
     // BLIT MULTISAMPLE TO DEFAULT FRAMEBUFFER //
     auto w = gfx->frame_s.w;
     auto h = gfx->frame_s.h;
-    //@Temporary: Move to GPU layer
+    //@Temporary: Move to GPU layer @Cleanup @Cleanup @Cleanup
 #if 0
     glBlitNamedFramebuffer(gfx->multisample_framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 #else
@@ -100,7 +100,7 @@ void frame_end(Window *window, Graphics *gfx)
     
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->multisample_framebuffer);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     auto err = glGetError();
     Assert(err == 0);
 
@@ -290,6 +290,23 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     }
 }
 
+
+void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == UI_TEXT);
+    auto &txt = e->text;
+    auto a = txt.a;
+
+    // @Temporary @Cleanup @Robustness: :PushPop color
+    auto old_color = gfx->current_color;
+    gfx->current_color = {0.1, 0.1, 0.1, 1};
+    {
+        String text = get_ui_string(txt.text, ui);
+        draw_body_text(text, FS_16, FONT_BODY, a, gfx);
+    }
+    gfx->current_color = old_color;
+}
+
 void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {    
     Assert(e->type == BUTTON);
@@ -402,7 +419,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     else if(btn.state & HOVERED) color = h;
 
     triangles(v, uv, color, tex, 6, gfx);
-    draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_24, FONT_TITLE, gfx);
+    draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_20, FONT_TITLE, gfx);
 }
 
 void draw_slider(UI_Element *e, Graphics *gfx)
@@ -588,9 +605,10 @@ DWORD render_loop(void *loop_)
                 Assert(e);
 
                 switch(e->type) {
-                    case WINDOW: draw_window(e, ui, &gfx); break;
-                    case BUTTON: draw_button(e, ui, &gfx); break;
-                    case SLIDER: draw_slider(e, &gfx);     break;
+                    case WINDOW:   draw_window(e, ui, &gfx); break;
+                    case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
+                    case BUTTON:   draw_button(e, ui, &gfx); break;
+                    case SLIDER:   draw_slider(e, &gfx);     break;
                     case DROPDOWN: draw_dropdown(e, &gfx); break;
 
                     default: Assert(false); break;
@@ -665,6 +683,20 @@ void stop_render_loop(Render_Loop *loop)
 
 
 // @Temporary
+void bar_window(UI_Context ctx)
+{
+    U(ctx);
+
+    _CENTER_X_(320);
+
+    UI_ID window_id;
+    { _AREA_(begin_window(P(ctx), &window_id, STRING("REFRIGERATOR")));
+        ui_text(STRING("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure."), P(ctx));
+    }
+    end_window(window_id, ctx.manager);
+}
+
+// @Temporary
 bool foo_window(bool slider_disabled, UI_Context ctx)
 {
     U(ctx);
@@ -680,10 +712,6 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
     bool result = false;
     static int selected = -1;
     static float slider_value = 0.75f;
-    //slider_value = (1.0f + cos(platform_milliseconds() / 1000.0f))/2.0f;
-
-    if((platform_milliseconds() / 1000) % 10 == 0)
-        slider_disabled = true;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
@@ -693,7 +721,7 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
                 dropdown(P(ctx));
             }
             {_RIGHT_HALF_();
-                slider_value = slider(slider_value, P(ctx), slider_disabled);
+                slider_value = slider(slider_value, P(ctx));
             }   
         }
         cut_bottom(window_default_padding, ctx.layout);
@@ -738,7 +766,8 @@ void client_ui(UI_Context ctx, Client *client)
 
         if(hidden == i) continue;
 
-        if(foo_window((i % 2 == 0), PC(ctx, i))) hidden = i;
+        if(i == 2) bar_window(PC(ctx, i));
+        else if(foo_window((i % 2 == 0), PC(ctx, i))) hidden = i;
     }
     x = new_x;
 }
