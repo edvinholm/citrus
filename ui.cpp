@@ -768,9 +768,11 @@ void begin_ui_build(UI_Manager *ui)
     Assert(ui->elements.n == ui->elements_in_depth_order.n);
     ui->elements_in_depth_order.n = 0;
 
-    ui->id_manager.used_ids_this_build.n = 0;
-
     ui->string_data.n = 0;
+
+#if DEBUG
+    ui->id_manager.used_ids_this_build.n = 0;
+#endif
 }
 
 void end_ui_build(UI_Manager *ui, Input_Manager *input)

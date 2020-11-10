@@ -146,3 +146,13 @@ bool load_texture_catalog(Texture_Catalog *cat)
 
     return load_texture_catalog_from_image_files(cat);
 }
+
+struct Graphics;
+
+float bound_slot_for_texture(Texture_ID texture, Graphics *gfx)
+{
+    if(texture == TEX_NONE_OR_NUM) return 0;
+    
+    Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
+    return (float)texture+1;
+}

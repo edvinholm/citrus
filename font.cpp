@@ -233,6 +233,7 @@ Sized_Glyph *find_or_load_glyph(int codepoint, Font_Size size, Font *font, int *
 }
 
 
+// NOTE: 0 is an invalid index.
 inline
 int glyph_index_for_codepoint(int codepoint, Font *font)
 {
@@ -252,8 +253,10 @@ int glyph_index_for_codepoint(int codepoint, Font *font)
 
     // ASK STBTT AND ADD IT TO CACHE //
     int index = stbtt_FindGlyphIndex(&font->stb_info, codepoint);
-    array_add(bucket.codepoints, codepoint);
-    array_add(bucket.indices,    index);
+    if(index != 0) {
+        array_add(bucket.codepoints, codepoint);
+        array_add(bucket.indices,    index);
+    }
     // //
 
     return index;

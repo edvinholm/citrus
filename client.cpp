@@ -303,7 +303,7 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     {
         String text = get_ui_string(txt.text, ui);
         Rect clip_rect = a;
-        draw_body_text(text, FS_16, FONT_BODY, a, gfx, false, &clip_rect);
+        draw_body_text(text, FS_12, FONT_BODY, a, gfx, false, &clip_rect);
     }
     gfx->current_color = old_color;
 }
@@ -688,7 +688,8 @@ void bar_window(UI_Context ctx)
 {
     U(ctx);
 
-    _CENTER_X_(320);
+    _AREA_(shrunken(ctx.client->main_window_a, 64));
+// nocheckin    _CENTER_X_(320);
 
     int c = 9;
 
@@ -866,7 +867,7 @@ int client_entry_point(int num_args, char **arguments)
     ui_ctx.client  = &client;
     //--
 
-#if DEBUG // Debug stuff for keeping track of things like FPS and UPS.
+#if DEBUG || true // Debug stuff for keeping track of things like FPS and UPS.
     u64 last_second = 0;
     String_Builder sb = {0};
 #endif
@@ -906,7 +907,7 @@ int client_entry_point(int num_args, char **arguments)
             
                 client_ui(P(ui_ctx), &client);
             
-#if DEBUG
+#if DEBUG || true
                 if(second != last_second) {
                     ups = updates_this_second;
                     updates_this_second = 0;
@@ -924,8 +925,10 @@ int client_entry_point(int num_args, char **arguments)
             reset_temporary_memory();
         }
         unlock_mutex(render_loop.mutex);
-        
+
+#if DEBUG || true
         last_second = second;
+#endif
 
         // NOTE: Experienced stuttering when not sleeping here -- guessing that this thread kept locking the mutex without letting the render loop render its frame(s).
         platform_sleep_microseconds(100);

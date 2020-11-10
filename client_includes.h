@@ -22,13 +22,15 @@
 
 // --
 
+
 #include "texture.h"
-#include "texture.cpp"
 
 #include "sprite.h"
 #include "font.h"
-
 #include "graphics.h"
+
+#include "texture.cpp"
+
 #include "graphics.cpp"
 
 #include "bitmap.cpp"

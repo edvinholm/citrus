@@ -15,8 +15,8 @@
 
 #if DEBUG
 #include <stdio.h>
-#include "debug.h"
 #endif
+#include "debug.h"
 
 // --
 

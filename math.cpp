@@ -145,11 +145,13 @@ float normalized_angle(double angle)
     return angle;
 }
 
+/*
 inline
 int abs(int x)
 {
     return (x < 0) ? -x : x;
 }
+*/
 
 template<typename T>
 T clamp(T value, T min = 0, T max = 1)

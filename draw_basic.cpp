@@ -42,7 +42,6 @@ void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
 
 void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-
     v3 v[6] = {
         a, d, c,
         a, d, b
@@ -72,12 +71,7 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Textur
         gfx->current_color, gfx->current_color, gfx->current_color
     };
 
-    float t = 0;
-    if(texture != TEX_NONE_OR_NUM)
-    {
-        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
-        t = (float)texture+1;
-    }
+    float t = bound_slot_for_texture(texture, gfx);
 
     float tex[6] = {
         t, t, t,
@@ -145,15 +139,20 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 }
 #endif
 
+#if 0 // Feels slow to use this one...
 inline
 void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
 {
-    v3 a = p0;
+    // v3 a = p0;
+
+    float p0
+    
     v3 b = p0 + d1;
     v3 c = p0 + d2;
     v3 d = b + d2;
     draw_quad_abs(a, b, c, d, gfx, uvs, tex);
 }
+#endif
 
 
 #if 0
@@ -194,11 +193,13 @@ void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL, Texture_ID textur
     draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, gfx, uvs, texture);
 }
 
+#if 0 // @Speed
 inline
 void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     draw_quad(V3(p0), V3(d1), V3(d2), gfx, uvs, texture);
 }
+#endif
 
 inline
 void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)

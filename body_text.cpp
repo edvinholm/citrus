@@ -40,8 +40,7 @@ float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx);
 Rect glyph_area(Sized_Glyph *glyph, int glyph_index, v2 p, int last_glyph_index, Font *font,
                 float scale, v2 *_new_p, int previous_codepoint = 0)
 {
-    if(last_glyph_index != -1)
-        p.x += glyph_kerning(&font->stb_info, last_glyph_index, glyph_index) * scale;
+    p.x += glyph_kerning(&font->stb_info, last_glyph_index, glyph_index) * scale;
 
     Rect glyph_a;
 
@@ -81,6 +80,27 @@ Rect codepoint_area(int cp, v2 p, Font_Size size, Font *font, float scale, v2 *_
     }
 
     return glyph_a;
+}
+
+float codepoint_x1(int cp, v2 p, Font_Size size, Font *font, float scale, v2 *_new_p, int previous_codepoint = 0)
+{
+    int glyph_index;
+    Sized_Glyph *glyph = find_or_load_glyph(cp, size, font, &glyph_index);
+
+    if(!glyph) {
+        *_new_p = p;
+        return p.x;
+    }
+    
+    int last_glyph_index = glyph_index_for_codepoint(previous_codepoint, font);
+
+    p.x += glyph_kerning(&font->stb_info, last_glyph_index, glyph_index) * scale;
+
+    float x1 = p.x + glyph->offset.x + glyph->pixel_s.w;
+
+    *_new_p = { p.x + glyph->advance_width, p.y };
+
+    return x1;
 }
 
 
@@ -335,6 +355,19 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
 {
     Font *font = &gfx->fonts[bt.font];
     Texture_ID font_texture = gfx->glyph_maps[bt.font].texture;
+
+    float texture_slot = bound_slot_for_texture(font_texture, gfx);
+    
+    float glyph_vertex_textures[6] = {
+        texture_slot, texture_slot, texture_slot,
+        texture_slot, texture_slot, texture_slot
+    };
+    
+    v4 glyph_vertex_colors[6] = {
+        gfx->current_color, gfx->current_color, gfx->current_color,
+        gfx->current_color, gfx->current_color, gfx->current_color
+    };
+
     
     u8 *end = bt.text.data + bt.text.length;
     
@@ -399,7 +432,7 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
                 }
                 
                 // Draw glyph in that area.
-                if(glyph) draw_glyph(glyph, glyph_a.p, font_texture, gfx, glyph_clip_rect, do_draw_line);
+                if(glyph) draw_glyph(glyph, glyph_a.p, glyph_vertex_colors, glyph_vertex_textures, gfx, glyph_clip_rect, do_draw_line);
 
                 cp_index++;
             }
@@ -417,6 +450,8 @@ void draw_body_text(Body_Text bt, v2 p, Graphics *gfx, bool lines_centered = fal
 // TODO @Cleanup: Take a size instead of a rect
 Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Graphics *gfx, float start_x = 0, bool multiline = true)
 {
+    float a_x1 = a.x + a.w;
+    
     // SETUP THINGS WE ALREADY KNOW ABOUT OUR Body_Text //
     Font *font = &gfx->fonts[font_id];
     
@@ -480,19 +515,18 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
         }
         else
         {
-            if(cp == ' ' || cp == '-' || is_whitespace(cp))
+            if(is_whitespace(cp) || cp == '-')
             {
                 whitespace_or_hyphen_cp_index = cp_index;
-                whitespace_or_hyphen_end = cp_end;
+                whitespace_or_hyphen_end      = cp_end;
             }
             
             // Calculate where the glyph would end up, and see if its x1 > the rect's x1.
             // if so, add a line break before it.
             float x0 = pp.x;
-            Rect glyph_a = codepoint_area(cp, pp, font_size, font, bt.glyph_scale, &pp, prev_cp);
-            float x1 = glyph_a.x + glyph_a.w;
+            float x1 = codepoint_x1(cp, pp, font_size, font, bt.glyph_scale, &pp, prev_cp);
 
-            if(x1 > a.x + a.w)
+            if(x1 > a_x1)
             {
                 if(whitespace_or_hyphen_cp_index != -1) // Break at last whitespace
                 {
@@ -512,7 +546,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
         if(next_line_start && multiline)
         {
             // Add linebreak => Add new Body_Text_Line
-            Body_Text_Line new_line = {0};
+            Body_Text_Line new_line;
             new_line.start_byte = next_line_start - bt.text.data;
             new_line.start_cp = next_line_start_cp_index;
 

@@ -76,9 +76,10 @@ Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, bool do_w
 }
 
 //NOTE: Returns size of rendered glyph. clip_rect does not affect this.
-v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx,
+//NOTE: Pass {bound_slot_for_texture(font_texture), ... x6} as vertex_textures... This is an optimization.
+v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_textures, Graphics *gfx,
               Rect *clip_rect = NULL, bool do_draw = true)
-{
+{   
     Rect a;
     a.p = p;
     a.s = { glyph->pixel_s.x / TWEAK_font_oversampling_rate, glyph->pixel_s.y / TWEAK_font_oversampling_rate };
@@ -103,15 +104,40 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx,
 
             uv1.x += uv_dx * (clip_x1 - (a.x + a.w))/a.w;
             uv1.y += uv_dy * (clip_y1 - (a.y + a.h))/a.h;
+
             
-            v2 uvs[6];
-            quad_uvs(uvs, uv0, uv1);
-            draw_rect(clip_a, gfx, uvs, font_texture);
+            v3 pos[6] = {
+                {clip_a.x, clip_a.y, 0}, {clip_x1, clip_y1, 0}, {clip_a.x, clip_y1, 0},
+                {clip_a.x, clip_a.y, 0}, {clip_x1, clip_y1, 0}, {clip_x1, clip_a.y, 0}
+            };
+            
+            v2 uvs[6] = {
+                { uv0.x, uv0.y }, { uv1.x, uv1.y }, { uv0.x, uv1.y },
+                { uv0.x, uv0.y }, { uv1.x, uv1.y }, { uv1.x, uv0.y }
+            };
+
+            //nocheckin: TODO: Pass tex and p.
+            triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
         }
         else {
+
+            float x1 = p.x + a.w;
+            float y1 = p.y + a.h;
+            
+            v3 pos[6] = {
+                {p.x, p.y, 0}, {x1, y1, 0}, {p.x, y1, 0},
+                {p.x, p.y, 0}, {x1, y1, 0}, {x1, p.y, 0}
+            };
+            /*
+            v2 uvs[6] = {
+                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p0.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y }, { glyph->sprite_frame_p0.x, glyph->sprite_frame_p1.y },
+                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p0.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p0.y }
+            };
+            */
             v2 uvs[6];
             quad_uvs(uvs, glyph->sprite_frame_p0, glyph->sprite_frame_p1);
-            draw_rect_d(p, V2_X * a.w, V2_Y * a.h, gfx, uvs, font_texture);
+
+            triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
         }
         
     }
@@ -124,13 +150,12 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, Texture_ID font_texture, Graphics *gfx,
 //NOTE: Returns area of rendered glyph
 //NOTE: Will change p to the next character's position.
 //NOTE: This should be given as much info as possible. The other overload is for doing things implicitly.
+//NOTE: Pass {bound_slot_for_texture(font_texture), ... x6} as vertex_textures... This is an optimization.
 inline
-Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics *gfx,
-                    bool offset = false, int previous_codepoint = 0, Rect *clip_rect = NULL,
+Rect draw_codepoint(int codepoint, v2 *p, Font *font, Font_Size size, float scale, v4 *vertex_colors, float *vertex_textures,
+                    Graphics *gfx, bool offset = false, int previous_codepoint = 0, Rect *clip_rect = NULL,
                     bool do_draw = true)
-{
-    Font *font = current_font(gfx);
-    
+{   
     int glyph_index;
     Sized_Glyph *glyph = find_or_load_glyph(codepoint, size, font, &glyph_index);
     
@@ -144,8 +169,7 @@ Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics 
     glyph_a.p = *p + ((offset) ? glyph->offset : V2_ZERO);
     
     if(glyph) {
-        Texture_ID font_texture = gfx->glyph_maps[current_font_id(gfx)].texture;
-        glyph_a.s = draw_glyph(glyph, glyph_a.p, font_texture, gfx, clip_rect, do_draw);
+        glyph_a.s = draw_glyph(glyph, glyph_a.p, vertex_colors, vertex_textures, gfx, clip_rect, do_draw);
     }
     else
         glyph_a.s = V2_ZERO;
@@ -156,15 +180,14 @@ Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, float scale, Graphics 
 }
 
 
+#if 0
 //NOTE: This gets the scale etc for you, if you don't have it.
 inline
-Rect draw_codepoint(int codepoint, v2 *p, Font_Size size, Graphics *gfx, bool offset = false, int previous_codepoint = 0)
+Rect draw_codepoint(int codepoint, v2 *p, Font *font, Font_Size size, Graphics *gfx, bool offset = false, int previous_codepoint = 0)
 {
-    Font *font = current_font(gfx);
-    
     return draw_codepoint(codepoint, p, size, scale_for_font_size(size, font), gfx, offset, previous_codepoint);
 }
-
+#endif
 
 
 float string_width(String string, Font_Size size, Font *font, int previous_codepoint = 0)
@@ -232,6 +255,18 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_i
                  int *previous_codepoint = NULL)
 {
     Texture_ID font_texture = gfx->glyph_maps[font_id].texture;
+
+    float texture_slot = bound_slot_for_texture(font_texture, gfx);
+    
+    float glyph_vertex_textures[6] = {
+        texture_slot, texture_slot, texture_slot,
+        texture_slot, texture_slot, texture_slot
+    };
+    
+    v4 glyph_vertex_colors[6] = {
+        gfx->current_color, gfx->current_color, gfx->current_color,
+        gfx->current_color, gfx->current_color, gfx->current_color
+    };
     
     int default_previous_codepoint = 0;
     if(!previous_codepoint) previous_codepoint = &default_previous_codepoint;
@@ -286,7 +321,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_i
                 if(previous_codepoint != 0)
                     pp.x += glyph_kerning(&font->stb_info, glyph_index_for_codepoint(*previous_codepoint, font), glyph_index) * scale;
 
-                draw_glyph(glyph, pp + glyph->offset, font_texture, gfx);
+                draw_glyph(glyph, pp + glyph->offset, glyph_vertex_colors, glyph_vertex_textures, gfx);
 
                 pp.x += glyph->advance_width;
                 if(pp.x > max_x)
