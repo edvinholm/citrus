@@ -116,7 +116,6 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
                 { uv0.x, uv0.y }, { uv1.x, uv1.y }, { uv1.x, uv0.y }
             };
 
-            //nocheckin: TODO: Pass tex and p.
             triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
         }
         else {

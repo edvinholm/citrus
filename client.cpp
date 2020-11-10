@@ -688,8 +688,7 @@ void bar_window(UI_Context ctx)
 {
     U(ctx);
 
-    _AREA_(shrunken(ctx.client->main_window_a, 64));
-// nocheckin    _CENTER_X_(320);
+    _CENTER_X_(320);
 
     int c = 9;
 
