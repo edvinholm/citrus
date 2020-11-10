@@ -600,11 +600,6 @@ DWORD render_loop(void *loop_)
             gpu_set_viewport(0, 0, gfx.frame_s.w, gfx.frame_s.h);
             // //////// //
 
-            for(int i = 0; i < ARRLEN(gfx.glyph_maps); i++)
-            {
-                update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
-            }
-
             const v4 background_color = { 0.3, 0.36, 0.42, 1 };
             quad(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
         
@@ -641,6 +636,12 @@ DWORD render_loop(void *loop_)
             first_frame = false;
         }
         unlock_mutex(loop->mutex);
+
+        
+        for(int i = 0; i < ARRLEN(gfx.glyph_maps); i++)
+        {
+            update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
+        }
 
         triangles_now(gfx.vertex_buffer.p,
                       gfx.vertex_buffer.uv,
