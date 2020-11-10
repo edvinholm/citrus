@@ -261,14 +261,19 @@ void gpu_set_texture_data(GPU_Texture_ID texture, void *data, u32 w, u32 h,
                           GPU_Texture_Parameters params)
 {
     Assert(texture != 0);
-    
-    glBindTexture(GL_TEXTURE_2D, texture);
-    auto gl_error = glGetError();
-    Assert(gl_error == 0);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
-                 params.pixel_format, params.pixel_data_type, data);
-
-    gl_error = glGetError();
-    Assert(gl_error == 0);
+    GLint old_bound;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &old_bound);
+    {
+        glBindTexture(GL_TEXTURE_2D, texture);
+        auto gl_error = glGetError();
+        Assert(gl_error == 0);
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
+                     params.pixel_format, params.pixel_data_type, data);
+        
+        gl_error = glGetError();
+        Assert(gl_error == 0);
+    }
+    glBindTexture(GL_TEXTURE_2D, old_bound);
 }

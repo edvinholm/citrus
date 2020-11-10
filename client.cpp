@@ -298,14 +298,9 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     auto a = txt.a;
 
     // @Temporary @Cleanup @Robustness: :PushPop color
-    auto old_color = gfx->current_color;
-    gfx->current_color = {0.1, 0.1, 0.1, 1};
-    {
-        String text = get_ui_string(txt.text, ui);
-        Rect clip_rect = a;
-        draw_body_text(text, FS_12, FONT_BODY, a, gfx, false, &clip_rect);
-    }
-    gfx->current_color = old_color;
+    String text = get_ui_string(txt.text, ui);
+    Rect clip_rect = a;
+    draw_body_text(text, FS_14, FONT_BODY, a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect);
 }
 
 void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -421,6 +416,22 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
     triangles(v, uv, color, tex, 6, gfx);
     draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_20, FONT_TITLE, gfx);
+}
+
+void draw_textfield(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == TEXTFIELD);
+    auto *tf = &e->textfield;
+    
+    //TODO :PushPop color @Cleanup
+    auto old_color = gfx->current_color;
+    gfx->current_color = {0.8, 0.8, 0.8, 1.0};
+    draw_rect(tf->a, gfx);
+
+    String text = get_ui_string(tf->text, ui);
+    Rect text_a = shrunken(tf->a, 10, 10, 8, 8);
+    Rect clip_rect = tf->a;
+    draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect);
 }
 
 void draw_slider(UI_Element *e, Graphics *gfx)
@@ -609,6 +620,7 @@ DWORD render_loop(void *loop_)
                     case WINDOW:   draw_window(e, ui, &gfx); break;
                     case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
                     case BUTTON:   draw_button(e, ui, &gfx); break;
+                    case TEXTFIELD: draw_textfield(e, ui, &gfx); break;
                     case SLIDER:   draw_slider(e, &gfx);     break;
                     case DROPDOWN: draw_dropdown(e, &gfx); break;
 
@@ -684,22 +696,29 @@ void stop_render_loop(Render_Loop *loop)
 
 
 // @Temporary
-void bar_window(UI_Context ctx)
+void bar_window(UI_Context ctx, Input_Manager *input)
 {
     U(ctx);
 
     _CENTER_X_(320);
 
-    int c = 9;
+    int c = 2;
+
+    static String the_string = copy_cstring_to_string("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.", ALLOC_UI);
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("REFRIGERATOR")));
 
-        _GRID_(c, c, 4);
+        _GRID_(1, c, 4);
 
-        for(int i = 0; i < c * c; i++) {
+        for(int i = 0; i < 1 * c; i++) {
             _CELL_();
-            ui_text(STRING("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure."), PC(ctx, i));
+
+            if(i == 0) {
+                ui_text(the_string, PC(ctx, i));
+            } else {
+                the_string = textfield(the_string, input, PC(ctx, i));
+            }
         }
     }
     end_window(window_id, ctx.manager);
@@ -717,6 +736,8 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
         "EGGPLANT",
         "CITRUS"
     };
+
+    words[3] = ((int)(platform_milliseconds() / 1000.0f) % 3 == 0) ? "BUTTER" : "EGGPLANT";
 
     bool result = false;
     static int selected = -1;
@@ -756,7 +777,7 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
     return result;
 }
 
-void client_ui(UI_Context ctx, Client *client)
+void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 {
     U(ctx);
 
@@ -775,7 +796,7 @@ void client_ui(UI_Context ctx, Client *client)
 
         if(hidden == i) continue;
 
-        if(i == 2) bar_window(PC(ctx, i));
+        if(i == 2) bar_window(PC(ctx, i), input);
         else if(foo_window((i % 2 == 0), PC(ctx, i))) hidden = i;
     }
     x = new_x;
@@ -904,7 +925,7 @@ int client_entry_point(int num_args, char **arguments)
             {
                 push_area_layout(window_a, layout);
             
-                client_ui(P(ui_ctx), &client);
+                client_ui(P(ui_ctx), input, &client);
             
 #if DEBUG || true
                 if(second != last_second) {

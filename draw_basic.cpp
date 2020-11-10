@@ -209,7 +209,7 @@ void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture 
 }
 
 inline
-void draw_rect(Rect a, Graphics *gfx, v2 *uvs /* = NULL*/, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect(Rect a, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     return draw_rect_ps(a.p, a.s, gfx, uvs, texture);
 }

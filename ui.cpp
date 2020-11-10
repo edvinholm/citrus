@@ -156,6 +156,7 @@ void pop_ui_location(UI_Manager *ui)
 }
 
 
+// @Cleanup
 void init_ui_element(UI_Element_Type type, UI_Element *_e)
 {
     Zero(*_e);
@@ -164,6 +165,7 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
     switch(_e->type) {
         case WINDOW:
         case BUTTON:
+        case TEXTFIELD:
         case SLIDER:
         case DROPDOWN:
         case UI_TEXT:
@@ -180,6 +182,7 @@ void clear_ui_element(UI_Element *e)
 
         case WINDOW:
         case BUTTON:
+        case TEXTFIELD:
         case SLIDER:
         case UI_TEXT:
             break;
@@ -441,6 +444,19 @@ Rect slider_handle_rect(Rect slider_a, float value)
     handle_a.x += (slider_a.w - handle_a.w) * value;
 
     return handle_a;
+}
+
+
+String textfield(String text, Input_Manager *input, UI_Context ctx)
+{
+    U(ctx);
+
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), TEXTFIELD, ctx.manager);
+    auto *tf = &e->textfield;
+    tf->a    = area(ctx.layout);
+    tf->text = push_ui_string(text, ctx.manager);
+    
+    return text;
 }
 
 float slider(float value, UI_Context ctx, bool disabled = false)
@@ -890,10 +906,11 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         bool mouse_over = false;
         
         switch(e->type) {
-            case WINDOW: mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
-            case BUTTON: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
-            case SLIDER: mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
-            case DROPDOWN: mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
+            case WINDOW:    mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
+            case BUTTON:    mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
+            case TEXTFIELD: mouse_over = point_inside_rect(mouse.p, e->textfield.a);      break;
+            case SLIDER:    mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
+            case DROPDOWN:  mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
 
             case UI_TEXT:
                 break;
@@ -916,6 +933,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         switch(e->type) {
             case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
             case BUTTON: update_button(e, input, hovered_element); break;
+            case TEXTFIELD: break;
             case SLIDER: update_slider(e, input, hovered_element); break;
             case DROPDOWN: update_dropdown(e, input, hovered_element); break;
 

@@ -110,6 +110,7 @@ enum UI_Element_Type
 {
     WINDOW,
     BUTTON,
+    TEXTFIELD,
     SLIDER,
     DROPDOWN,
     UI_TEXT
@@ -169,6 +170,12 @@ struct UI_Button
     bool selected;
 };
 
+struct UI_Textfield
+{
+    Rect a;
+    UI_String text;
+};
+
 struct UI_Slider
 {
     Rect a;
@@ -200,11 +207,12 @@ struct UI_Element
     UI_Element_Type type;
 
     union {
-        UI_Window window;
-        UI_Text   text;
-        UI_Button button;
-        UI_Slider slider;
-        UI_Dropdown dropdown;
+        UI_Window    window;
+        UI_Text      text;
+        UI_Button    button;
+        UI_Textfield textfield;
+        UI_Slider    slider;
+        UI_Dropdown  dropdown;
     };
 };
 
