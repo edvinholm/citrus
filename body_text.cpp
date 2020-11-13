@@ -1,41 +1,6 @@
 
-struct Text_Location
-{
-    strlength byte; // Where in the string, in bytes
-    int cp_index;   // Codepoint index in the string
-    int line;       // Line index
-    int col;        // Column index, in codepoints
-};
 
-struct Body_Text_Line
-{
-    strlength start_byte;
-    int start_cp;
-};
-
-struct Body_Text
-{
-    String text; // Not owned.
-    Array<Body_Text_Line, ALLOC_TMP> lines; // UI or GFX?
-    int num_codepoints;
-
-    float start_x;
-    float w;
-    v2 end_p;
-    int end_cp;
-
-    Font_ID font;
-    Font_Size font_size;
-
-    float ascent;
-    float descent;
-    float line_height;
-    
-    float glyph_scale;
-};
-
-
-float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx);
+float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx);
 
 Rect glyph_area(Sized_Glyph *glyph, int glyph_index, v2 p, int last_glyph_index, Font *font,
                 float scale, v2 *_new_p, int previous_codepoint = 0)
@@ -105,19 +70,19 @@ float codepoint_x1(int cp, v2 p, Font_Size size, Font *font, float scale, v2 *_n
 
 
 // Get position in the text where a line starts and ends, in a Body_Text
-void get_line_start_and_end(int line_index, Body_Text bt, u8 **_start, u8 **_end)
+void get_line_start_and_end(int line_index, Body_Text *bt, u8 **_start, u8 **_end)
 {
     Assert(line_index >= 0);
-    Assert(line_index < bt.lines.n);
+    Assert(line_index < bt->lines.n);
 
     // Get our line
-    Body_Text_Line line = bt.lines[line_index];
+    Body_Text_Line line = bt->lines[line_index];
     
     // Start is easy.
-    *_start = bt.text.data + line.start_byte;
+    *_start = bt->text.data + line.start_byte;
 
-    if(line_index < bt.lines.n - 1) {
-        u8 *next_line_start =  bt.text.data + bt.lines[line_index + 1].start_byte;
+    if(line_index < bt->lines.n - 1) {
+        u8 *next_line_start =  bt->text.data + bt->lines[line_index + 1].start_byte;
 
         u8 *start_of_last_cp_on_this_line = find_codepoint_backwards(next_line_start);
         u32 last_cp_on_this_line = eat_codepoint(&start_of_last_cp_on_this_line);
@@ -127,71 +92,84 @@ void get_line_start_and_end(int line_index, Body_Text bt, u8 **_start, u8 **_end
             *_end = next_line_start;
     }
     else
-        *_end = bt.text.data + bt.text.length;  // End of text
+        *_end = bt->text.data + bt->text.length;  // End of text
 }
 
 // Get position in the text where a line starts and ends, in a Body_Text
-void get_line_cp_start_and_end(int line_index, Body_Text bt, int *_start_cp_index, int *_end_cp_index)
+void get_line_cp_start_and_end(int line_index, Body_Text *bt, int *_start_cp_index, int *_end_cp_index)
 {
     Assert(line_index >= 0);
-    Assert(line_index < bt.lines.n);
+    Assert(line_index < bt->lines.n);
 
     // Get our line
-    Body_Text_Line line = bt.lines[line_index];
+    Body_Text_Line line = bt->lines[line_index];
     
     // Start is easy.
     *_start_cp_index = line.start_cp;
 
     // End is start cp of next line or total number of codepoints in text if our line is the last one.
-    if(line_index < bt.lines.n - 1)
-        *_end_cp_index = bt.lines[line_index + 1].start_cp; // Start of next line
+    if(line_index < bt->lines.n - 1)
+        *_end_cp_index = bt->lines[line_index + 1].start_cp; // Start of next line
     else
-        *_end_cp_index = bt.num_codepoints;  // End of text
+        *_end_cp_index = bt->num_codepoints;  // End of text
 }
 
 
-
-int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text bt, Graphics *gfx, strlength *_rel_byte = NULL)
+// NOTE: If place_before_trailing_whitespace is true, we will get the index of the last codepoint before end, if the last codepoint is a whitespace. Instead of last codepoint index + 1.
+int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font *fonts, bool place_before_trailing_whitespace, strlength *_rel_byte/* = NULL*/)
 {
     v2 pp = V2_ZERO;
-    
+
     u8 *at = start;
     int prev_cp = 0;
+    u8 *prev_cp_start = start; // Not really, but whatevs. It works.
 
-    // Return byte position on exit.
-    defer(if(_rel_byte){ *_rel_byte = at - start; });
+    Font *font = &fonts[bt->font];
 
-    Font *font = &gfx->fonts[bt.font];
-    
     int cp_index = 0;
-    while(at < end)
+    while (at < end)
     {
         // Get codepoint
+        u8 *cp_start = at;
         int cp = eat_codepoint(&at);
 
         // Get glyph and area
-        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
+        float p_x0 = pp.x;
+        codepoint_x1(cp, pp, bt->font_size, font, bt->glyph_scale, &pp, prev_cp);
 
         // Calculate center x of glyph
-        float glyph_mid_x = center_x(glyph_a);
+        float glyph_mid_x = (p_x0 + pp.x) / 2.0f;
 
         // If the x we're searching for is to the left of this glyph's center, this is the codepoint we want to return.
-        if(glyph_mid_x > x)
+        if (glyph_mid_x > x) {
+            if (_rel_byte) *_rel_byte = (cp_start - start);
             return cp_index;
+        }
 
         // Set previous codepoint and current codepoint index
-        prev_cp = cp;
+        prev_cp       = cp;
+        prev_cp_start = cp_start;
         cp_index++;
     }
 
+    strlength rel_byte = (strlength)(end - start);
+
+    if (place_before_trailing_whitespace && is_whitespace(prev_cp)) {
+        cp_index--;
+        rel_byte = (strlength)(prev_cp_start - start);
+
+        Assert(cp_index >= 0);
+    }
+
+    if(_rel_byte) *_rel_byte = rel_byte;
     return cp_index;
 }
 
-float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text bt, Graphics *gfx, int *_cp = NULL)
+float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text *bt, Font *fonts, int *_cp/* = NULL*/)
 {
     v2 pp = V2_ZERO;
 
-    Font *font = &gfx->fonts[bt.font];
+    Font *font = &fonts[bt->font];
     
     u8 *at = start;
     int prev_cp = 0;
@@ -208,7 +186,7 @@ float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text
         }
                         
         // Get glyph and area
-        Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
+        Rect glyph_a = codepoint_area(cp, pp, bt->font_size, font, bt->glyph_scale, &pp, prev_cp);
 
         // Set previous codepoint
         prev_cp = cp;
@@ -222,25 +200,24 @@ float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text
     return pp.x;
 }
 
-float y_from_line_index(int line_index, Body_Text bt)
+float y_from_line_index(int line_index, Body_Text *bt)
 {
     Assert(line_index >= 0);
-    Assert(line_index < bt.lines.n);
+    Assert(line_index < bt->lines.n);
 
-    return line_index * bt.line_height;
+    return line_index * bt->line_height;
 }
 
-
-Text_Location text_location_from_position(v2 p, Body_Text bt, v2 bt_p, Graphics *gfx)
+Text_Location text_location_from_position(v2 p, Body_Text *bt, v2 bt_p, Font *fonts)
 {
     v2 delta = p - bt_p;
-    s64 line_index = delta.y / bt.line_height;
+    s64 line_index = delta.y / bt->line_height;
 
     // Clamp line to valid interval
-    line_index = clamp(line_index, (s64)0, bt.lines.n - 1);
+    line_index = clamp(line_index, (s64)0, bt->lines.n - 1);
 
     // Get our line
-    Body_Text_Line line = bt.lines[line_index];
+    Body_Text_Line line = bt->lines[line_index];
 
     // Get line start and end position in the text //
     u8 *line_start;
@@ -254,7 +231,7 @@ Text_Location text_location_from_position(v2 p, Body_Text bt, v2 bt_p, Graphics 
 
     // Find col and byte index in our line.
     strlength byte_in_line;
-    loc.col = codepoint_index_from_x(delta.x, line_start, line_end, bt, gfx, &byte_in_line);
+    loc.col = codepoint_index_from_x(delta.x, line_start, line_end, bt, fonts, true, &byte_in_line);
 
     // Calculate "global" codepoint and byte index in text
     loc.cp_index = line.start_cp + loc.col;
@@ -263,21 +240,21 @@ Text_Location text_location_from_position(v2 p, Body_Text bt, v2 bt_p, Graphics 
     return loc;
 }
 
-int line_from_codepoint_index(int cp_index, Body_Text bt, int *_cp_index_on_line = NULL)
+int line_from_codepoint_index(int cp_index, Body_Text *bt, int *_cp_index_on_line/* = NULL*/)
 {
     Assert(cp_index >= 0);
-    Assert(cp_index <= bt.num_codepoints);
-    Assert(bt.lines.n > 0);
+    Assert(cp_index <= bt->num_codepoints);
+    Assert(bt->lines.n > 0);
 
-    if (cp_index == bt.num_codepoints) {
-        auto &line = bt.lines[bt.lines.n-1];
-        if(_cp_index_on_line) *_cp_index_on_line = bt.num_codepoints - line.start_cp;
-        return bt.lines.n-1;
+    if (cp_index == bt->num_codepoints) {
+        auto &line = bt->lines[bt->lines.n-1];
+        if(_cp_index_on_line) *_cp_index_on_line = bt->num_codepoints - line.start_cp;
+        return bt->lines.n-1;
     }
     
     // Binary search lines for the cp_index //
     int low_line = 0;
-    int high_line = bt.lines.n - 1;
+    int high_line = bt->lines.n - 1;
 
     // Set this to the line we found.
     int found_line = -1;
@@ -298,7 +275,7 @@ int line_from_codepoint_index(int cp_index, Body_Text bt, int *_cp_index_on_line
         }
 
         if(cp_index > mid_end_cp ||
-           (mid_line != bt.lines.n-1 && cp_index == mid_end_cp)) // cp index after last cp counts as being part of last line.
+           (mid_line != bt->lines.n-1 && cp_index == mid_end_cp)) // cp index after last cp counts as being part of last line.
         {
             // Search right
             low_line = mid_line + 1;
@@ -318,21 +295,21 @@ int line_from_codepoint_index(int cp_index, Body_Text bt, int *_cp_index_on_line
 }
 
 
-v2 position_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int *_cp = NULL, int *_line_index = NULL)
+v2 position_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_cp = NULL, int *_line_index = NULL)
 {
     Assert(cp_index >= 0);
-    Assert(cp_index <= bt.num_codepoints);
+    Assert(cp_index <= bt->num_codepoints);
     
     // Find which line this codepoint is on //
     int line_index = line_from_codepoint_index(cp_index, bt);
-    int rel_cp_index = cp_index - bt.lines[line_index].start_cp;
+    int rel_cp_index = cp_index - bt->lines[line_index].start_cp;
 
     // Find x in the found line //
     u8 *line_start;
     u8 *line_end;
     get_line_start_and_end(line_index, bt, &line_start, &line_end);
 
-    float x = x_from_codepoint_index(rel_cp_index, line_start, line_end, bt, gfx, _cp);
+    float x = x_from_codepoint_index(rel_cp_index, line_start, line_end, bt, fonts, _cp);
     // ---- //
 
     if(_line_index) *_line_index = line_index;
@@ -340,21 +317,21 @@ v2 position_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int 
     return { x, y_from_line_index(line_index, bt) };
 }
 
-Rect area_from_codepoint_index(int cp_index, Body_Text bt, Graphics *gfx, int *_cp = NULL)
+Rect area_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_cp = NULL)
 {
     Rect a;
     int cp = 0;
-    a.p = position_from_codepoint_index(cp_index, bt, gfx, &cp);
+    a.p = position_from_codepoint_index(cp_index, bt, fonts, &cp);
 
     if(_cp) *_cp = cp;
     v2 unused;
-    return codepoint_area(cp, a.p, bt.font_size, &gfx->fonts[bt.font], bt.glyph_scale, &unused);
+    return codepoint_area(cp, a.p, bt->font_size, &fonts[bt->font], bt->glyph_scale, &unused);
 }
 
-void draw_body_text(Body_Text bt, v2 p, v4 color, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL)
+void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL)
 {
-    Font *font = &gfx->fonts[bt.font];
-    Texture_ID font_texture = gfx->glyph_maps[bt.font].texture;
+    Font *font = &gfx->fonts[bt->font];
+    Texture_ID font_texture = gfx->glyph_maps[bt->font].texture;
 
     float texture_slot = bound_slot_for_texture(font_texture, gfx);
     
@@ -369,17 +346,17 @@ void draw_body_text(Body_Text bt, v2 p, v4 color, Graphics *gfx, bool lines_cent
     };
 
     
-    u8 *end = bt.text.data + bt.text.length;
+    u8 *end = bt->text.data + bt->text.length;
     
     v2 pp = p;
-    pp.x += bt.start_x;
+    pp.x += bt->start_x;
 
 
     // DRAW LINES //
-    for(int l = 0; l < bt.lines.n; l++)
+    for(int l = 0; l < bt->lines.n; l++)
     {
         if(lines_centered) {            
-            pp.x += bt.w / 2.0f - body_text_line_width(l, bt, gfx) / 2.0f;
+            pp.x += bt->w / 2.0f - body_text_line_width(l, bt, gfx) / 2.0f;
         }
         
         // Find line start and end for line_index = l //
@@ -393,13 +370,13 @@ void draw_body_text(Body_Text bt, v2 p, v4 color, Graphics *gfx, bool lines_cent
         bool do_draw_line = true;
         Rect *line_clip_rect = NULL;
         if(clip_rect) {
-            if(pp.y + bt.line_height < clip_rect->y) {
+            if(pp.y + bt->line_height < clip_rect->y) {
                 do_draw_line = false; // Past top border of clip rect.
             }
             else if(pp.y >= clip_rect->y + clip_rect->h) {
                 break; // Past bottom border of clip rect.
             }
-            else if(pp.y < clip_rect->y || pp.y + bt.line_height > clip_rect->y + clip_rect->h)
+            else if(pp.y < clip_rect->y || pp.y + bt->line_height > clip_rect->y + clip_rect->h)
                line_clip_rect = clip_rect;
         }
 
@@ -417,7 +394,7 @@ void draw_body_text(Body_Text bt, v2 p, v4 color, Graphics *gfx, bool lines_cent
                 
                 // Get glyph and area
                 Sized_Glyph *glyph;
-                Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp, &glyph);
+                Rect glyph_a = codepoint_area(cp, pp, bt->font_size, font, bt->glyph_scale, &pp, prev_cp, &glyph);
                 if (cp_index == 0)
                 {
                     float delta = line_x0 - glyph_a.x;
@@ -443,18 +420,18 @@ void draw_body_text(Body_Text bt, v2 p, v4 color, Graphics *gfx, bool lines_cent
 
         // Prepare position for next line
         pp.x = p.x;
-        pp.y += bt.line_height;
+        pp.y += bt->line_height;
     }
 }
 
 // TODO @Cleanup: Take a size instead of a rect
-Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Graphics *gfx, float start_x = 0, bool multiline = true)
+Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font *fonts, float start_x/* = 0*/, bool multiline/* = true*/)
 {
     float a_x1 = a.x + a.w;
+
+    Font *font = &fonts[font_id];
     
     // SETUP THINGS WE ALREADY KNOW ABOUT OUR Body_Text //
-    Font *font = &gfx->fonts[font_id];
-    
     Body_Text bt = {0};
     bt.text = text;
 
@@ -582,25 +559,25 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
 }
 
 inline
-float body_text_height(Body_Text bt)
+float body_text_height(Body_Text *bt)
 {
-    return bt.line_height * bt.lines.n;
+    return bt->line_height * bt->lines.n;
 }
 
 inline
-float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx)
+float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
 {
-    Assert(line_index >= 0 && line_index < bt.lines.n);
+    Assert(line_index >= 0 && line_index < bt->lines.n);
     
-    auto &line = bt.lines[line_index];
+    auto &line = bt->lines[line_index];
 
     v2 pp = V2_ZERO;    
-    u8 *at = bt.text.data + line.start_byte;
+    u8 *at = bt->text.data + line.start_byte;
     u8 *end;
-    if(line_index == bt.lines.n-1) end = bt.text.data + bt.text.length;
-    else  end = bt.text.data + bt.lines[line_index+1].start_byte;
+    if(line_index == bt->lines.n-1) end = bt->text.data + bt->text.length;
+    else  end = bt->text.data + bt->lines[line_index+1].start_byte;
 
-    Font *font = &gfx->fonts[bt.font];
+    Font *font = &gfx->fonts[bt->font];
 
     float x0 = pp.x;
     float min_x = FLT_MAX;
@@ -613,7 +590,7 @@ float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx)
         int cp = eat_codepoint(&at);
         if(cp != '\n' && cp != '\r'){
 
-            Rect glyph_a = codepoint_area(cp, pp, bt.font_size, font, bt.glyph_scale, &pp, prev_cp);
+            Rect glyph_a = codepoint_area(cp, pp, bt->font_size, font, bt->glyph_scale, &pp, prev_cp);
             if (cp_index == 0)
             {
                 float delta = x0 - glyph_a.x;
@@ -637,15 +614,15 @@ float body_text_line_width(int line_index, Body_Text bt, Graphics *gfx)
 void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 color, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL,
                     Body_Text *_bt = NULL, V_Align v_align = VA_TOP, float start_x = 0)
 {
-    Body_Text body_text = create_body_text(text, a, font_size, font, gfx, start_x);
+    Body_Text body_text = create_body_text(text, a, font_size, font, gfx->fonts, start_x);
 
     v2 p = a.p;
     if(v_align == VA_BOTTOM)
-        p.y += a.h - body_text_height(body_text);
+        p.y += a.h - body_text_height(&body_text);
     else if(v_align == VA_CENTER)
-        p.y += a.h * 0.5f - body_text_height(body_text) * 0.5f;
+        p.y += a.h * 0.5f - body_text_height(&body_text) * 0.5f;
     
-    draw_body_text(body_text, p, color, gfx, lines_centered, clip_rect); //TODO @Robustness: @Incomplete: lines_centered should be taken into account in create_body_text
+    draw_body_text(&body_text, p, color, gfx, lines_centered, clip_rect); //TODO @Robustness: @Incomplete: lines_centered should be taken into account in create_body_text
 
     if(_bt) *_bt = body_text;
 }

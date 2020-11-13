@@ -116,7 +116,7 @@ enum UI_Element_Type
     UI_TEXT
 };
 
-enum UI_Button_State_
+enum UI_Click_State_
 {
     IDLE                = 0b000000000000,
     HOVERED             = 0b000000000001,
@@ -126,11 +126,11 @@ enum UI_Button_State_
     CLICKED_AT_ALL      = 0b000000010000, // Clicked this frame.
     CLICKED_ENABLED     = 0b000000100000, // Clicked this frame AND the element was enabled.
     CLICKED_DISABLED    = 0b000001000000, // Clicked this frame AND the element was enabled.
-    //PRESSED_NOW         = 0b000010000000, // Pressed this frame.
+    PRESSED_NOW         = 0b000010000000, // Pressed this frame.
     //RELEASED_NOW        = 0b000100000000, // It was pressed before, and it was released this frame.
     //MOUSE_UP_ON_NOW     = 0b001000000000, // The mouse was released this frame, and the cursor was over the element.
 };
-typedef u16 UI_Button_State; //In @JAI, this can probably be just an enum.
+typedef u16 UI_Click_State; //In @JAI, this can probably be just an enum.
 
 struct UI_Window
 {
@@ -140,7 +140,7 @@ struct UI_Window
     UI_String title;
     
     bool pressed;
-    UI_Button_State close_button_state;
+    UI_Click_State close_button_state;
     bool has_close_button;
 
     s8 resize_dir_x;
@@ -162,7 +162,7 @@ struct UI_Text
 struct UI_Button
 {
     Rect a;
-    UI_Button_State state;
+    UI_Click_State state;
 
     UI_String label;
     
@@ -174,6 +174,9 @@ struct UI_Textfield
 {
     Rect a;
     UI_String text;
+
+    UI_Click_State click_state;
+    bool disabled;
 };
 
 struct UI_Slider
@@ -189,7 +192,7 @@ struct UI_Slider
 struct UI_Dropdown
 {
     Rect box_a;
-    UI_Button_State box_button_state;
+    UI_Click_State box_click_state;
     
     Array<UI_String, ALLOC_UI> options;
 
@@ -216,6 +219,25 @@ struct UI_Element
     };
 };
 
+struct UI_Textfield_Caret
+{
+    u64 cp;
+    u64 byte;
+};
+
+struct UI_Textfield_State
+{
+    UI_Textfield_Caret caret;
+    UI_Textfield_Caret highlight_start;
+
+    // NOTE: This is reset on textfield resize.
+    Direction last_nav_dir;
+    float last_vertical_nav_x; // Where the caret was on x (in pixels) before the last vertical navigation.
+                               // This is relative to the textfield's text's position.
+
+    float last_resize_w; // When a resize was last detected (or the textfield was marked active), this is the width the text area had.
+};
+
 struct UI_Manager
 {   
     UI_ID_Manager id_manager;
@@ -233,4 +255,9 @@ struct UI_Manager
     Array<UI_ID, ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
     Array<u8, ALLOC_UI> string_data;
     // ////////////////////////////////// //
+
+    UI_ID active_element;
+    union {
+        UI_Textfield_State active_textfield_state;
+    };
 };

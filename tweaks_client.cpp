@@ -16,6 +16,8 @@ App_Version APP_version = {{
 }};
 
 
+bool TWEAK_vsync_enabled = false;
+
 // Text editing //
 float TWEAK_nav_key_repeat_delay = 0.1; // in seconds
 // --

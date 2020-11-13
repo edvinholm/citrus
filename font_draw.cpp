@@ -56,7 +56,6 @@ inline
 Font_ID current_font_id(Graphics *gfx)
 {
     Assert(gfx->current_font >= 0);
-    Assert(gfx->current_font < ARRLEN(gfx->fonts));
     return gfx->current_font;
 }
 
@@ -69,7 +68,7 @@ Font *current_font(Graphics *gfx)
 
 
 inline
-Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, bool do_wrap = true, float line_height_multiplier = 1.0, bool centered = false)
+Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, Font *fonts, bool do_wrap = true, float line_height_multiplier = 1.0, bool centered = false)
 {
     Font *font = current_font(gfx);
     return body_text_drawer(p, font_height(size, font), font_descent(size, font), line_height_multiplier, do_wrap, centered);
@@ -225,6 +224,12 @@ float string_width(String string, Font_Size size, Graphics *gfx, int previous_co
 }
 
 
+float string_width(String string, Font_Size size, Font_ID font_id, Graphics *gfx, int previous_codepoint = 0)
+{
+    return string_width(string, size, &gfx->fonts[font_id], previous_codepoint);
+}
+
+
 inline
 v2 string_size(String string, Font_Size size, Font *font)
 {
@@ -237,7 +242,6 @@ inline
 v2 string_size(String string, Font_Size size, Font_ID font, Graphics *gfx)
 {
     Assert(font >= 0);
-    Assert(font <= ARRLEN(gfx->fonts));
     
     return string_size(string, size, &gfx->fonts[font]);
 }
@@ -249,10 +253,12 @@ v2 string_size(String string, Font_Size size, Graphics *gfx)
 }
 
 //NOTE: Returns rect of drawn string
-Rect draw_string(String string, v2 p, Font_Size size, Font *font, Font_ID font_id, Graphics *gfx,
+Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
+    Font *font = &gfx->fonts[font_id];
+    
     Texture_ID font_texture = gfx->glyph_maps[font_id].texture;
 
     float texture_slot = bound_slot_for_texture(font_texture, gfx);
@@ -341,85 +347,8 @@ Rect draw_string(String string, v2 p, Font_Size size, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    return draw_string(string, p, size, current_font(gfx), current_font_id(gfx), gfx, h_align, v_align, previous_codepoint);
+    return draw_string(string, p, size, current_font_id(gfx), gfx, h_align, v_align, previous_codepoint);
 }
-
-
-#if 0 // @Cleanup: These should be part of the UI build now when we separated UI build and UI draw.
-inline
-Rect text(Graphics *gfx, String string, Font_Size size,
-          H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
-          int *previous_codepoint = NULL)
-{
-    // @Boilerplate
-    Rect a = area(gfx);
-    v2 p = a.p;
-    
-    if(h_align == HA_CENTER)
-        p.x += a.w / 2.0f;
-    else if(h_align == HA_RIGHT)
-        p.x += a.w;
-
-    if(v_align == VA_CENTER)
-        p.y += a.h / 2.0f;
-    else if(v_align == VA_BOTTOM)
-        p.y += a.h;
-    //----
- 
-    return draw_string(string, p, size, h_align, v_align, previous_codepoint);
-}
-
-inline
-Rect text_colored(String string, Font_Size size, v4 color,
-                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
-                  int *previous_codepoint = NULL)
-{
-    _COLOR_(color);
-    return draw_string(string, area().p, size, h_align, v_align, previous_codepoint);
-}
-
-#endif
-
-
-
-inline
-Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics *gfx,
-                 H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
-                 int *previous_codepoint = NULL)
-{
-    Assert(font_id >= 0);
-    Assert(font_id < ARRLEN(gfx->fonts));
-    
-    Font *font = &gfx->fonts[font_id];
-    return draw_string(string, p, size, font, font_id, gfx, h_align, v_align, previous_codepoint);
-}
-
-#if 0 // @Cleanup: This should be part of the UI build now when we separated UI build and UI draw.
-inline
-Rect text(String string, Font_Size size, Font_ID font,
-          H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
-          int *previous_codepoint = NULL)
-{
-    // @Boilerplate
-    Rect a = area();
-    v2 p = a.p;
-    
-    if(h_align == HA_CENTER)
-        p.x += a.w / 2.0f;
-    else if(h_align == HA_RIGHT)
-        p.x += a.w;
-    
-    if(v_align == VA_CENTER)
-        p.y += a.h / 2.0f;
-    else if(v_align == VA_BOTTOM)
-        p.y += a.h;
-    //---
-        
-    return draw_string(string, p, size, font, h_align, v_align, previous_codepoint);
-}
-
-#endif
-
 
 
 inline

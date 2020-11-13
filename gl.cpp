@@ -1,7 +1,17 @@
 
+/*
+  @NoRelease TODO: Check which extensions we need, and check if the user's system supports them at startup.
+                   If they don't tell them, and maybe send that information to us?
+ */
+
 
 #if OS_WINDOWS || OS_ANDROID
 
+
+#if OS_WINDOWS
+typedef BOOL (*wgl_swap_interval_ext)(int interval);
+wgl_swap_interval_ext wglSwapIntervalEXT;
+#endif
 
 
 #if !(OS_ANDROID)
@@ -161,6 +171,11 @@ bool load_gl_extensions()
     
 #if OS_WINDOWS || OS_ANDROID
 
+    
+#if OS_WINDOWS
+    TRY_LOAD_GL_EXT(wgl_swap_interval_ext, wglSwapIntervalEXT);
+#endif
+    
 
 #if !(OS_ANDROID)
     TRY_LOAD_GL_EXT(gl_depth_range_f, glDepthRangef);

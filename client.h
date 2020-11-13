@@ -8,4 +8,6 @@ struct Client
 
     Window main_window;
     Rect main_window_a;
+
+    Font fonts[NUM_FONTS] = {0};
 };

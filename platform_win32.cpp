@@ -473,7 +473,7 @@ void platform_create_window(Window *_window, const char *Title = "",
     WindowClass.hInstance = Instance;
     //WindowClass.hIcon = ;//LoadIcon(Instance, MAKEINTRESOURCE(IDI_WINLOGO));
     WindowClass.lpszClassName = "GLWindow";
-    WindowClass.hCursor = LoadCursor(0, IDC_ARROW);
+    WindowClass.hCursor = NULL;//LoadCursor(0, IDC_ARROW);
     
     if (RegisterClass(&WindowClass))
     {
@@ -733,4 +733,21 @@ void platform_sleep_microseconds(u64 microseconds)
 
         if(delta_us >= microseconds) break;
     }
+}
+
+void platform_set_cursor_icon(Cursor_Icon icon)
+{
+    LPCTSTR cursor_name;
+    
+    switch(icon) {
+        case CURSOR_ICON_DEFAULT: cursor_name = IDC_ARROW; break;
+        case CURSOR_ICON_I_BEAM:  cursor_name = IDC_IBEAM; break;
+
+        default: Assert(false); return;
+    }
+
+    HCURSOR cursor = LoadCursor(NULL, cursor_name);
+    Assert(cursor);
+    
+    SetCursor(cursor);
 }

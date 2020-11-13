@@ -2,6 +2,8 @@
 struct Graphics_Debug
 {
     u64 num_draw_calls;
+    
+    String_Builder sb;
 };
 
 struct Vertex_Buffer
@@ -36,7 +38,7 @@ struct Graphics
     u8 num_bound_textures;
     
     Sprite_Map glyph_maps[NUM_FONTS];
-    Font       fonts[NUM_FONTS] = {0};
+    Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
 
     v4      current_color;
     Font_ID current_font;

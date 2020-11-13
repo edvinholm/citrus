@@ -288,7 +288,7 @@ bool load_font(byte *font_file_contents, Font *_font)
 }
 
 
-void init_fonts(Graphics *gfx)
+void init_fonts(Font *fonts, Graphics *gfx)
 {
     TIMED_FUNCTION;
     
@@ -297,7 +297,7 @@ void init_fonts(Graphics *gfx)
         // IMPORTANT: This does NOT create a gpu texture. The texture will be created in game_init_graphics, so that we can redo it when we lose the graphics context.
         gfx->glyph_maps[f] = create_sprite_map(TWEAK_font_texture_size, TWEAK_font_texture_size, font_textures[f], ALLOC_GFX, gfx);
 
-        Font *font = &gfx->fonts[f];
+        Font *font = &fonts[f];
 
         font->sprite_map = &gfx->glyph_maps[f];
 

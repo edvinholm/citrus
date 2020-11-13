@@ -22,6 +22,8 @@
 
 // --
 
+#include "direction.h"
+
 
 #include "texture.h"
 
@@ -45,6 +47,8 @@
 #include "ui.h"
 
 #include "client.h"
+
+#include "body_text.h"
 
 #include "ui.cpp"
 

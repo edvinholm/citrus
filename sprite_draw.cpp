@@ -1,15 +1,5 @@
 
 
-enum Direction
-{
-    TOP    = 0b1000,
-    BOTTOM = 0b0100,
-    LEFT   = 0b0010,
-    RIGHT  = 0b0001,
-    ALL_DIRECTIONS = 0b1111
-};
-
-
 //@Jai: @Speed: We could do baked versions of this where sides_to_do is constant.
 //IMPORTANT: This DOES NOT set the texture.
 // NOTE: What is referred to as the 'slice' here, is the center rect created by the four cuts.
@@ -68,13 +58,13 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
         sp0 = rp0 + slicing->p0 * scale;
         sp1 = rp1 - (f_s - slicing->p1) * scale;
 
-        if(!(sides_to_do & TOP))    sp0.y = rp0.y;
-        if(!(sides_to_do & BOTTOM)) sp1.y = rp1.y;
+        if(!(sides_to_do & UP))     sp0.y = rp0.y;
+        if(!(sides_to_do & DOWN))   sp1.y = rp1.y;
         if(!(sides_to_do & LEFT))   sp0.x = rp0.x;
         if(!(sides_to_do & RIGHT))  sp1.x = rp1.x;
         
 
-        if(sides_to_do & TOP)
+        if(sides_to_do & UP)
         {
             if(sides_to_do & LEFT)
             {
@@ -95,7 +85,7 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
             }
         }
         
-        if(sides_to_do & BOTTOM)
+        if(sides_to_do & DOWN)
         {
             if(sides_to_do & LEFT)
             {

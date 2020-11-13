@@ -41,7 +41,7 @@ u8 *find_codepoint_backwards(u8 *at)
     u8 length = 1;
     while(length < 4)
     {
-        if(*at & 0b01000000)
+        if((*at & 0b11000000) == 0b11000000)
         {
             // Found start of cp.
             return at;
@@ -109,6 +109,7 @@ u32 eat_codepoint_backwards(u8 **at)
     *at = cp_start;
     return eat_codepoint(&cp_start);
 }
+
 
 u32 count_codepoints(String str, bool utf_16 = false)
 {

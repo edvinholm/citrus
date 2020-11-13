@@ -5,6 +5,7 @@ int frames_this_second = 0;
 int ups = 0;
 int updates_this_second = 0;
 u64 draw_calls_last_frame = 0;
+u64 triangles_this_frame = 0;
 
 
 bool update_gpu_resources(Graphics *gfx)
@@ -166,6 +167,9 @@ bool init_graphics(Window *window, Graphics *gfx)
 
     // Create multisample framebuffer
     gpu_create_framebuffers(1, &gfx->multisample_framebuffer);
+
+    
+    gpu_set_vsync_enabled(TWEAK_vsync_enabled);
 
     return true;
 }
@@ -418,7 +422,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_20, FONT_TITLE, gfx);
 }
 
-void draw_textfield(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == TEXTFIELD);
     auto *tf = &e->textfield;
@@ -429,9 +433,107 @@ void draw_textfield(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     draw_rect(tf->a, gfx);
 
     String text = get_ui_string(tf->text, ui);
-    Rect text_a = shrunken(tf->a, 10, 10, 8, 8);
+
+    Rect text_a = textfield_text_a(tf);
     Rect clip_rect = tf->a;
-    draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect);
+
+    Body_Text bt = create_textfield_body_text(text, text_a, gfx->fonts);
+
+    if(ui->active_element == id) {
+        // CARET / HIGHLIGHT
+        
+        auto &tf_state = ui->active_textfield_state;
+
+        // Highlight
+        int highlight_cp0;
+        int highlight_cp1;
+        if(tf_state.caret.cp > tf_state.highlight_start.cp) {
+            highlight_cp0 = tf_state.highlight_start.cp;
+            highlight_cp1 = tf_state.caret.cp;
+        } else {
+            highlight_cp0 = tf_state.caret.cp;
+            highlight_cp1 = tf_state.highlight_start.cp;
+        }
+        
+        v2 highlight_p0 = text_a.p + position_from_codepoint_index(highlight_cp0, &bt, gfx->fonts);
+        v2 highlight_p1 = text_a.p + position_from_codepoint_index(highlight_cp1, &bt, gfx->fonts);
+
+        
+        int highlight_line0 = line_from_codepoint_index(highlight_cp0, &bt);
+        int highlight_line1 = line_from_codepoint_index(highlight_cp1, &bt) + 1;
+        int num_highlight_lines = highlight_line1 - highlight_line0;
+        for(int l = 0; l < num_highlight_lines; l++)
+        {
+            float start_x = text_a.x;
+            float end_x   = text_a.x + text_a.w;
+            
+            if(l == 0)                   start_x = highlight_p0.x;
+            if(l == num_highlight_lines-1) end_x = highlight_p1.x;
+            
+            // TODO :PushPop color
+            gfx->current_color = {0.10, 0.61, 0.53, 1};
+            draw_rect_ps({start_x - 2, highlight_p0.y + bt.line_height * l}, {end_x - start_x + 2, bt.line_height}, gfx);
+        }
+        // ----------
+
+        // Caret
+        v2 caret_p;
+        if(highlight_cp0 == tf_state.caret.cp) {
+            caret_p = highlight_p0;
+        } else {
+            Assert(highlight_cp1 == tf_state.caret.cp);
+            caret_p = highlight_p1;
+        }
+    
+        // TODO :PushPop color
+        gfx->current_color = {0, 0, 0, 1};
+        draw_rect_ps({caret_p.x - 2, caret_p.y}, {2, bt.line_height}, gfx);
+        // ----------
+
+#if DEBUG && true // DEBUG STUFF
+        
+#if true && DEBUG // DEBUG DISPLAY: LAST VERTICAL NAV X
+        gfx->current_color = {1, 0, 0, 0.5};
+        draw_rect_ps({text_a.x + ui->active_textfield_state.last_vertical_nav_x-2,
+                    text_a.y - 4}, {4, 4}, gfx);
+        draw_rect_ps(text_a.p + V2_X * (ui->active_textfield_state.last_vertical_nav_x-1), {2, text_a.h}, gfx);
+#endif
+
+        
+#if true && DEBUG // DEBUG DISPLAY: CARET/HIGHLIGHT CODEPOINT INDEX
+
+        { // CARET
+            String cp_index_str = concat_tmp("", tf_state.caret.cp, gfx->debug.sb);
+            float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
+        
+            gfx->current_color = {0, 0, 0, 1};
+            draw_rect_ps({text_a.x + text_a.w, text_a.y}, {cp_index_str_w + 4, 16}, gfx);
+            
+            gfx->current_color = {1, 1, 1, 1};
+            draw_string(cp_index_str, { text_a.x + text_a.w + 2, text_a.y + 2 }, FS_12, FONT_TITLE, gfx);   
+        }
+
+        { // HIGHLIGHT
+            String cp_index_str = concat_tmp("", tf_state.highlight_start.cp, gfx->debug.sb);
+            float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
+        
+            gfx->current_color = {0.10, 0.61, 0.53, 1};
+            draw_rect_ps({text_a.x + text_a.w, text_a.y + 16}, {cp_index_str_w + 4, 16}, gfx);
+            
+            gfx->current_color = {1, 1, 1, 1};
+            draw_string(cp_index_str, { text_a.x + text_a.w + 2, text_a.y + 2 + 16 }, FS_12, FONT_TITLE, gfx);   
+        }
+        
+#endif
+
+#endif
+        
+    }
+    
+    draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect, &bt);
+
+    // TODO :PushPop color
+    gfx->current_color = old_color;
 }
 
 void draw_slider(UI_Element *e, Graphics *gfx)
@@ -548,10 +650,12 @@ DWORD render_loop(void *loop_)
         ui =          &client->ui;    
         main_window = &client->main_window;
         
+        gfx.fonts = client->fonts;
+        
         bool graphics_init_result = init_graphics(main_window, &gfx);
         Assert(graphics_init_result);
 
-        init_fonts(&gfx);
+        init_fonts(gfx.fonts, &gfx);
 
         // CREATE FONT GLYPH TEXTURES ON GPU //
         for(int f = 0; f < NUM_FONTS; f++){
@@ -615,7 +719,7 @@ DWORD render_loop(void *loop_)
                     case WINDOW:   draw_window(e, ui, &gfx); break;
                     case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
                     case BUTTON:   draw_button(e, ui, &gfx); break;
-                    case TEXTFIELD: draw_textfield(e, ui, &gfx); break;
+                    case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
                     case SLIDER:   draw_slider(e, &gfx);     break;
                     case DROPDOWN: draw_dropdown(e, &gfx); break;
 
@@ -643,6 +747,9 @@ DWORD render_loop(void *loop_)
             update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
         }
 
+        
+        triangles_this_frame = gfx.vertex_buffer.n/3;
+        
         triangles_now(gfx.vertex_buffer.p,
                       gfx.vertex_buffer.uv,
                       gfx.vertex_buffer.c,
@@ -705,7 +812,10 @@ void bar_window(UI_Context ctx, Input_Manager *input)
 
     int c = 2;
 
-    static String the_string = copy_cstring_to_string("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.", ALLOC_UI);
+    const Allocator_ID allocator = ALLOC_APP;
+
+    static String the_string = copy_cstring_to_string("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.", allocator);
+
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("REFRIGERATOR")));
@@ -716,9 +826,22 @@ void bar_window(UI_Context ctx, Input_Manager *input)
             _CELL_();
 
             if(i == 0) {
-                ui_text(the_string, PC(ctx, i));
+                //ui_text(the_string, PC(ctx, i));
+                bool text_did_change;
+                String text = textfield_tmp(the_string, input, PC(ctx, i), &text_did_change);
+                if(text_did_change) {
+                    // @Speed!!!
+                    clear(&the_string, allocator);
+                    the_string = copy_of(&text, allocator);
+                }
             } else {
-                the_string = textfield(the_string, input, PC(ctx, i));
+                bool text_did_change;
+                String text = textfield_tmp(the_string, input, PC(ctx, i), &text_did_change);
+                if(text_did_change) {
+                    // @Speed!!!
+                    clear(&the_string, allocator);
+                    the_string = copy_of(&text, allocator);
+                }
             }
         }
     }
@@ -770,7 +893,7 @@ bool foo_window(bool slider_disabled, UI_Context ctx)
         }
 
     }
-    UI_Button_State close_button_state;
+    UI_Click_State close_button_state;
     end_window(window_id, ctx.manager, &close_button_state);
     if(close_button_state & CLICKED_ENABLED)
         result = true;
@@ -830,15 +953,75 @@ void client_mouse_move(Window *window, int x, int y, u64 ms, void *client_)
     input.mouse.p = { (float)x, (float)y };
 }
 
+void client_character_input(Window *window, byte *utf8, int num_bytes, u16 repeat_count, void *client_)
+{
+    auto *client = (Client *)client_;
+    auto *input  = &client->input;
+
+    u8 *at  = utf8;
+    u8 *end = utf8 + num_bytes;
+    while(at < end) {
+        u8 *cp_start = at;
+        int cp = eat_codepoint(&at);
+        
+        if(cp == '\b') {
+            if(input->text.n > 0) {
+                u8 *at2 = input->text.e + input->text.n;
+                int last_cp = eat_codepoint_backwards(&at2);
+                if(last_cp != '\b') {
+                    input->text.n = at2 - input->text.e;
+                    continue;
+                }
+            }
+
+            // If input->text is empty or only contains \b's, we add a \b. See comment in Input_Manager for an explanation of why we know this is true here.
+            array_add(input->text, (u8)'\b');
+            continue;
+        }
+
+        array_add(input->text, cp_start, at-cp_start);
+    }
+    
+}
+
+void client_key_down(Window *window, virtual_key key, u8 scan_code, u16 repeat_count, void *client_)
+{
+    Client *client = (Client *)client_;
+    Input_Manager *input = &client->input;
+    
+    if(key == VKEY_RETURN)
+        client_character_input(window, (byte *)"\n", 1, repeat_count, client_);
+
+    ensure_in_array(input->keys, key);
+    
+    ensure_in_array(input->keys_down,   key);
+    ensure_not_in_array(input->keys_up, key);
+
+    for(u16 i = 0; i < repeat_count; i++)
+        array_add(input->key_hits, key);
+}
+
+void client_key_up(Window *window, virtual_key key, u8 scan_code, void *client_)
+{
+    Client *client = (Client *)client_;
+    Input_Manager *input = &client->input;
+
+    ensure_not_in_array(input->keys, key);
+    
+    ensure_not_in_array(input->keys_down, key);
+    ensure_in_array(input->keys_up, key);
+}
+
+
 void client_set_window_delegate(Window *window, Client *client)
 {
     Window_Delegate delegate = {0};
     delegate.data = client;
     
-    delegate.key_down = NULL;
-    delegate.key_up   = NULL;
+    delegate.key_down = &client_key_down;
+    delegate.key_up   = &client_key_up;
     
-    delegate.character_input = NULL;
+    delegate.character_input = &client_character_input;
 
     delegate.mouse_down = &client_mouse_down;
     delegate.mouse_up   = &client_mouse_up;
@@ -847,11 +1030,6 @@ void client_set_window_delegate(Window *window, Client *client)
     window->delegate = delegate;
 }
 
-// NOTE: Assumes *client has been zeroed.
-void init_client(Client *client)
-{
-    init_ui_manager(&client->ui);
-}
 
 int client_entry_point(int num_args, char **arguments)
 {    
@@ -859,7 +1037,6 @@ int client_entry_point(int num_args, char **arguments)
 
     // INIT CLIENT //
     Client client = {0};
-    init_client(&client);
     Layout_Manager *layout = &client.layout;
     UI_Manager         *ui = &client.ui;
     Input_Manager   *input = &client.input;
@@ -915,6 +1092,8 @@ int client_entry_point(int num_args, char **arguments)
         if(!platform_process_input(main_window, true)) {
             break;
         }
+
+        Cursor_Icon cursor;
         
         lock_mutex(render_loop.mutex);
         {
@@ -934,13 +1113,16 @@ int client_entry_point(int num_args, char **arguments)
                     updates_this_second = 0;
                 }
                 updates_this_second++;
-            
-                platform_set_window_title(main_window, concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws", sb));
+
+                char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
+                title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
+                
+                platform_set_window_title(main_window, title);
 #endif
                 pop_layout(layout);
 
             }
-            end_ui_build(ui, &client.input);
+            end_ui_build(ui, &client.input, client.fonts, &cursor);
             // //////// //
 
             reset_temporary_memory();
@@ -950,6 +1132,8 @@ int client_entry_point(int num_args, char **arguments)
 #if DEBUG || true
         last_second = second;
 #endif
+        
+        platform_set_cursor_icon(cursor);
 
         // NOTE: Experienced stuttering when not sleeping here -- guessing that this thread kept locking the mutex without letting the render loop render its frame(s).
         platform_sleep_microseconds(100);

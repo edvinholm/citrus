@@ -6,6 +6,12 @@ struct GPU_Context
 };
 
 inline
+void gpu_set_vsync_enabled(bool enabled)
+{
+    wglSwapIntervalEXT((enabled) ? 1 : 0);
+}
+
+inline
 bool gpu_init(float clear_color_r, float clear_color_g, float clear_color_b, float clear_color_a)
 {
     if(!load_gl_extensions()) return false;

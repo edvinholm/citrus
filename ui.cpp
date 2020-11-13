@@ -1,5 +1,6 @@
 
 
+// IMPORTANT: Callers assume strings pushed after each other will end up after each other in UI_Manager.string_data. (Except if there is a reset inbetween the calls).
 inline
 UI_String push_ui_string(String string, UI_Manager *ui)
 {
@@ -23,11 +24,6 @@ String get_ui_string(UI_String string, UI_Manager *ui)
     str.data   = ui->string_data.e + string.offset;
     str.length = string.length;
     return str;
-}
-
-
-void init_ui_manager(UI_Manager *manager)
-{
 }
 
 
@@ -367,18 +363,22 @@ private:
 
 
 
-UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input_Manager *input, bool disabled = false)
+UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Manager *input, bool disabled = false)
 {
     auto &mouse = input->mouse;
     
     state &= ~CLICKED_AT_ALL;
     state &= ~CLICKED_DISABLED;
     state &= ~CLICKED_ENABLED;
+    state &= ~PRESSED_NOW;
+    
     if(hovered) {
         state |= HOVERED;
         
-        if(mouse.buttons_down & MB_PRIMARY)
+        if(mouse.buttons_down & MB_PRIMARY) {
+            if(!(state & PRESSED)) state |= PRESSED_NOW;
             state |= PRESSED;
+        }
 
         if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
             if(disabled) {
@@ -395,6 +395,7 @@ UI_Button_State evaluate_button_state(UI_Button_State state, bool hovered, Input
     }
     
     if(!(mouse.buttons & MB_PRIMARY)) {
+        Assert(!(state & PRESSED_NOW));
         state &= ~PRESSED;
     }
 
@@ -414,7 +415,7 @@ void ui_text(String text, UI_Context ctx)
 }
 
 
-UI_Button_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled = false, bool selected = false)
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled = false, bool selected = false)
 {    
     U(ctx);
     
@@ -434,7 +435,7 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     Assert(e->type == BUTTON);
     auto &btn   = e->button;
     
-    btn.state = evaluate_button_state(btn.state, e == hovered_element, input, btn.disabled);
+    btn.state = evaluate_click_state(btn.state, e == hovered_element, input, btn.disabled);
 }
 
 
@@ -446,18 +447,436 @@ Rect slider_handle_rect(Rect slider_a, float value)
     return handle_a;
 }
 
-
-String textfield(String text, Input_Manager *input, UI_Context ctx)
+inline
+bool is_allowed_input(u32 cp, bool single_line_mode /*= false*/)
 {
+    if(cp == '\n') {
+        return !single_line_mode;
+    }
+
+    if(cp < 32) return false; // @Temporary: TODO: @NoRelease: We need to disallow all unicode codepoints we don't have glyphs for.
+ 
+    return true;
+}
+
+Rect textfield_text_a(UI_Textfield *tf)
+{
+    return shrunken(tf->a, 10, 10, 8, 8);
+}
+
+
+String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_text_did_change)
+{
+    // IMPORTANT: Don't use the carets before we've clamped them to the text length. (We do that further down in this proc) -EH, 2020-11-13
+    
     U(ctx);
 
-    UI_Element *e = find_or_create_ui_element(ctx.get_id(), TEXTFIELD, ctx.manager);
+    const bool multiline = true; // @Temporary
+
+    UI_Manager *ui = ctx.manager;
+
+    auto id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, TEXTFIELD, ui);
     auto *tf = &e->textfield;
     tf->a    = area(ctx.layout);
-    tf->text = push_ui_string(text, ctx.manager);
+
+
+    // TEXT //
+    *_text_did_change = false;
+
+    if(ui->active_element != id) {
+        tf->text = push_ui_string(text, ui);
+        return text;
+    }
+
+    // ////////////////////////////////////// //
+    // THE TEXTFIELD IS ACTIVE IF WE GET HERE //
+    // ////////////////////////////////////// //
     
-    return text;
+    Rect text_a = textfield_text_a(tf);
+
+    // RESET LAST NAV DIR ON RESIZE //
+    auto *tf_state = &ui->active_textfield_state;
+    if(fabs(text_a.w - tf_state->last_resize_w) > 0.001f) {
+        tf_state->last_nav_dir  = NO_DIRECTION;
+        tf_state->last_resize_w = text_a.w;
+    }
+    // /////////////////////////// //
+    
+    auto *caret           = &ui->active_textfield_state.caret;
+    auto *highlight_start = &ui->active_textfield_state.highlight_start;
+
+    u32 text_cp_length = count_codepoints(text);
+    
+    // CLAMP CARETS //
+    if(caret->cp > text_cp_length) {
+        Debug_Print("Clamp caret");
+        caret->cp   = text_cp_length;
+        caret->byte = text.length;
+    }
+        
+    if(highlight_start->cp > text_cp_length) {
+        Debug_Print("Clamp highlight");
+        highlight_start->cp   = text_cp_length;
+        highlight_start->byte = text.length;
+    }
+    // /////////// //
+
+
+    if(input->text.n == 0) {
+        tf->text = push_ui_string(text, ui);
+    }
+    else
+    {
+        // @BadName because we set this to say that we want to erase things after caret.
+        auto initial_byte_caret = ui->active_textfield_state.caret.byte;
+        
+        // INSERT TEXT //
+        u8 *input_at  = input->text.e;
+        u8 *input_end = input_at + input->text.n;
+
+        // Erase highlight?
+        bool do_erase_highlight = false;
+        if(highlight_start->cp != caret->cp)
+        {
+            while(input_at < input_end) {
+                u8 *cp_start = input_at;
+                u32 cp = eat_codepoint(&input_at);
+
+                if(cp == '\b') {
+                    do_erase_highlight = true;
+                    // We don't set input_at back here, because we want to consume one backspace to erase the highlight.
+                    break;
+                }
+
+                if(!is_allowed_input(cp, !multiline)) continue;
+
+                do_erase_highlight = true;
+                input_at = cp_start;
+                break;
+            }
+        }
+
+        // Erase highlight
+        if(do_erase_highlight) {
+            if(caret->cp > highlight_start->cp) {
+                *caret = *highlight_start;
+            } else {
+                // @Hack...
+                initial_byte_caret = highlight_start->byte;
+                *highlight_start = *caret;
+            }
+
+            *_text_did_change = true;
+        }
+
+        // Check if we should erase at insertion point. See comment in Input_Manager for an explanation of why we can do it like this.
+        u8 *pre_end = text.data + caret->byte;
+        while(input_at < input_end)
+        {
+            u8 *cp_start = input_at;
+            u32 cp = eat_codepoint(&input_at);
+            
+            if(cp != '\b') {
+                input_at = cp_start;
+                break;
+            }
+
+            if(pre_end > text.data) {
+                u8 *erased_cp_end = pre_end;
+                pre_end = find_codepoint_backwards(pre_end);
+
+                caret->cp   -= 1;
+                caret->byte -= erased_cp_end - pre_end;
+                *highlight_start = *caret;
+
+                *_text_did_change = true;
+            }
+            else {
+                Assert(pre_end == text.data);
+            }
+        }
+
+        // Push text before insertion point
+        tf->text = push_ui_string({text.data, pre_end - text.data}, ui);
+
+        // Push the new input
+        int cp_ix = 0;
+
+        while(input_at < input_end)
+        {
+            u8 *cp_start = input_at;
+            u32 cp = eat_codepoint(&input_at);
+
+            Assert(cp != '\b'); // See comment in Input_Manager for an explanation of why this always should be true.
+            
+            if(!is_allowed_input(cp, !multiline)) continue;
+
+            strlength byte_length = input_at - cp_start;
+            push_ui_string({cp_start, byte_length}, ui);
+                
+            tf->text.length += byte_length;
+            
+            caret->byte += byte_length;
+            caret->cp   += 1;
+            *highlight_start = *caret;
+
+            *_text_did_change = true;
+        }
+
+        // Push text after insertion point
+        if(initial_byte_caret < text.length) {
+            auto end_length = (strlength)(text.length - initial_byte_caret);
+            push_ui_string({text.data + initial_byte_caret, end_length}, ui);
+            tf->text.length += end_length;
+        }
+
+        Assert(ui->active_textfield_state.caret.byte <= tf->text.length);
+        Assert(ui->active_textfield_state.caret.byte >= 0);
+        Assert(ui->active_textfield_state.caret.cp >= 0);
+        Assert(ui->active_textfield_state.caret.cp <= text_cp_length);
+        
+        Assert(ui->active_textfield_state.highlight_start.byte <= tf->text.length);
+        Assert(ui->active_textfield_state.highlight_start.byte >= 0);
+        Assert(ui->active_textfield_state.highlight_start.cp >= 0);
+        Assert(ui->active_textfield_state.highlight_start.cp <= text_cp_length);
+    }
+
+    // //// //    
+
+    if(!(*_text_did_change)) return text;
+
+    return get_ui_string(tf->text, ui);
 }
+
+
+Body_Text create_textfield_body_text(String text, Rect text_a, Font *fonts)
+{
+    return create_body_text(text, text_a, FS_16, FONT_INPUT, fonts);
+}
+
+// NOTE: Only one direction can be passed -- dir is not used as a bitmask.
+void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font *fonts)
+{        
+    String &text = bt->text;
+    auto *caret = &tf_state->caret;
+    
+    u8 *new_caret_at = text.data + caret->byte;
+    int cp_delta = 0;
+
+    bool did_go = false;
+
+    switch(dir) {
+        case UP:
+        case DOWN: {
+            
+            // NAVIGATE VERTICALLY //
+
+            // THE CURRENT LINE //
+            // Line and col
+            int current_col;
+            int current_line_index = line_from_codepoint_index(caret->cp, bt, &current_col);
+            auto *current_line = bt->lines.e + current_line_index;
+            // //////////////// //
+
+            // CAN GO? //
+            int new_line_index = current_line_index;
+            if(dir == UP) {
+                new_line_index -= 1;
+                if(new_line_index < 0) break; // Can't go.
+            } else {
+                Assert(dir == DOWN);
+                new_line_index += 1;
+                if(new_line_index >= bt->lines.n) break; // Can't go.
+            }
+            // /////// //
+
+            // THE LINE TO GO TO //
+            Assert(new_line_index >= 0 && new_line_index < bt->lines.n);
+            auto *new_line = bt->lines.e + new_line_index;
+
+            int new_line_start_cp_index   = new_line->start_cp;
+            strlength new_line_start_byte = new_line->start_byte;
+            
+            // Find end byte
+            strlength new_line_end_byte;
+            if(new_line_index < bt->lines.n-1) {
+                auto *line_after_new = bt->lines.e + new_line_index + 1;
+                new_line_end_byte = line_after_new->start_byte;
+            } else {
+                new_line_end_byte = bt->text.length;
+            }
+            
+            // Start and end of new line
+            u8 *new_line_start = bt->text.data + new_line_start_byte;
+            u8 *new_line_end   = bt->text.data + new_line_end_byte;
+
+            // //////////////// //
+
+            
+            // X TO USE TO FIND COL ON NEW LINE //
+            float x;
+            if(tf_state->last_nav_dir == UP ||
+               tf_state->last_nav_dir == DOWN) {
+                x = tf_state->last_vertical_nav_x;
+            }
+            else {
+                u8 *current_line_start = text.data + current_line->start_byte;
+                // @Robustness: We allow x_from_codepoint_index to search to the end of the text.
+                //              We should find our codepoint index before reaching the line's end byte,
+                //              but we don't make sure that we do...
+                x = x_from_codepoint_index(current_col, current_line_start, text.data + text.length, bt, fonts);
+                tf_state->last_vertical_nav_x = x;
+            }
+            // //////////////////////////////// //
+            
+
+            // FIND NEW CARET //
+            strlength rel_byte;  // @Temporary? (Remove byte caret?)
+            caret->cp = new_line_start_cp_index + codepoint_index_from_x(x, new_line_start, new_line_end, bt, fonts, true, &rel_byte);
+            caret->byte = new_line_start_byte + rel_byte; // @Temporary? (Remove byte caret?)
+            // /////////// //
+
+            did_go = true;
+            
+        } break;
+
+        case LEFT:  {
+            // NAVIGATE LEFT //
+            if(new_caret_at > text.data)
+            {    
+                int cp = eat_codepoint_backwards(&new_caret_at);
+                caret->cp--;
+                caret->byte  = new_caret_at - text.data;
+
+                did_go = true;
+            }
+        } break;
+
+        case RIGHT: {
+            // NAVIGATE RIGHT //
+            u8 *end = text.data + text.length;
+
+            if(new_caret_at < end)
+            {    
+                int cp = eat_codepoint(&new_caret_at);
+                caret->cp++;
+                caret->byte  = new_caret_at - text.data;
+
+                did_go = true;
+            }
+        } break;
+
+        default: Assert(false); return;
+    }
+
+    // Navigating without holding SHIFT removes highlight
+    if(!shift_is_down) {
+        tf_state->highlight_start = *caret;
+    }
+
+    if(did_go)
+        tf_state->last_nav_dir = dir;
+}
+
+void reset_textfield_state(UI_Textfield_State *tf_state)
+{
+    Zero(*tf_state);
+}
+
+void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_Manager *ui, Font *fonts, bool became_active)
+{
+    Assert(e->type == TEXTFIELD);
+    auto *tf = &e->textfield;
+    auto *mouse = &input->mouse;
+    
+    tf->click_state = evaluate_click_state(tf->click_state, e == hovered_element, input, tf->disabled);
+
+    if(tf->disabled) return;
+
+    
+    if(ui->active_element != id) return;
+
+    // //////////////////////////////////////////////// //
+    // IF WE REACH THIS POINT, THE TEXTFIELD IS ACTIVE. //
+    // //////////////////////////////////////////////// //
+
+    auto *caret           = &ui->active_textfield_state.caret;
+    auto *highlight_start = &ui->active_textfield_state.highlight_start;
+        
+    Rect text_a  = textfield_text_a(tf);
+    String text  = get_ui_string(tf->text, ui);
+
+    if(became_active) {
+        ui->active_textfield_state.last_resize_w = text_a.w;
+    }
+
+    Body_Text bt;
+    bool body_text_created = false;
+
+    bool shift_is_down = false;
+    bool ctrl_is_down  = false;
+    
+    for(int i = 0; i < input->keys.n; i++) {
+        if(input->keys[i] == VKEY_SHIFT)   { shift_is_down = true; continue; }
+        if(input->keys[i] == VKEY_CONTROL) { ctrl_is_down = true; continue; }
+    }
+    
+    // SELECT ALL //
+    if(ctrl_is_down && in_array(input->keys_down, VKEY_a)) {
+        
+        if(!body_text_created)
+            bt = create_textfield_body_text(text, text_a, fonts);
+        
+        highlight_start->cp = 0;
+        highlight_start->byte = 0;
+
+        caret->cp   = bt.num_codepoints;
+        caret->byte = text.length;
+    }
+    // ////////// //
+    
+    if(tf->click_state & PRESSED) {
+
+        if(!body_text_created)
+            bt = create_textfield_body_text(text, text_a, fonts);
+        
+        Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, text_a.p, fonts);
+
+        caret->cp   = mouse_text_location.cp_index;
+        caret->byte = mouse_text_location.byte;
+        
+        if(tf->click_state & PRESSED_NOW && !shift_is_down) {
+            highlight_start->cp   = mouse_text_location.cp_index;
+            highlight_start->byte = mouse_text_location.byte;
+        };
+    }
+    
+    // NAVIGATE //
+    {
+        for(int i = 0; i < input->key_hits.n; i++)
+        {
+            Direction nav_dir;
+            
+            virtual_key key = input->key_hits[i];
+            switch(key) {
+                case VKEY_LEFT:  nav_dir = LEFT;  break;
+                case VKEY_RIGHT: nav_dir = RIGHT; break;
+                case VKEY_UP:    nav_dir = UP;    break;
+                case VKEY_DOWN:  nav_dir = DOWN;  break;
+                default: continue;
+            }
+
+            if(!body_text_created)
+                bt = create_textfield_body_text(text, text_a, fonts);
+            
+            textfield_navigate(nav_dir, shift_is_down, &bt, &ui->active_textfield_state, fonts);
+        }
+
+    }
+    // ///////// //
+}
+
 
 float slider(float value, UI_Context ctx, bool disabled = false)
 {    
@@ -543,10 +962,10 @@ void update_dropdown(UI_Element *e, Input_Manager *input, UI_Element *hovered_el
         box_hovered = point_inside_rect(mouse.p, dd->box_a);
     }
 
-    dd->box_button_state = evaluate_button_state(dd->box_button_state, box_hovered, input);
+    dd->box_click_state = evaluate_click_state(dd->box_click_state, box_hovered, input);
     
-    if(dd->box_button_state & CLICKED_ENABLED) dd->open = !dd->open;
-    else if(dd->open && !(dd->box_button_state & HOVERED)) {
+    if(dd->box_click_state & CLICKED_ENABLED) dd->open = !dd->open;
+    else if(dd->open && !(dd->box_click_state & HOVERED)) {
         if(mouse.buttons_down & MB_PRIMARY) dd->open = false;
     }
 }
@@ -655,7 +1074,7 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, String title = EMPTY_STRING, bool 
                     to_shrink); // Bottom
 }
 
-void end_window(UI_ID id, UI_Manager *ui, UI_Button_State *_close_button_state = NULL)
+void end_window(UI_ID id, UI_Manager *ui, UI_Click_State *_close_button_state = NULL)
 {
     UI_Element *e = find_ui_element(id, ui);
     Assert(e);
@@ -706,7 +1125,7 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             Rect close_button_a = right_square_of(title_a);
             close_button_hovered = point_inside_rect(mouse.p, close_button_a);
         }
-        win->close_button_state = evaluate_button_state(win->close_button_state, close_button_hovered, input);
+        win->close_button_state = evaluate_click_state(win->close_button_state, close_button_hovered, input);
     }
     //
 
@@ -791,7 +1210,7 @@ void begin_ui_build(UI_Manager *ui)
 #endif
 }
 
-void end_ui_build(UI_Manager *ui, Input_Manager *input)
+void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon *_cursor)
 {
     Array<u8, ALLOC_TMP> temp = {0};
 
@@ -925,17 +1344,41 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
         }
     }
 
+
+    UI_Element *element_that_became_active = NULL;
+    
+    if(input->mouse.buttons_down & MB_PRIMARY)
+    {
+        if(hovered_element &&
+           hovered_element->type == TEXTFIELD)
+        {
+            if(ui->active_element != hovered_element_id) {
+                // ACTIVATE ELEMENT //
+                ui->active_element = hovered_element_id;
+                reset_textfield_state(&ui->active_textfield_state);
+            
+                element_that_became_active = hovered_element;
+            }
+        }
+        else {
+            ui->active_element = 0;
+        }   
+    }
+
     // UPDATE ELEMENTS //
     for(s64 i = 0; i < ui->elements.n; i++)
     {
         UI_Element *e = &ui->elements[i];
-
+        
         switch(e->type) {
-            case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
-            case BUTTON: update_button(e, input, hovered_element); break;
-            case TEXTFIELD: break;
-            case SLIDER: update_slider(e, input, hovered_element); break;
-            case DROPDOWN: update_dropdown(e, input, hovered_element); break;
+            case WINDOW:    update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
+            case BUTTON:    update_button(e, input, hovered_element);    break;
+            case TEXTFIELD: {
+                bool became_active = (element_that_became_active == e);
+                update_textfield(e, ui->element_ids[i], input, hovered_element, ui, fonts, became_active); break;
+            } break;
+            case SLIDER:    update_slider(e, input, hovered_element);    break;
+            case DROPDOWN:  update_dropdown(e, input, hovered_element);  break;
 
             case UI_TEXT:
                 break;
@@ -943,4 +1386,11 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input)
             default: Assert(false); break;
         }
     }
+    
+
+    if(hovered_element &&
+       hovered_element->type == TEXTFIELD)
+        *_cursor = CURSOR_ICON_I_BEAM;
+    else
+        *_cursor = CURSOR_ICON_DEFAULT;
 }

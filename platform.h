@@ -102,6 +102,12 @@ enum Mouse_Button
     MB_FIFTH     = 0b10000  // Typically the "Browser Forward" button
 };
 
+enum Cursor_Icon
+{
+    CURSOR_ICON_DEFAULT,
+    CURSOR_ICON_I_BEAM
+};
+
 
 struct Window_Delegate
 {
