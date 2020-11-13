@@ -510,15 +510,11 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     
     // CLAMP CARETS //
     if(caret->cp > text_cp_length) {
-        Debug_Print("Clamp caret");
         caret->cp   = text_cp_length;
-        caret->byte = text.length;
     }
         
     if(highlight_start->cp > text_cp_length) {
-        Debug_Print("Clamp highlight");
         highlight_start->cp   = text_cp_length;
-        highlight_start->byte = text.length;
     }
     // /////////// //
 
@@ -529,7 +525,7 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     else
     {
         // @BadName because we set this to say that we want to erase things after caret.
-        auto initial_byte_caret = ui->active_textfield_state.caret.byte;
+        strlength initial_byte_caret = codepoint_start(ui->active_textfield_state.caret.cp, text.data, text.data + text.length) - text.data; // @Speed
         
         // INSERT TEXT //
         u8 *input_at  = input->text.e;
@@ -563,7 +559,7 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
                 *caret = *highlight_start;
             } else {
                 // @Hack...
-                initial_byte_caret = highlight_start->byte;
+                initial_byte_caret = codepoint_start(highlight_start->cp, text.data, text.data + text.length) - text.data; // @Speed
                 *highlight_start = *caret;
             }
 
@@ -571,7 +567,7 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
         }
 
         // Check if we should erase at insertion point. See comment in Input_Manager for an explanation of why we can do it like this.
-        u8 *pre_end = text.data + caret->byte;
+        u8 *pre_end = codepoint_start(caret->cp, text.data, text.data + text.length); // @Speed
         while(input_at < input_end)
         {
             u8 *cp_start = input_at;
@@ -587,7 +583,6 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
                 pre_end = find_codepoint_backwards(pre_end);
 
                 caret->cp   -= 1;
-                caret->byte -= erased_cp_end - pre_end;
                 *highlight_start = *caret;
 
                 *_text_did_change = true;
@@ -617,7 +612,6 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
                 
             tf->text.length += byte_length;
             
-            caret->byte += byte_length;
             caret->cp   += 1;
             *highlight_start = *caret;
 
@@ -631,15 +625,16 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
             tf->text.length += end_length;
         }
 
-        Assert(ui->active_textfield_state.caret.byte <= tf->text.length);
-        Assert(ui->active_textfield_state.caret.byte >= 0);
-        Assert(ui->active_textfield_state.caret.cp >= 0);
-        Assert(ui->active_textfield_state.caret.cp <= text_cp_length);
-        
-        Assert(ui->active_textfield_state.highlight_start.byte <= tf->text.length);
-        Assert(ui->active_textfield_state.highlight_start.byte >= 0);
-        Assert(ui->active_textfield_state.highlight_start.cp >= 0);
-        Assert(ui->active_textfield_state.highlight_start.cp <= text_cp_length);
+#if DEBUG // TODO Make a DEBUG_SLOW
+        {
+            auto length = count_codepoints(get_ui_string(tf->text, ui));
+            Assert(ui->active_textfield_state.caret.cp >= 0);
+            Assert(ui->active_textfield_state.caret.cp <= length);
+
+            Assert(ui->active_textfield_state.highlight_start.cp >= 0);
+            Assert(ui->active_textfield_state.highlight_start.cp <= length);
+        }
+#endif
     }
 
     // //// //    
@@ -661,7 +656,6 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
     String &text = bt->text;
     auto *caret = &tf_state->caret;
     
-    u8 *new_caret_at = text.data + caret->byte;
     int cp_delta = 0;
 
     bool did_go = false;
@@ -732,9 +726,7 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
             
 
             // FIND NEW CARET //
-            strlength rel_byte;  // @Temporary? (Remove byte caret?)
-            caret->cp = new_line_start_cp_index + codepoint_index_from_x(x, new_line_start, new_line_end, bt, fonts, true, &rel_byte);
-            caret->byte = new_line_start_byte + rel_byte; // @Temporary? (Remove byte caret?)
+            caret->cp = new_line_start_cp_index + codepoint_index_from_x(x, new_line_start, new_line_end, bt, fonts, true);
             // /////////// //
 
             did_go = true;
@@ -743,12 +735,9 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
 
         case LEFT:  {
             // NAVIGATE LEFT //
-            if(new_caret_at > text.data)
+            if(codepoint_start(caret->cp, text.data, text.data + text.length) > text.data)
             {    
-                int cp = eat_codepoint_backwards(&new_caret_at);
                 caret->cp--;
-                caret->byte  = new_caret_at - text.data;
-
                 did_go = true;
             }
         } break;
@@ -757,12 +746,9 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
             // NAVIGATE RIGHT //
             u8 *end = text.data + text.length;
 
-            if(new_caret_at < end)
+            if(codepoint_start(caret->cp, text.data, text.data + text.length) < end)
             {    
-                int cp = eat_codepoint(&new_caret_at);
                 caret->cp++;
-                caret->byte  = new_caret_at - text.data;
-
                 did_go = true;
             }
         } break;
@@ -829,10 +815,8 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
             bt = create_textfield_body_text(text, text_a, fonts);
         
         highlight_start->cp = 0;
-        highlight_start->byte = 0;
 
         caret->cp   = bt.num_codepoints;
-        caret->byte = text.length;
     }
     // ////////// //
     
@@ -844,11 +828,9 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
         Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, text_a.p, fonts);
 
         caret->cp   = mouse_text_location.cp_index;
-        caret->byte = mouse_text_location.byte;
         
         if(tf->click_state & PRESSED_NOW && !shift_is_down) {
             highlight_start->cp   = mouse_text_location.cp_index;
-            highlight_start->byte = mouse_text_location.byte;
         };
     }
     

@@ -99,6 +99,20 @@ u32 eat_codepoint(u8 **Pointer, bool UTF16 = false)
     return Result;
 }
 
+u8 *codepoint_start(u64 codepoint_index, u8 *start, u8 *end)
+{    
+    u64 ix = 0;
+    
+    u8 *at = start;
+    while(at < end) {
+        if(ix == codepoint_index) return at;
+        eat_codepoint(&at);
+        ix++;
+    }
+
+    return at;
+}
+
 u32 eat_codepoint_backwards(u8 **at)
 {
     u8 *cp_start = find_codepoint_backwards(*at);

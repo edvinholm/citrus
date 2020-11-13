@@ -222,7 +222,6 @@ struct UI_Element
 struct UI_Textfield_Caret
 {
     u64 cp;
-    u64 byte;
 };
 
 struct UI_Textfield_State
