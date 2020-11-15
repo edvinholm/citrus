@@ -17,6 +17,8 @@ DEL citrus.pdb
 DEL citrus_release.pdb
 echo ----------------------------------------------------------------
 
+
+REM Comment out 'goto' to build client.
 :client
 REM goto server
 
@@ -40,8 +42,9 @@ REM cl -D OS_WINDOWS=1 -D DEBUG=1 -D UNICODE_DB_PARSER=1  /EHsc main.cpp /Feucd_
 IF %ERRORLEVEL% NEQ 0 goto end
 echo Done.
 
+REM Comment out 'goto' to build server.
 :server
-goto shaders
+REM goto shaders
 
 echo ----------------------------------------------------------------
 
