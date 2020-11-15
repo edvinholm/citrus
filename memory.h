@@ -58,7 +58,6 @@ Allocator app_allocator    = {0};
 Allocator game_allocator   = {0};
 Allocator gfx_allocator    = {0};
 Allocator ui_allocator     = {0};
-Allocator server_allocator = {0};
 Allocator dev_allocator    = {0};
 Allocator platform_allocator = {0};
 
@@ -69,7 +68,6 @@ Allocator *allocators[] = {
     &game_allocator,
     &gfx_allocator,
     &ui_allocator,
-    &server_allocator,
     &dev_allocator,
     &platform_allocator
 };
