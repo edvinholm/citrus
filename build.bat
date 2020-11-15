@@ -17,6 +17,9 @@ DEL citrus.pdb
 DEL citrus_release.pdb
 echo ----------------------------------------------------------------
 
+:client
+REM goto server
+
 echo ############# COMPILING CLIENT #############
 
 REM RELEASE BUILD (NOTE: This outputs to another .exe file name than test builds do)
@@ -37,16 +40,21 @@ REM cl -D OS_WINDOWS=1 -D DEBUG=1 -D UNICODE_DB_PARSER=1  /EHsc main.cpp /Feucd_
 IF %ERRORLEVEL% NEQ 0 goto end
 echo Done.
 
-REM echo ----------------------------------------------------------------
-
-REM echo ############# COMPILING SERVER #############
-REM cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib opengl32.lib gdi32.lib -incremental:no /opt:ref /opt:icf /nologo
-
-REM IF %ERRORLEVEL% NEQ 0 goto end
-REM echo Done.
+:server
+goto shaders
 
 echo ----------------------------------------------------------------
 
+echo ############# COMPILING SERVER #############
+cl -D OS_WINDOWS=1 -D DEBUG=1 -D SERVER=1  /EHsc main.cpp /Fecitrus_server.exe /Z7 /link Shcore.lib user32.lib Shell32.lib ws2_32.lib opengl32.lib gdi32.lib -incremental:no /opt:ref /opt:icf /nologo
+
+IF %ERRORLEVEL% NEQ 0 goto end
+echo Done.
+
+echo ----------------------------------------------------------------
+
+
+:shaders
 echo Copying shader code...
 
 copy vertex_shader.glsl    "res\vertex_shader.glsl"

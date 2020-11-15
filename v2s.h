@@ -22,5 +22,4 @@ struct v2s
         };
         s32 comp[2];
     };
-
 };

@@ -42,6 +42,8 @@ const double PI_2 = 2 * 3.14159265359;
 #include "v2.cpp"
 #include "v3s.h"
 #include "v3.cpp"
+#include "v4s.h"
+#include "v4u.h"
 
 v3 vecmatmul(m4x4 m, v3 v);
 

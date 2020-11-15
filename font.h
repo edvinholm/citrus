@@ -57,7 +57,8 @@ enum Font_Size
 };
 
 
-inline int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversampling_rate = true)
+inline
+int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversampling_rate = true)
 {
     int h;
     
@@ -80,7 +81,7 @@ inline int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversamplin
     }
 
     if(multiply_by_oversampling_rate)
-        h *= TWEAK_font_oversampling_rate;
+        h *= tweak_float(TWEAK_FONT_OVERSAMPLING_RATE);
     return h;
 }
 

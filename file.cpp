@@ -113,11 +113,7 @@ FILE *open_user_file(char *filename, bool for_writing = false, String_Builder *b
     string_append(filename, *builder);
     filename = copy_built_string_as_cstring(*builder, ALLOC_TMP);
 
-    Debug_Print("Opening user file '%s'\n", filename);
-
     FILE *file = open_file(filename, for_writing);
-
-    Debug_Print("open_file %s (%d)\n", (file) ? "success" : "fail", errno);
     
     if(!file) return NULL;
     return file;

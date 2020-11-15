@@ -18,7 +18,7 @@ bool update_gpu_resources(Graphics *gfx)
     
     // GET MAX NUM MULTISAMPLE SAMPLES //
     int max_num_samples = gpu_max_num_multisample_samples();
-    int num_samples = min(TWEAK_max_multisample_samples, max_num_samples);
+    int num_samples = min(tweak_int(TWEAK_MAX_MULTISAMPLE_SAMPLES), max_num_samples);
     // 
 
     // UPDATE OR CREATE MULTISAMPLE TEXTURE //
@@ -168,8 +168,6 @@ bool init_graphics(Window *window, Graphics *gfx)
     // Create multisample framebuffer
     gpu_create_framebuffers(1, &gfx->multisample_framebuffer);
 
-    
-    gpu_set_vsync_enabled(TWEAK_vsync_enabled);
 
     return true;
 }
@@ -257,8 +255,8 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
     const float visible_border_w = 2;
     Rect r = shrunken(a, window_border_width-visible_border_w);
-    const v4 c_purple = { 0.3, 0, 0.9, 1 };
-    quad(r, c_purple, gfx);
+    
+    quad(r, tweak_v4(TWEAK_WINDOW_BORDER_COLOR), gfx);
 
     r = shrunken(r, visible_border_w);
 
@@ -682,6 +680,8 @@ DWORD render_loop(void *loop_)
                 unlock_mutex(loop->mutex);
                 break;
             }
+                
+            gpu_set_vsync_enabled(tweak_bool(TWEAK_VSYNC));
             
 #if DEBUG
             draw_calls_last_frame = gfx.debug.num_draw_calls;
@@ -1032,9 +1032,10 @@ void client_set_window_delegate(Window *window, Client *client)
 
 
 int client_entry_point(int num_args, char **arguments)
-{    
+{
+    String_Builder sb = {0};
     Debug_Print("I am a client.\n");
-
+    
     // INIT CLIENT //
     Client client = {0};
     Layout_Manager *layout = &client.layout;
@@ -1043,8 +1044,16 @@ int client_entry_point(int num_args, char **arguments)
     Window *main_window = &client.main_window;
     //--
 
+    // @Norelease: Doing Developer stuff in release build...
+    init_developer(&client.developer);
+    load_tweaks(client.developer.user_id, &sb);
+#if OS_WINDOWS
+    setup_tweak_hotloading();
+#endif
+
     // CREATE WINDOW //
-    platform_create_window(main_window, "Citrus", 1440, 1000, 72, 8);
+    v4s window_rect = tweak_v4s(TWEAK_INITIAL_OS_WINDOW_RECT);
+    platform_create_window(main_window, "Citrus", window_rect.w, window_rect.h, window_rect.x, window_rect.y);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
@@ -1067,7 +1076,6 @@ int client_entry_point(int num_args, char **arguments)
 
 #if DEBUG || true // Debug stuff for keeping track of things like FPS and UPS.
     u64 last_second = 0;
-    String_Builder sb = {0};
 #endif
    
     while(true)
@@ -1097,6 +1105,10 @@ int client_entry_point(int num_args, char **arguments)
         
         lock_mutex(render_loop.mutex);
         {
+#if OS_WINDOWS
+            maybe_reload_tweaks(client.developer.user_id, &sb);
+#endif
+            
             client.main_window_a = window_a;
             
             

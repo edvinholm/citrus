@@ -1,5 +1,7 @@
 
 local_env.bat
+local.tweaks
+local.dev_id
 
 citrus.exe
 citrus.pdb

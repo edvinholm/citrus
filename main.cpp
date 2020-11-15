@@ -34,6 +34,33 @@
 
 // --
 
+
+struct App_Version
+{
+    u16 comp[4];
+};
+bool equal(App_Version &a, App_Version &b)
+{
+    for(int i = 0; i < ARRLEN(a.comp); i++)
+        if(a.comp[i] != b.comp[i]) return false;
+
+    return true;
+}
+
+#if UNICODE_DB_PARSER
+#elif SERVER
+App_Version APP_version = {{
+#include "_app_version_server"
+}};
+#else
+App_Version APP_version = {{
+#include "_app_version_client"
+}};
+#endif
+
+
+// --
+
 #include "platform.h"
 
 #if OS_WINDOWS
@@ -55,6 +82,10 @@
 
 // --
 
+#include "tweaks.h"
+
+// --
+
 #include "memory.cpp"
 
 #include "array.cpp"
@@ -66,6 +97,9 @@
 #include "file.cpp"
 #include "file_read.cpp"
 #include "file_write.cpp"
+
+#include "developer.cpp"
+#include "tweaks.cpp"
 
 #include "thread.cpp"
 

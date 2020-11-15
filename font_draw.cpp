@@ -78,10 +78,12 @@ Body_Text_Drawer body_text_drawer(Graphics *gfx, v2 p, Font_Size size, Font *fon
 //NOTE: Pass {bound_slot_for_texture(font_texture), ... x6} as vertex_textures... This is an optimization.
 v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_textures, Graphics *gfx,
               Rect *clip_rect = NULL, bool do_draw = true)
-{   
+{
+    float oversampling_rate = tweak_float(TWEAK_FONT_OVERSAMPLING_RATE);
+       
     Rect a;
     a.p = p;
-    a.s = { glyph->pixel_s.x / TWEAK_font_oversampling_rate, glyph->pixel_s.y / TWEAK_font_oversampling_rate };
+    a.s = { glyph->pixel_s.x / oversampling_rate, glyph->pixel_s.y / oversampling_rate }; // @Speed: cache pixel_s scaled by oversampling rate.
     
     if(do_draw) {
         

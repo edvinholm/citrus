@@ -177,12 +177,14 @@ bool load_glyph(int codepoint, Font_Size size, Glyph_Info *existing_glyph, Font 
                               sized.sprite_frame_p0.y + glyph_h / (float)map.h };
     sized.pixel_s = { (float)glyph_w, (float)glyph_h };
 
+    float oversampling_rate = tweak_float(TWEAK_FONT_OVERSAMPLING_RATE);
+    
     int left_side_bearing;
     int advance_width;
     stbtt_GetGlyphHMetrics(font_info, glyph_index, &advance_width, &left_side_bearing);
-    sized.offset = { left_side_bearing * scale / TWEAK_font_oversampling_rate,
-                     iy0 / TWEAK_font_oversampling_rate };
-    sized.advance_width = advance_width * scale / TWEAK_font_oversampling_rate;
+    sized.offset = { left_side_bearing * scale / oversampling_rate,
+                     iy0 / oversampling_rate };
+    sized.advance_width = advance_width * scale / oversampling_rate;
 
     return true;
 }
@@ -291,11 +293,13 @@ bool load_font(byte *font_file_contents, Font *_font)
 void init_fonts(Font *fonts, Graphics *gfx)
 {
     TIMED_FUNCTION;
+
+    int texture_size = tweak_uint(TWEAK_FONT_TEXTURE_SIZE);
     
     for(int f = 0; f < NUM_FONTS; f++)
     {
         // IMPORTANT: This does NOT create a gpu texture. The texture will be created in game_init_graphics, so that we can redo it when we lose the graphics context.
-        gfx->glyph_maps[f] = create_sprite_map(TWEAK_font_texture_size, TWEAK_font_texture_size, font_textures[f], ALLOC_GFX, gfx);
+        gfx->glyph_maps[f] = create_sprite_map(texture_size, texture_size, font_textures[f], ALLOC_GFX, gfx);
 
         Font *font = &fonts[f];
 

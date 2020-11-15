@@ -665,6 +665,17 @@ String platform_get_user_directory()
     return STRING("usr/");
 }
 
+String platform_get_working_directory(Allocator_ID allocator)
+{
+    auto length_including_zero = GetCurrentDirectory(0, NULL);
+    u8 *path = alloc(length_including_zero, allocator);
+
+    auto result = GetCurrentDirectory(length_including_zero, (LPSTR)path);
+    Assert(result == length_including_zero-1);
+    
+    return {path, length_including_zero-1};
+}
+
 float platform_get_status_bar_height()
 {
     return 20;

@@ -10,4 +10,8 @@ struct Client
     Rect main_window_a;
 
     Font fonts[NUM_FONTS] = {0};
+
+    
+    // @Norelease: Doing Developer stuff in release build...
+    Developer developer;
 };

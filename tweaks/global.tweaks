@@ -1,0 +1,19 @@
+
+# This is a comment.
+# Please don't remove tweaks from the global file. If you want to disable something, comment it out instead.
+
+# About tweaks:
+# This global file contains the default values, for all machines and devs.
+# local.tweaks contains values for the local machine. This file is .gitignore:d and will not be checked in.
+# <dev_id>.tweaks contains values for the current developer. Set developer ID for the local machine by writing putting it in local.dev_id in the project's root directory. (The file should contain the ID, like "edvinholm" and nothing more)
+
+vsync false
+
+max_multisample_samples 8
+
+font_texture_size       2048
+font_oversampling_rate  2.0
+
+initial_os_window_rect  8 8 1440 1000
+
+window_border_color  0.3 0.2 0.9 1
