@@ -9,9 +9,6 @@ REM --------
 
 
 echo ----------------------------------------------------------------
-Taskkill /IM citrus.exe /F 
-Taskkill /IM citrus_release.exe /F
-echo ----------------------------------------------------------------
 DEL vc140.pdb
 DEL citrus.pdb
 DEL citrus_release.pdb
@@ -21,6 +18,9 @@ echo ----------------------------------------------------------------
 REM Comment out 'goto' to build client.
 :client
 REM goto server
+
+Taskkill /IM citrus.exe /F 
+Taskkill /IM citrus_release.exe /F
 
 echo ############# COMPILING CLIENT #############
 
@@ -45,6 +45,8 @@ echo Done.
 REM Comment out 'goto' to build server.
 :server
 REM goto shaders
+
+Taskkill /IM citrus_server.exe /F
 
 echo ----------------------------------------------------------------
 

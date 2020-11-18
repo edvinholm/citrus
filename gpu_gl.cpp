@@ -217,6 +217,11 @@ void gpu_update_framebuffer(GPU_Framebuffer_ID id, GPU_Texture_ID color_attachme
     }
     
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+    // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
+    // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
+    // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
+    // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
     Assert(status == GL_FRAMEBUFFER_COMPLETE);
 }
 

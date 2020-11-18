@@ -165,6 +165,8 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
         case SLIDER:
         case DROPDOWN:
         case UI_TEXT:
+
+        case WORLD_VIEW:
             break;
             
         default: Assert(false); break;
@@ -181,6 +183,8 @@ void clear_ui_element(UI_Element *e)
         case TEXTFIELD:
         case SLIDER:
         case UI_TEXT:
+
+        case WORLD_VIEW:
             break;
 
         default: Assert(false); break;
@@ -1175,6 +1179,28 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
 }
 
+void world_view(UI_Context ctx)
+{
+    U(ctx);
+    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), WORLD_VIEW, ctx.manager);
+    
+    auto *view = &e->world_view;
+    view->a = area(ctx.layout);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1314,6 +1340,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
             case DROPDOWN:  mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
 
             case UI_TEXT:
+            case WORLD_VIEW:                
                 break;
                 
             default: Assert(false); break;
@@ -1363,6 +1390,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
             case DROPDOWN:  update_dropdown(e, input, hovered_element);  break;
 
             case UI_TEXT:
+            case WORLD_VIEW:
                 break;
                 
             default: Assert(false); break;

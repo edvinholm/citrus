@@ -9,7 +9,14 @@ struct Thread
     HANDLE handle;
 };
 
-
+struct Socket
+{
+    SOCKET handle;
+};
+bool equal(Socket *a, Socket *b)
+{
+    return a->handle == b->handle;
+}
 
 
 u32 platform_big_endian_32(u32 int_with_machine_endianness);

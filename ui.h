@@ -113,7 +113,9 @@ enum UI_Element_Type
     TEXTFIELD,
     SLIDER,
     DROPDOWN,
-    UI_TEXT
+    UI_TEXT,
+
+    WORLD_VIEW
 };
 
 enum UI_Click_State_
@@ -204,6 +206,11 @@ void clear(UI_Dropdown *dropdown)
     clear(&dropdown->options);
 }
 
+struct UI_World_View
+{
+    Rect a;
+};
+
 
 struct UI_Element
 {
@@ -216,6 +223,8 @@ struct UI_Element
         UI_Textfield textfield;
         UI_Slider    slider;
         UI_Dropdown  dropdown;
+
+        UI_World_View world_view;
     };
 };
 

@@ -762,3 +762,156 @@ void platform_set_cursor_icon(Cursor_Icon icon)
     
     SetCursor(cursor);
 }
+
+
+
+
+// REMEMBER to do platform_deinit_socket_use() when you're done.
+bool platform_init_socket_use() {
+    WSADATA wsa_data;
+    return (WSAStartup(MAKEWORD(2,2), &wsa_data) == 0);
+}
+
+bool platform_deinit_socket_use() {
+    return (WSACleanup() == 0);
+}
+
+// REMEMBER to do platform_init_socket_use() first.
+bool platform_create_tcp_socket(Socket *_sock, bool blocking = true)
+{
+    Socket sock = {0};
+    
+    sock.handle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(sock.handle == INVALID_SOCKET) return false;
+
+    u_long blocking_mode = (!blocking) ? 1 : 0;
+
+    if(ioctlsocket(sock.handle, FIONBIO, &blocking_mode) != 0) {
+        Debug_Print("Unable to set blocking to %s for tcp socket. WSA error: %d\n", (blocking) ? "true" : "false", WSAGetLastError());
+        return false;
+    }
+        
+    *_sock = sock;
+    return true;
+}
+
+bool platform_close_socket(Socket *socket)
+{
+    return (closesocket(socket->handle) == 0);
+}
+
+bool platform_connect_socket(Socket *sock, char *address, u16 port)
+{
+    sockaddr_in address_info = {0}; // Don't remove this. We need to zero .sin_zero.
+    address_info.sin_family = AF_INET;
+    address_info.sin_port   = htons(port);
+
+    auto inet_pton_result = inet_pton(AF_INET, address, &address_info.sin_addr);
+    if(inet_pton_result != 1) {
+        Debug_Print("inet_pton failed: ");
+        if(inet_pton_result == 0)       Debug_Print("Invalid IPv4/IPv6 address string '%s'.\n", address);
+        else if(inet_pton_result == -1) Debug_Print("WSA Error: %d\n", WSAGetLastError());
+        else {
+            Assert(false);
+            Debug_Print("inet_pton_result is %d, which is not a valid result according to the documentation.\n", inet_pton_result);
+        }
+        return false;
+    }
+    
+    return (connect(sock->handle, (const sockaddr *)&address_info, sizeof(address_info)) != SOCKET_ERROR);
+}
+
+// REMEMBER to do platform_init_socket_use() first.
+bool platform_bind_socket(Socket *sock, u16 port)
+{
+    sockaddr_in addr = {0};
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port        = htons(port);
+
+    int result = bind(sock->handle, (sockaddr *)&addr, sizeof(addr));
+    return (result == 0);
+}
+
+// REMEMBER to do platform_init_socket_use() first.
+bool platform_start_listening_to_socket(Socket *sock, int max_backlog_length)
+{
+    return (listen(sock->handle, max_backlog_length) == 0);
+}
+
+// REMEMBER to do platform_init_socket_use() first.
+bool platform_accept_next_incoming_socket_connection(Socket *listening_socket, Socket *_client_socket, bool *_error)
+{
+    *_error = false;
+    
+    Zero(*_client_socket);
+    _client_socket->handle = accept(listening_socket->handle, 0, 0); // @Incomplete: Return address
+
+    if(_client_socket->handle == INVALID_SOCKET) {
+        if(WSAGetLastError() != WSAEWOULDBLOCK) {
+            *_error = true;
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+// REMEMBER to do platform_init_socket_use() first.
+bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
+{
+    u8 *at  = data;
+    u8 *end = data + length;
+    Assert(at < end);
+    
+    while(at < end) {
+        int result = send(sock->handle, (const char *)at, end - at, 0);
+        if(result == SOCKET_ERROR) return false;
+        at += result;
+    }
+    
+    Assert(at == end);
+    return true;
+}
+
+bool platform_socket_has_bytes_to_read(Socket *sock)
+{
+    u_long bytes_available;
+    if(ioctlsocket(sock->handle, FIONREAD, &bytes_available) != 0) {
+        Debug_Print("ioctlsocket failed in %s.\n", __FUNCTION__);
+        Assert(false);
+        return false;
+    }
+    
+    return (bytes_available > 0);
+}
+
+bool platform_read_from_socket(u8 *_data, u64 length, Socket *sock)
+{
+    u8 *at  = _data;
+    u8 *end = _data + length;
+    Assert(at < end);
+    
+    while(at < end) {
+        int result = recv(sock->handle, (char *)at, end - at, 0);
+        if(result == SOCKET_ERROR) {
+            Debug_Print("recv failed with WSA Error %d\n", WSAGetLastError());
+            return false;
+        }
+        else if(result == 0)
+        {
+            // Socket was closed.
+            return false;
+        }
+        at += result;
+    }
+    
+    Assert(at == end);
+    return true;
+}
+
+
+bool platform_set_socket_read_timeout(Socket *sock, DWORD milliseconds)
+{
+    return (setsockopt(sock->handle, SOL_SOCKET, SO_RCVTIMEO, (const char *)&milliseconds, sizeof(milliseconds)) == 0);
+}

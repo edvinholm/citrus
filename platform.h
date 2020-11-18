@@ -13,6 +13,9 @@ struct Window;
 struct Mutex;
 struct Thread;
 struct String;
+struct Socket;
+
+bool equal(Socket *a, Socket *b);
 
 enum virtual_key
 {

@@ -1,4 +1,7 @@
 
+
+
+
 // @Temporary
 int fps = 0;
 int frames_this_second = 0;
@@ -179,6 +182,23 @@ bool init_graphics(Window *window, Graphics *gfx)
 
 
 struct Render_Loop
+{
+    enum State
+    {
+        INITIALIZING,
+        RUNNING,
+        SHOULD_EXIT
+    };
+    
+    Mutex mutex;
+    
+    State  state;
+    Thread thread;
+    Client *client;
+};
+
+
+struct Network_Loop
 {
     enum State
     {
@@ -628,6 +648,36 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     quad(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
+void draw_world_view(UI_Element *e, Room *room, Graphics *gfx)
+{
+    Assert(e->type == WORLD_VIEW);
+    auto *view = &e->world_view;
+
+    const v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
+    const v4 grass = {0.25, 0.6,  0.1, 1.0f};
+    const v4 stone = {0.42, 0.4, 0.35, 1.0f};
+    const v4 water = {0.1,  0.3, 0.5, 1.0f};
+
+    auto *tiles = room->shared.tiles;
+
+    float tile_s = min(view->a.w / room_size_x, view->a.h / room_size_y);
+    
+    for(int y = 0; y < room_size_y; y++) {
+        for(int x = 0; x < room_size_x; x++) {
+
+            Rect tile_a = { view->a.x + tile_s * x, view->a.y + tile_s * y, tile_s, tile_s };
+            
+            switch(tiles[y * room_size_x + x]) {
+                case TILE_SAND:  quad(tile_a, sand,  gfx); break;
+                case TILE_GRASS: quad(tile_a, grass, gfx); break;
+                case TILE_STONE: quad(tile_a, stone, gfx); break;
+                case TILE_WATER: quad(tile_a, water, gfx); break;
+                default: break;
+            }
+        }
+    }
+}
+
 
 DWORD render_loop(void *loop_)
 {
@@ -723,6 +773,8 @@ DWORD render_loop(void *loop_)
                     case SLIDER:   draw_slider(e, &gfx);     break;
                     case DROPDOWN: draw_dropdown(e, &gfx); break;
 
+                    case WORLD_VIEW: draw_world_view(e, &client->game.room, &gfx); break;
+                        
                     default: Assert(false); break;
                 }
 
@@ -763,7 +815,7 @@ DWORD render_loop(void *loop_)
     return 0;
 }
 
-// NOTE: Assumes you've zeroed *_ctx
+// NOTE: Assumes you've zeroed *_loop
 bool start_render_loop(Render_Loop *_loop, Client *client)
 {
     create_mutex(_loop->mutex);
@@ -801,6 +853,303 @@ void stop_render_loop(Render_Loop *loop)
 
     delete_mutex(loop->mutex);
 }
+
+
+
+
+bool connect_to_room_server(Room_ID room_id, Socket *_socket)
+{
+    Socket sock;
+    if(!platform_create_tcp_socket(&sock)) {
+        Debug_Print("Unable to create socket.\n");
+        return false;
+    }
+
+    if(!platform_connect_socket(&sock, "127.0.0.1", SERVER_PORT)) {
+        Debug_Print("Unable to connect socket. WSA Error: %d\n", WSAGetLastError());
+        return false;
+    }
+
+    Write(u64, room_id, &sock);
+
+    platform_set_socket_read_timeout(&sock, 5 * 1000);
+    
+    Fail_If_True(read_room_connect_status_code(&sock) != ROOM_CONNECT__REQUEST_RECEIVED);
+    Fail_If_True(read_room_connect_status_code(&sock) != ROOM_CONNECT__CONNECTED);
+
+    platform_set_socket_read_timeout(&sock, 1000);
+    
+    *_socket = sock;
+    
+    return true;
+}
+
+bool disconnect_from_room_server(Room_Server_Connection *rs_con, bool say_goodbye = true)
+{
+    Debug_Print("Disconnecting from rom server...\n");
+    
+    // IMPORTANT: REMEMBER: Even if we fail to say goodbye, always close the socket anyway.
+    bool result = true;
+
+    if(say_goodbye)
+    {
+        // REMEMBER: This is special, so don't do anything fancy here that can put us in an infinite disconnection loop.
+        if(!write_rsb_Goodbye_packet(&rs_con->socket)) result = false;
+        RCB_Packet_Header header;
+        if(!read_RCB_Packet_Header(&header, &rs_con->socket) ||
+           header.type != RCB_GOODBYE)
+        {
+            result = false;
+        }
+    }
+    
+    if(!platform_close_socket(&rs_con->socket)) result = false;
+
+    rs_con->current_room = 0;
+    rs_con->status = ROOM_SERVER_DISCONNECTED;
+    
+    return result;
+}
+
+
+#define RCB_Header(Socket_Ptr, Packet_Ident, ...)                       \
+    if(!read_rcb_##Packet_Ident##_header(Socket_Ptr, __VA_ARGS__)) {   \
+        Debug_Print("Failed to read RCB header.\n");                \
+        return false;                                               \
+    }                                                               \
+
+bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_server_said_goodbye)
+{        
+    RCB_Packet_Header header;
+    Read(RCB_Packet_Header, &header, sock);
+
+    *_server_said_goodbye = false;
+
+    switch(header.type) {
+
+        case RCB_GOODBYE: {
+            // Kicked from the server :(
+            Debug_Print("The server said goodbye.\n");
+            *_server_said_goodbye = true;
+        } break;
+        
+        case RCB_TILES_CHANGED: {
+            u64 tile0, tile1;
+            RCB_Header(sock, Tiles_Changed, &tile0, &tile1);
+            Debug_Print("Tiles changed. tile0 = %llu, tile1 = %llu\n", tile0, tile1);
+
+            Fail_If_True(tile0 >= tile1);
+            
+            // @Temporary: Reuse some buffer. (WE CAN'T USE TEMPORARY MEMORY BECAUSE WE HAVE NOT LOCKED THE MUTEX AT THIS POINT)
+            size_t rec_tiles_size = sizeof(Tile) * (tile1 - tile0);
+            Tile *rec_tiles;
+            rec_tiles = (Tile *)malloc(rec_tiles_size);
+            defer(free(rec_tiles););
+
+            //TODO @Speed: Make a Read_N, where we read N of type Type. So we can unroll that loop etc....
+            {
+#if 0
+                for(int i = 0; i < tile1 - tile0; i++) {
+                    Read(Tile, rec_tiles + i, sock);
+                }
+#else
+                Assert(sizeof(Tile) == 1);
+                Read_Bytes(rec_tiles, rec_tiles_size, sock);
+#endif
+            }
+            
+            lock_mutex(mutex);
+            {
+                Tile *tiles = room->shared.tiles;
+                for(int t = tile0; t < tile1; t++)
+                {
+                    tiles[t] = rec_tiles[t-tile0];
+                }
+            }
+            unlock_mutex(mutex);
+        } break;
+            
+        default: {
+            Assert(false);
+            return false;
+        } break;
+    }
+
+    return true;
+}
+
+bool talk_to_room_server(Socket *sock, Mutex &mutex, Room *room, bool *_server_said_goodbye)
+{
+    while(true) {
+        if(!platform_socket_has_bytes_to_read(sock)) break;
+
+        if(!read_and_handle_rcb_packet(sock, mutex, room, _server_said_goodbye)) {
+            // TODO @Norelease
+            Debug_Print("Unable to read and handle RCB packet. What should we do?.\n");
+            return false;
+        }
+
+        if(*_server_said_goodbye) break;
+    }
+
+    return true;
+}
+
+DWORD network_loop(void *loop_)
+{
+    Network_Loop *loop = (Network_Loop *)loop_;
+
+    Client *client;
+
+    Room_Server_Connection rs_connection;
+
+    // START INITIALIZATION //
+    lock_mutex(loop->mutex);
+    {
+        Assert(loop->state == Network_Loop::INITIALIZING);
+        
+        client = loop->client;
+        rs_connection = client->server_connections.room;
+        
+        // INITIALIZATION DONE //
+        loop->state = Network_Loop::RUNNING;
+    }
+    unlock_mutex(loop->mutex);
+
+    //
+    bool room_connect_requested;
+    Room_ID requested_room;
+    //
+    
+    while(true) {
+        lock_mutex(loop->mutex);
+        {
+            if(loop->state == Network_Loop::SHOULD_EXIT) {
+                unlock_mutex(loop->mutex);
+
+                // DISCONNECT FROM ALL CONNECTED SERVERS //
+                if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+                    if(!disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed.\n"); }
+                    else {
+                        Debug_Print("Disconnected from room server successfully.\n");
+                    }
+                }
+                
+                break;
+            }
+
+            room_connect_requested = client->server_connections.room_connect_requested;
+            requested_room         = client->server_connections.requested_room;
+
+            // Make sure no-one else has written to this struct -- Network Loop is the only one that is allowed to.
+            Assert(equal(&client->server_connections.room, &rs_connection));
+            // --
+        }
+        unlock_mutex(loop->mutex);
+
+        // TALK TO SERVERS HERE //
+        {
+            // CONNECT TO ROOM SERVER //
+            if(room_connect_requested) {
+
+                if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+                    // DISCONNECT FROM CURRENT SERVER //
+                    if(!disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed.\n"); }
+                    else {
+                        Debug_Print("Disconnected from room server successfully.\n");
+                    }
+                }
+
+                Assert(rs_connection.status == ROOM_SERVER_DISCONNECTED);
+                
+                Socket sock;
+                if(connect_to_room_server(requested_room, &sock)) {
+                    rs_connection.status = ROOM_SERVER_CONNECTED;
+                    rs_connection.current_room = requested_room;
+                    rs_connection.socket = sock;
+                    
+                    rs_connection.last_connect_attempt_failed = false;
+                }
+                else
+                {
+                    rs_connection.status = ROOM_SERVER_DISCONNECTED;
+                    rs_connection.last_connect_attempt_failed = true;
+                }
+            }
+            // // //
+
+            if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+                bool server_said_goodbye;
+                bool talk = talk_to_room_server(&rs_connection.socket, loop->mutex, &client->game.room, /* IMPORTANT: Passing a pointer to the room here only works because we only have one room, and it will always be at the same place in memory. */
+                                                &server_said_goodbye);
+                if(!talk || server_said_goodbye)
+                {
+                    //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
+                    bool say_goodbye = !server_said_goodbye;
+                    disconnect_from_room_server(&rs_connection, say_goodbye);
+                }
+            }
+        }
+        // //////////////////// //
+        
+        lock_mutex(loop->mutex);
+        {
+            // Update Network Info
+
+            // IMPORTANT that we do this if here. Otherwise the main loop can set this var to true
+            //           between the time we saw it was false and now. And then we would ignore the request.
+            //           (It is not allowed to request a connection if one is already requested)
+            if(room_connect_requested) client->server_connections.room_connect_requested = false;
+
+            client->server_connections.room = rs_connection;
+        }
+        unlock_mutex(loop->mutex);
+    }
+    
+    return 0;
+}
+
+
+// NOTE: Assumes you've zeroed *_loop
+bool start_network_loop(Network_Loop *_loop, Client *client)
+{
+    create_mutex(_loop->mutex);
+    _loop->state = Network_Loop::INITIALIZING;
+    _loop->client = client;
+
+    // Start thread
+    if(!create_thread(&network_loop, _loop, &_loop->thread)) {
+        delete_mutex(_loop->mutex);
+        return false;
+    } 
+
+    // Wait for the loop to initialize itself.
+    while(true) {
+        lock_mutex(_loop->mutex);
+        defer(unlock_mutex(_loop->mutex););
+
+        if(_loop->state != Network_Loop::INITIALIZING) {
+            Assert(_loop->state == Network_Loop::RUNNING);
+            break;
+        }
+    }
+
+    return true;
+}
+
+void stop_network_loop(Network_Loop *loop)
+{
+    lock_mutex(loop->mutex);
+    Assert(loop->state == Network_Loop::RUNNING);
+    loop->state = Network_Loop::SHOULD_EXIT;
+    unlock_mutex(loop->mutex);
+
+    join_thread(loop->thread);
+
+    delete_mutex(loop->mutex);
+}
+
+
 
 
 // @Temporary
@@ -848,50 +1197,49 @@ void bar_window(UI_Context ctx, Input_Manager *input)
     end_window(window_id, ctx.manager);
 }
 
+void request_connection_to_room(Room_ID id, Client *client)
+{
+    Assert(client->server_connections.room_connect_requested == false);
+    
+    client->server_connections.requested_room = id;
+    client->server_connections.room_connect_requested = true;
+}
+
 // @Temporary
-bool foo_window(bool slider_disabled, UI_Context ctx)
+bool foo_window(bool slider_disabled, UI_Context ctx, Client *client)
 {
     U(ctx);
-
-    char *words[] = {
-        "Moo",
-        "OK",
-        "Hello",
-        "EGGPLANT",
-        "CITRUS"
-    };
-
-    words[3] = ((int)(platform_milliseconds() / 1000.0f) % 3 == 0) ? "BUTTER" : "EGGPLANT";
-
+    
     bool result = false;
-    static int selected = -1;
-    static float slider_value = 0.75f;
+
+    // @Temporary
+    String_Builder sb = {0};
+    
+    const int num_rooms = 15;
+
+    Room_ID requested_room = (client->server_connections.room_connect_requested) ? client->server_connections.requested_room : -1;
+    Room_ID current_room   = client->server_connections.room.current_room;
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
-        
-        {_BOTTOM_CUT_(32);
-            {_LEFT_HALF_();
-                dropdown(P(ctx));
-            }
-            {_RIGHT_HALF_();
-                slider_value = slider(slider_value, P(ctx));
-            }   
-        }
-        cut_bottom(window_default_padding, ctx.layout);
-
-        int rows_and_cols = 1 + round(slider_value * 5);
-        
-        { _GRID_(rows_and_cols, rows_and_cols, window_default_padding);
-            for(int i = 0; i < rows_and_cols * rows_and_cols; i++) {
+        { _TOP_CUT_(64);
+            _GRID_(num_rooms, 1, 4);
+            for(int r = 0; r < num_rooms; r++)
+            {
                 _CELL_();
-                
-                if(button(PC(ctx, i), STRING(words[i % ARRLEN(words)]), (i % 2 > 0), (selected == i)) & CLICKED_ENABLED) {
-                    selected = i;
+                bool selected;
+                if(requested_room != -1) selected = (requested_room == r);
+                else                     selected = (current_room   == r);
+
+                if(button(PC(ctx, r), concat_tmp("", r, sb), (requested_room != -1), selected) & CLICKED_ENABLED)
+                {
+                    request_connection_to_room((Room_ID)r, client);
                 }
-            }   
+            }
         }
 
+        cut_top(4, ctx.layout);
+        world_view(P(ctx));
     }
     UI_Click_State close_button_state;
     end_window(window_id, ctx.manager, &close_button_state);
@@ -911,8 +1259,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
     static int hidden = -1;
 
     _SHRINK_(10);
+    
+#if 0
     _GRID_(x, x, 10);
-
     int new_x = x;
     for(int i = 0; i < x*x; i++)
     {   
@@ -921,9 +1270,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         if(hidden == i) continue;
 
         if(i == 2) bar_window(PC(ctx, i), input);
-        else if(foo_window((i % 2 == 0), PC(ctx, i))) hidden = i;
+        else if(foo_window((i % 2 == 0), PC(ctx, i), client)) hidden = i;
+        
     }
     x = new_x;
+#else
+    foo_window(false, P(ctx), client);
+#endif
 }
 
 
@@ -1030,17 +1383,24 @@ void client_set_window_delegate(Window *window, Client *client)
     window->delegate = delegate;
 }
 
+// NOTE: *_game should already have been zeroed.
+void init_game(Game *_game)
+{
+    
+}
 
 int client_entry_point(int num_args, char **arguments)
 {
+    platform_init_socket_use();
+    
     String_Builder sb = {0};
     Debug_Print("I am a client.\n");
     
     // INIT CLIENT //
     Client client = {0};
     Layout_Manager *layout = &client.layout;
-    UI_Manager         *ui = &client.ui;
-    Input_Manager   *input = &client.input;
+    UI_Manager     *ui = &client.ui;
+    Input_Manager  *input = &client.input;
     Window *main_window = &client.main_window;
     //--
 
@@ -1058,7 +1418,11 @@ int client_entry_point(int num_args, char **arguments)
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
     //--
 
-    // START RENDER THREAD //
+    // INIT GAME //
+    init_game(&client.game);
+    //--
+
+    // START RENDER LOOP //
     Render_Loop render_loop = {0};
     if(!start_render_loop(&render_loop, &client))
     {
@@ -1067,6 +1431,16 @@ int client_entry_point(int num_args, char **arguments)
     }
     //--
 
+    // START NETWORK LOOP //
+    Network_Loop network_loop = {0};
+    if(!start_network_loop(&network_loop, &client))
+    {
+        Debug_Print("Unable to start network loop.\n");
+        return 1;
+    }
+    //--
+
+    
     // UI SETUP //
     UI_Context ui_ctx = UI_Context();
     ui_ctx.manager = ui;
@@ -1103,6 +1477,7 @@ int client_entry_point(int num_args, char **arguments)
 
         Cursor_Icon cursor;
         
+        lock_mutex(network_loop.mutex);
         lock_mutex(render_loop.mutex);
         {
 #if OS_WINDOWS
@@ -1140,6 +1515,7 @@ int client_entry_point(int num_args, char **arguments)
             reset_temporary_memory();
         }
         unlock_mutex(render_loop.mutex);
+        unlock_mutex(network_loop.mutex);
 
 #if DEBUG || true
         last_second = second;
@@ -1151,7 +1527,10 @@ int client_entry_point(int num_args, char **arguments)
         platform_sleep_microseconds(100);
     }
 
+    stop_network_loop(&network_loop);
     stop_render_loop(&render_loop);
+
+    platform_deinit_socket_use();
  
     return 0;
 }

@@ -12,6 +12,8 @@
 #include "memory_macros.h"
 
 // --
+const u16 SERVER_PORT = 50888;
+// --
 
 #if DEBUG
 #include <stdio.h>
@@ -65,6 +67,8 @@ App_Version APP_version = {{
 
 #if OS_WINDOWS
 #include <xmmintrin.h>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
 #include <Windows.h>
 #include <shellscalingapi.h>
 #include "platform_win32.h"
