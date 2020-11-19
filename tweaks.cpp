@@ -244,7 +244,7 @@ bool parse_tweaks(u8 *start, u8 *end) {
         }
 
         skip_whitespace_ascii(&at, end, false);
-        if(at < end && *at != '\n') {
+        if(at < end && *at != '\n' && *at != '#') {
             Debug_Print("Trailing characters after '%s' tweak.\n", info->name);
             result = false;
         }

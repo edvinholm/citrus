@@ -874,12 +874,14 @@ bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
     return true;
 }
 
-bool platform_socket_has_bytes_to_read(Socket *sock)
+bool platform_socket_has_bytes_to_read(Socket *sock, bool *_error)
 {
+    *_error = false;
+    
     u_long bytes_available;
     if(ioctlsocket(sock->handle, FIONREAD, &bytes_available) != 0) {
         Debug_Print("ioctlsocket failed in %s.\n", __FUNCTION__);
-        Assert(false);
+        *_error = true;
         return false;
     }
     

@@ -17,8 +17,8 @@ enum Tile_Type {
 
 typedef s8 Tile;
 
-const u64 room_size_x = 256;
-const u64 room_size_y = 256;
+const u64 room_size_x = 16;
+const u64 room_size_y = 16;
 const u64 room_size   = room_size_x * room_size_y;
 
 typedef s32 Room_ID; // Only positive numbers are allowed room IDs.
@@ -28,3 +28,6 @@ struct S__Room
 {
     Tile tiles[room_size_x * room_size_y];
 };
+void reset(S__Room *room) {
+    memset(room->tiles, 0, sizeof(room->tiles));
+}

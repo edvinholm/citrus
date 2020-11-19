@@ -10,6 +10,7 @@ namespace Server_Game
         
         // @Temporary @NoRelease
         double randomize_cooldown;
+        bool did_change;
         // --
 
         S__Room shared;

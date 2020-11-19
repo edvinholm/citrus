@@ -15,7 +15,9 @@ enum Room_Connect_Status
 enum RCB_Packet_Type
 {
     RCB_GOODBYE = 1,
-    RCB_TILES_CHANGED = 2
+    RCB_ROOM_INIT = 3,
+    
+    RCB_TILES_CHANGED = 2,
 };
 
 // Room Client Bound Packet Header
@@ -26,7 +28,9 @@ struct RCB_Packet_Header
 
 enum RSB_Packet_Type
 {
-    RSB_GOODBYE = 1
+    RSB_GOODBYE = 1,
+
+    RSB_CLICK_TILE = 2,
 };
 
 // Room Server Bound Packet Header
@@ -164,11 +168,21 @@ bool write_u64(u64 i, Socket *sock)
 #define Write_Bytes(Src, Length, Sock_Ptr)      \
     Fail_If_True(!write_to_socket(Src, Length, Sock_Ptr))
 
-#define Read(Type, Dest, Sock_Ptr) \
+#define Read_To_Ptr(Type, Dest, Sock_Ptr) \
     Fail_If_True(!read_##Type(Dest, Sock_Ptr))
 
-#define Write(Type, Dest, Sock_Ptr) \
-    Fail_If_True(!write_##Type(Dest, Sock_Ptr))
+#define Read(Type, Ident, Sock_Ptr) \
+    Type Ident;                                 \
+    Fail_If_True(!read_##Type(&Ident, Sock_Ptr))
+
+#define Write(Type, Val, Sock_Ptr) \
+    Fail_If_True(!write_##Type(Val, Sock_Ptr))
+
+#define Write_RSB_Header(Packet_Type, Sock_Ptr)    \
+    Fail_If_True(!write_RSB_Packet_Header({Packet_Type}, Sock_Ptr))
+
+#define Write_RCB_Header(Packet_Type, Sock_Ptr)    \
+    Fail_If_True(!write_RCB_Packet_Header({Packet_Type}, Sock_Ptr))
 
 
 inline
@@ -228,7 +242,7 @@ inline
 bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Socket *sock)
 {
     Zero(*_header);
-    Read(RSB_Packet_Type, &_header->type, sock);
+    Read_To_Ptr(RSB_Packet_Type, &_header->type, sock);
     return true;
 }
 
@@ -243,15 +257,10 @@ bool write_RSB_Packet_Header(RSB_Packet_Header header, Socket *sock)
 // NOTE: tiles should point to all_tiles + tile0
 bool write_rsb_Goodbye_packet(Socket *sock)
 {
-    RSB_Packet_Header header = {0};
-    header.type = RSB_GOODBYE;
-    
-    Write(RSB_Packet_Header, header, sock);
+    Write_RSB_Header(RSB_GOODBYE, sock);
 
     return true;
 }
-
-
 
 
 
@@ -276,7 +285,7 @@ inline
 bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Socket *sock)
 {
     Zero(*_header);
-    Read(RCB_Packet_Type, &_header->type, sock);
+    Read_To_Ptr(RCB_Packet_Type, &_header->type, sock);
     return true;
 }
 
@@ -291,10 +300,7 @@ bool write_RCB_Packet_Header(RCB_Packet_Header header, Socket *sock)
 // NOTE: tiles should point to all_tiles + tile0
 bool write_rcb_Goodbye_packet(Socket *sock)
 {
-    RCB_Packet_Header header = {0};
-    header.type = RCB_GOODBYE;
-    
-    Write(RCB_Packet_Header, header, sock);
+    Write_RCB_Header(RCB_GOODBYE, sock);
 
     return true;
 }
@@ -304,10 +310,7 @@ bool write_rcb_Goodbye_packet(Socket *sock)
 bool write_rcb_Tiles_Changed_packet(Socket *sock,
                                     u64 tile0, u64 tile1, Tile *tiles)
 {
-    RCB_Packet_Header header = {0};
-    header.type = RCB_TILES_CHANGED;
-    
-    Write(RCB_Packet_Header, header, sock);
+    Write_RCB_Header(RCB_TILES_CHANGED, sock);
 
     /* Header */
     Write(u64, tile0, sock);
@@ -330,11 +333,22 @@ bool write_rcb_Tiles_Changed_packet(Socket *sock,
 }
 
 
+bool write_rcb_Room_Init_packet(Socket *sock, Tile *tiles)
+{
+    Write_RCB_Header(RCB_ROOM_INIT, sock);
+
+    Assert(sizeof(Tile) == 1);
+    Write_Bytes(tiles, room_size_x * room_size_y, sock);
+
+    return true;
+}
+
+
 bool read_rcb_Tiles_Changed_header(Socket *sock,
                                   u64 *_tile0, u64 *_tile1)
 {
-    Read(u64, _tile0, sock);
-    Read(u64, _tile1, sock);
+    Read_To_Ptr(u64, _tile0, sock);
+    Read_To_Ptr(u64, _tile1, sock);
 
     return true;
 }

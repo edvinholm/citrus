@@ -17,7 +17,6 @@ void create_dummy_rooms(Server *server)
         
         array_add(server->room_ids, i + 1);
         array_add(server->rooms,    room);
-        array_add(server->room_was_updated, false);
         
         array_add(server->room_clients, empty_client_array);
     }
@@ -60,10 +59,8 @@ void randomize_tiles(Tile *tiles, u64 num_tiles, int x) {
     }
 }
 
-bool update_room(Room *room, int index) {
+void update_room(Room *room, int index) {
 
-    bool was_updated = false;
-    
     Assert(room->t > 0); // Should be initialized when created
     
     double last_t = room->t;
@@ -72,12 +69,38 @@ bool update_room(Room *room, int index) {
 
     room->randomize_cooldown -= dt;
     while(room->randomize_cooldown <= 0) {
+        Tile *tiles = room->shared.tiles;
+        Tile *at  = tiles;
+        Tile *end = tiles + room_size_x * room_size_y;
+        while(at < end) {
+            
+            if(*at == TILE_WATER) {
+                
+                int y = (at - tiles) / room_size_x;
+                int x = (at - tiles) % room_size_x;
+                
+                if(y > 0) {
+                    
+                    Tile *north = at - room_size_x;
+                    
+                    if(*north != TILE_WATER) {
+                        if(*north != TILE_STONE) {
+                            *north = TILE_WATER;
+                        }
+                        *at = TILE_GRASS;
+                        room->did_change = true;
+                    }
+                }
+            }
+            
+            at++;
+        }
+#if 0
         randomize_tiles(room->shared.tiles, ARRLEN(room->shared.tiles), random_int(1, 10));
-        room->randomize_cooldown += 2.0;
-        was_updated = true;
+        room->did_change = true;
+#endif
+        room->randomize_cooldown += 0.2;
     }
-
-    return was_updated;
 }
 
 bool setup_listening_socket(Socket *_sock)
@@ -216,56 +239,6 @@ void disconnect_room_client(Room_Client *client)
     clear(&client_copy);
 }
 
-void add_new_room_clients(Server *server)
-{
-    auto *queue = &server->room_client_queue;
-    lock_mutex(queue->mutex);
-    {
-        Assert(queue->num_clients <= ARRLEN(queue->clients));
-        Assert(ARRLEN(queue->clients) == ARRLEN(queue->rooms));
-        for(int c = 0; c < queue->num_clients; c++) {
-
-            Room_ID room_id = queue->rooms[c];
-            
-            int room_index = -1;
-            for(int r = 0; r < server->room_ids.n; r++) {
-                if(server->room_ids[r] == room_id) {
-                    room_index = r;
-                    break;
-                }
-            }
-
-            Room_Client *client = queue->clients + c;
-                
-            if(room_index == -1) {
-                write_room_connect_status_code(ROOM_CONNECT__INVALID_ROOM_ID, &client->sock);
-                
-                // IMPORTANT: Do not use disconnect_room_client here, because it won't work before we've added the client to the room client list.
-                platform_close_socket(&client->sock);
-                clear(client);
-                
-                continue;
-            }
-
-            if(write_room_connect_status_code(ROOM_CONNECT__CONNECTED, &client->sock))
-            {
-                auto *clients = &server->room_clients[room_index];
-                array_add(*clients, *client);
-                Debug_Print("Added client (socket = %lld) to room %d.\n", client->sock.handle, client->room);
-            }
-        }
-
-        queue->num_clients = 0;
-    }
-    unlock_mutex(queue->mutex);
-}
-
-// NOTE: Assumes we've already zeroed queue.
-void init_room_client_queue(Room_Client_Queue *queue)
-{
-    create_mutex(queue->mutex);
-}
-
 
 // Sends an RCB packet if Room_Client_Ptr != NULL.
 // If the operation fails, the client is disconnected and
@@ -292,6 +265,82 @@ void init_room_client_queue(Room_Client_Queue *queue)
     }                                                               \
 
 
+
+bool initialize_room_client(Room_Client *client, Room *room)
+{
+    RCB_Packet(client, Room_Init, room->shared.tiles);
+    return true;
+}
+
+void add_new_room_clients(Server *server)
+{
+    auto *queue = &server->room_client_queue;
+    lock_mutex(queue->mutex);
+    {
+        Assert(queue->num_clients <= ARRLEN(queue->clients));
+        Assert(ARRLEN(queue->clients) == ARRLEN(queue->rooms));
+        for(int c = 0; c < queue->num_clients; c++) {
+
+            Room_ID room_id = queue->rooms[c];
+
+            Room *room = NULL;
+            
+            int room_index = -1;
+            for(int r = 0; r < server->room_ids.n; r++) {
+                if(server->room_ids[r] == room_id) {
+                    room_index = r;
+                    room = server->rooms.e + r;
+                    break;
+                }
+            }
+
+            Room_Client *client = queue->clients + c;
+                
+            if(room_index == -1) {
+                write_room_connect_status_code(ROOM_CONNECT__INVALID_ROOM_ID, &client->sock);
+
+                // @Cleanup @Boilerplate                
+                // IMPORTANT: Do not use disconnect_room_client here, because it won't work before we've added the client to the room client list.
+                platform_close_socket(&client->sock);
+                clear(client);
+                
+                continue;
+            }
+
+            if(!write_room_connect_status_code(ROOM_CONNECT__CONNECTED, &client->sock))
+            {
+                Debug_Print("Failed to write ROOM_CONNECT__CONNECTED to client (socket = %lld).\n", client->sock.handle);
+
+                // @Cleanup @Boilerplate
+                platform_close_socket(&client->sock);
+                clear(client);
+                continue;
+            }
+                        
+            Assert(room != NULL);
+            if(!initialize_room_client(client, room)) {
+                // @Cleanup @Boilerplate
+                platform_close_socket(&client->sock);
+                clear(client);
+                continue;
+            }
+
+            auto *clients = &server->room_clients[room_index];
+            array_add(*clients, *client);
+            Debug_Print("Added client (socket = %lld) to room %d.\n", client->sock.handle, client->room);
+        }
+
+        queue->num_clients = 0;
+    }
+    unlock_mutex(queue->mutex);
+}
+
+// NOTE: Assumes we've already zeroed queue.
+void init_room_client_queue(Room_Client_Queue *queue)
+{
+    create_mutex(queue->mutex);
+}
+
 bool start_listening_loop(Server *server, Thread *thread)
 {
     while(!setup_listening_socket(&server->listening_socket))
@@ -306,6 +355,32 @@ bool start_listening_loop(Server *server, Thread *thread)
         Debug_Print("Unable to create listening loop thread.\n");
         false;
     }
+    return true;
+}
+
+bool read_and_handle_rsb_packet(Room_Client *client, RSB_Packet_Header header, Room *room)
+{
+    // NOTE: RSB_GOODBYE is handled somewhere else.
+
+    auto *sock = &client->sock;
+    
+    switch(header.type) {
+        case RSB_CLICK_TILE: {
+            Read(u64, tile_ix, sock);
+
+            Fail_If_True(tile_ix >= room_size_x * room_size_y);
+            room->shared.tiles[tile_ix]++;
+            room->shared.tiles[tile_ix] %= TILE_NONE_OR_NUM;
+            room->did_change = true;
+            
+        } break;
+            
+        default: {
+            Debug_Print("Client (socket = %lld) sent invalid RSB packet type (%u).\n", client->sock.handle, header.type);
+            return false;
+        } break;
+    }
+    
     return true;
 }
 
@@ -357,39 +432,53 @@ int server_entry_point(int num_args, char **arguments)
 
             auto &clients = server.room_clients.e[i];
 
-            // LISTEN TO WHAT THE CLIENT HAS TO SAY //
+            // LISTEN TO WHAT THE CLIENTS HAVE TO SAY //
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
 
-                if(!platform_socket_has_bytes_to_read(&client->sock)) continue;
-                
-                RSB_Packet_Header header;
-                RSB_Header(client, &header);
-                if(client == NULL) { c--; continue; }
+                while(true) {
+                    bool error;
+                    if(!platform_socket_has_bytes_to_read(&client->sock, &error)) { // TODO @Norelease: @Security: There has to be some limit to how much data a client can send, so that we can't be stuck in this loop forever!
+                        if(error) {
+                            disconnect_room_client(client); // @Cleanup @Boilerplate
+                            c--;
+                        }
+                        break;
+                    }
 
-                switch(header.type) {
-                    case RSB_GOODBYE: {
+                    // @Cleanup
+
+                    RSB_Packet_Header header;
+                    RSB_Header(client, &header);
+                    if(client == NULL) { c--; break; }
+
+                    bool do_disconnect = false;
+
+                    if(header.type == RSB_GOODBYE) {
                         // TODO @Norelease: Better logging, with more client info etc.
                         Debug_Print("Client (socket = %lld) sent goodbye message.\n", client->sock.handle);
+                        do_disconnect = true;
+                    }
+                    else if(!read_and_handle_rsb_packet(client, header, room)) {
+                        do_disconnect = true;
+                    }
+                    
+                    if (do_disconnect) { // @Cleanup @Boilerplate
                         disconnect_room_client(client);
                         c--;
-                    } break;
-
-                    default: {
-                        Debug_Print("Client (socket = %lld) sent invalid RSB packet type. Disconnecting it.\n", client->sock.handle);
-                        disconnect_room_client(client);
-                        c--;
-                    } break;
+                        break;
+                    }
                 }
             }
 
             // RUN SIMULATION //
-            server.room_was_updated[i] = update_room(room, i);
+            update_room(room, i);
             //
 
             // SEND UPDATES TO CLIENTS //
-            if(!server.room_was_updated[i]) continue;
-
+            if(!room->did_change) continue;
+            room->did_change = false;
+            
             // @Speed: Loop over just the sockets, not the whole Client structs.
             // @Speed: Prepare the data to send (all packets combined, endiannessed etc) and then just write that to all the clients.
                 

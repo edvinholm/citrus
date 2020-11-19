@@ -8,6 +8,7 @@ const int LISTENING_SOCKET_BACKLOG_SIZE = 1024;
 
 
 struct Server;
+
 struct Room_Client {
     Socket sock;
 
@@ -24,8 +25,8 @@ struct Room_Client_Queue
     Mutex mutex;
     
     int num_clients;
-    Room_Client clients[8];
-    Room_ID     rooms[8];
+    Room_Client clients[32];
+    Room_ID     rooms[32];
 };
 
 // @Temporary?
@@ -72,7 +73,6 @@ struct Server {
 
     Array<Room_ID, ALLOC_GAME> room_ids;
     Array<Room, ALLOC_GAME> rooms;
-    Array<bool, ALLOC_GAME> room_was_updated;
     
     Array<Array<Room_Client, ALLOC_APP>, ALLOC_APP> room_clients;
     Room_Client_Queue room_client_queue;

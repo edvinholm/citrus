@@ -13,7 +13,6 @@ citrus_release.pdb
 main.obj
 .vscode
 .vs/**
-todo.txt
+
 
 usr/
-tmp/

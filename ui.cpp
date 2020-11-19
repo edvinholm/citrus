@@ -1328,7 +1328,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
 }
 
-void world_view(UI_Context ctx)
+// NOTE: (@Temporary): Returns index of clicked tile. U64_MAX if none.
+u64 world_view(UI_Context ctx)
 {
     U(ctx);
     
@@ -1336,9 +1337,39 @@ void world_view(UI_Context ctx)
     
     auto *view = &e->world_view;
     view->a = area(ctx.layout);
+
+    return view->clicked_tile_ix;
 }
 
+void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{    
+    Assert(e->type == WORLD_VIEW);
+    auto *view = &e->world_view;
+    auto *mouse = &input->mouse;
 
+    view->clicked_tile_ix = U64_MAX;
+    view->click_state = evaluate_click_state(view->click_state, e == hovered_element, input);
+
+    if(e == hovered_element)
+    {
+        Assert(point_inside_rect(mouse->p, view->a));
+        int hovered_tile_x = (mouse->p.x - view->a.x) / (view->a.w / room_size_x);
+        int hovered_tile_y = (mouse->p.y - view->a.y) / (view->a.h / room_size_y);
+        u64 hovered_tile_ix = hovered_tile_y * room_size_x + hovered_tile_x;
+        
+        if(view->click_state & PRESSED_NOW) {
+            view->pressed_tile_ix = hovered_tile_ix;
+        }
+        else if(view->click_state & CLICKED_ENABLED) {
+            if(view->pressed_tile_ix == hovered_tile_ix) {
+                view->clicked_tile_ix = view->pressed_tile_ix;
+            }
+        }
+    }
+
+    if(!(view->click_state & PRESSED))
+        view->pressed_tile_ix = U64_MAX;
+}
 
 
 
@@ -1482,14 +1513,14 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
         bool mouse_over = false;
         
         switch(e->type) {
-            case WINDOW:    mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
-            case BUTTON:    mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
-            case TEXTFIELD: mouse_over = point_inside_rect(mouse.p, e->textfield.a);      break;
-            case SLIDER:    mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
-            case DROPDOWN:  mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
+            case WINDOW:     mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
+            case BUTTON:     mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
+            case TEXTFIELD:  mouse_over = point_inside_rect(mouse.p, e->textfield.a);      break;
+            case SLIDER:     mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
+            case DROPDOWN:   mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
+            case WORLD_VIEW: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
 
             case UI_TEXT:
-            case WORLD_VIEW:                
                 break;
                 
             default: Assert(false); break;
@@ -1545,11 +1576,11 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
                 if(area_hovered)
                     use_i_beam_cursor = true;
             } break;
-            case SLIDER:    update_slider(e, input, hovered_element);    break;
-            case DROPDOWN:  update_dropdown(e, input, hovered_element);  break;
+            case SLIDER:     update_slider(e, input, hovered_element);     break;
+            case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
+            case WORLD_VIEW: update_world_view(e, input, hovered_element); break;
 
             case UI_TEXT:
-            case WORLD_VIEW:
                 break;
                 
             default: Assert(false); break;

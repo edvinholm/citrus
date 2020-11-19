@@ -950,6 +950,11 @@ bool disconnect_from_room_server(Room_Server_Connection *rs_con, bool say_goodby
 }
 
 
+
+#define RSB_Packet(Client_Ptr, Packet_Ident, ...)                       \
+    enqueue_rsb_##Packet_Ident##_packet(&Client_Ptr->server_connections.rsb_queue, __VA_ARGS__)
+
+
 #define RCB_Header(Socket_Ptr, Packet_Ident, ...)                       \
     if(!read_rcb_##Packet_Ident##_header(Socket_Ptr, __VA_ARGS__)) {   \
         Debug_Print("Failed to read RCB header.\n");                \
@@ -959,7 +964,7 @@ bool disconnect_from_room_server(Room_Server_Connection *rs_con, bool say_goodby
 bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_server_said_goodbye)
 {        
     RCB_Packet_Header header;
-    Read(RCB_Packet_Header, &header, sock);
+    Read_To_Ptr(RCB_Packet_Header, &header, sock);
 
     *_server_said_goodbye = false;
 
@@ -970,11 +975,28 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
             Debug_Print("The server said goodbye.\n");
             *_server_said_goodbye = true;
         } break;
+
+        case RCB_ROOM_INIT: {
+            // @Temporary: Reuse some buffer. (WE CAN'T USE TEMPORARY MEMORY BECAUSE WE HAVE NOT LOCKED THE MUTEX AT THIS POINT)
+            size_t rec_tiles_size = sizeof(Tile) * (room_size_x * room_size_y);
+            Tile *rec_tiles;
+            rec_tiles = (Tile *)malloc(rec_tiles_size);
+            defer(free(rec_tiles););
+
+            Assert(sizeof(Tile) == 1);
+            Read_Bytes(rec_tiles, rec_tiles_size, sock);
+
+            lock_mutex(mutex);
+            {
+                memcpy(room->shared.tiles, rec_tiles, rec_tiles_size);
+            }
+            unlock_mutex(mutex);
+            
+        } break;
         
         case RCB_TILES_CHANGED: {
             u64 tile0, tile1;
             RCB_Header(sock, Tiles_Changed, &tile0, &tile1);
-            Debug_Print("Tiles changed. tile0 = %llu, tile1 = %llu\n", tile0, tile1);
 
             Fail_If_True(tile0 >= tile1);
             
@@ -1016,18 +1038,34 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
     return true;
 }
 
-bool talk_to_room_server(Socket *sock, Mutex &mutex, Room *room, bool *_server_said_goodbye)
+bool talk_to_room_server(Socket *sock, Mutex &mutex, Room *room, Packet_Queue *queue, bool *_server_said_goodbye)
 {
+    // READ //
     while(true) {
-        if(!platform_socket_has_bytes_to_read(sock)) break;
-
+        bool error;
+        if(!platform_socket_has_bytes_to_read(sock, &error)) {
+            if(error) return false;
+            break;
+        }
+        
         if(!read_and_handle_rcb_packet(sock, mutex, room, _server_said_goodbye)) {
             // TODO @Norelease
             Debug_Print("Unable to read and handle RCB packet. What should we do?.\n");
             return false;
         }
-
+        
         if(*_server_said_goodbye) break;
+    }
+
+    if(*_server_said_goodbye) return true;
+    
+    // WRITE //
+    if(queue->n > 0) {
+        if(!write_to_socket(queue->e, queue->n, sock)) {
+            // TODO @Norelease
+            Debug_Print("Unable to write enqueued RSB data. What should we do?.\n");
+            return false;
+        }
     }
 
     return true;
@@ -1054,12 +1092,17 @@ DWORD network_loop(void *loop_)
     }
     unlock_mutex(loop->mutex);
 
+    const Allocator_ID allocator = ALLOC_NETWORK;
+    
     //
     bool room_connect_requested;
     Room_ID requested_room;
+    Packet_Queue rsb_queue;
     //
     
     while(true) {
+        bool did_connect_to_room_this_loop = false;
+        
         lock_mutex(loop->mutex);
         {
             if(loop->state == Network_Loop::SHOULD_EXIT) {
@@ -1079,6 +1122,9 @@ DWORD network_loop(void *loop_)
             room_connect_requested = client->server_connections.room_connect_requested;
             requested_room         = client->server_connections.requested_room;
 
+            array_set(rsb_queue, client->server_connections.rsb_queue);
+            client->server_connections.rsb_queue.n = 0;
+            
             // Make sure no-one else has written to this struct -- Network Loop is the only one that is allowed to.
             Assert(equal(&client->server_connections.room, &rs_connection));
             // --
@@ -1107,6 +1153,7 @@ DWORD network_loop(void *loop_)
                     rs_connection.socket = sock;
                     
                     rs_connection.last_connect_attempt_failed = false;
+                    did_connect_to_room_this_loop = true;
                 }
                 else
                 {
@@ -1116,10 +1163,12 @@ DWORD network_loop(void *loop_)
             }
             // // //
 
-            if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+            if(rs_connection.status == ROOM_SERVER_CONNECTED &&
+               !did_connect_to_room_this_loop)
+            {
                 bool server_said_goodbye;
                 bool talk = talk_to_room_server(&rs_connection.socket, loop->mutex, &client->game.room, /* IMPORTANT: Passing a pointer to the room here only works because we only have one room, and it will always be at the same place in memory. */
-                                                &server_said_goodbye);
+                                                &rsb_queue, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
                 {
                     //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
@@ -1140,6 +1189,10 @@ DWORD network_loop(void *loop_)
             if(room_connect_requested) client->server_connections.room_connect_requested = false;
 
             client->server_connections.room = rs_connection;
+
+            if(did_connect_to_room_this_loop) {
+                reset(&client->game.room);
+            }
         }
         unlock_mutex(loop->mutex);
     }
@@ -1244,13 +1297,33 @@ void request_connection_to_room(Room_ID id, Client *client)
 }
 
 // @Temporary
-bool foo_window(bool slider_disabled, UI_Context ctx, Client *client)
+bool foo_window(UI_Context ctx, Client *client)
 {
     U(ctx);
-
-    return false;
     
     bool result = false;
+
+    float room_button_h = 64;
+
+    // DETERMINE WINDOW RECT //
+    Rect window_a;
+    {
+        Rect a = area(ctx.layout);
+        float map_s = min(a.w, a.h);
+        Rect map_a = { a.x, a.y, map_s, map_s };
+        float border_and_padding = window_border_width + window_default_padding;
+        v4 borders_and_stuff = { border_and_padding,
+                                 border_and_padding,
+                                 border_and_padding + window_title_height + room_button_h + window_default_padding,
+                                 border_and_padding };
+        map_a = shrunken(map_a, borders_and_stuff);
+        map_s = min(map_a.w, map_a.h);
+        map_a.w = map_s;
+        map_a.h = map_s;
+        window_a = grown(map_a, borders_and_stuff);
+    }
+    _AREA_(window_a);
+    // 
 
     // @Temporary
     String_Builder sb = {0};
@@ -1262,7 +1335,7 @@ bool foo_window(bool slider_disabled, UI_Context ctx, Client *client)
 
     UI_ID window_id;
     { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
-        { _TOP_CUT_(64);
+        { _TOP_CUT_(room_button_h);
             _GRID_(num_rooms, 1, 4);
             for(int r = 0; r < num_rooms; r++)
             {
@@ -1278,8 +1351,17 @@ bool foo_window(bool slider_disabled, UI_Context ctx, Client *client)
             }
         }
 
-        cut_top(4, ctx.layout);
-        world_view(P(ctx));
+        cut_top(window_default_padding, ctx.layout);
+
+        u64 clicked_tile = world_view(P(ctx));
+        if(clicked_tile != U64_MAX)
+        {
+            // @Cleanup: We don't know what kind of system is best to keep track of "requests" to the server yet.
+            //           We probably will want to know which operations succeeds and fails.
+            //           And for some things we want to get stuff back.
+            RSB_Packet(client, Click_Tile, clicked_tile);
+        }
+        
     }
     UI_Click_State close_button_state;
     end_window(window_id, ctx.manager, &close_button_state);
@@ -1295,25 +1377,16 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 
     Rect a = area(ctx.layout);
 
-    static int x = 2;
-    static int hidden = -1;
-
-    _SHRINK_(10);
-    
+    _SHRINK_(10);    
 #if 1
-    _GRID_(x, x, 10);
-    int new_x = x;
-    for(int i = 0; i < x*x; i++)
-    {   
-        _CELL_();
 
-        if(hidden == i) continue;
-
-        if(i == 2) bar_window(PC(ctx, i), input);
-        else if(foo_window((i % 2 == 0), PC(ctx, i), client)) hidden = i;
-        
+    { _RIGHT_HALF_();
+        foo_window(P(ctx), client);
     }
-    x = new_x;
+    { _LEFT_HALF_();
+        _BOTTOM_HALF_();
+        bar_window(P(ctx), input);
+    }
 #else
     foo_window(false, P(ctx), client);
 #endif

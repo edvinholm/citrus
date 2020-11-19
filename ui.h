@@ -220,6 +220,11 @@ void clear(UI_Dropdown *dropdown)
 struct UI_World_View
 {
     Rect a;
+
+    UI_Click_State click_state;
+    
+    u64 pressed_tile_ix; // U64_MAX == no tile
+    u64 clicked_tile_ix; // U64_MAX == no tile
 };
 
 

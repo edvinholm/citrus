@@ -7,6 +7,7 @@ enum Allocator_ID
     ALLOC_GAME,
     ALLOC_GFX,
     ALLOC_UI,
+    ALLOC_NETWORK,
     ALLOC_DEV,
     ALLOC_PLATFORM,
  
@@ -40,6 +41,7 @@ void dealloc(void *ptr, Allocator_ID allocator
 #define game_alloc(Size)     alloc(Size, ALLOC_GAME)
 #define gfx_alloc(Size)      alloc(Size, ALLOC_GFX)
 #define ui_alloc(Size)       alloc(Size, ALLOC_UI)
+#define network_alloc(Size)  alloc(Size, ALLOC_NETWORK)
 #define dev_alloc(Size)      alloc(Size, ALLOC_DEV)
 #define platform_alloc(Size) alloc(Size, ALLOC_PLATFORM)
 
@@ -47,7 +49,7 @@ void dealloc(void *ptr, Allocator_ID allocator
 #define app_dealloc(Ptr)       dealloc(Ptr, ALLOC_APP)
 #define gfx_dealloc(Size)      dealloc(Size, ALLOC_GFX)
 #define ui_dealloc(Size)       dealloc(Size, ALLOC_UI)
-#define server_dealloc(Size)   dealloc(Size, ALLOC_SERVER)
+#define network_dealloc(Size)  dealloc(Size, ALLOC_NETWORK)
 #define dev_dealloc(Size)      dealloc(Size, ALLOC_DEV)
 #define platform_dealloc(Size) dealloc(Size, ALLOC_PLATFORM)
 
