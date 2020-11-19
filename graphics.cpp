@@ -39,3 +39,4 @@ void add_vertices(v3 *p, v2 *uv, v4 *c, float *tex, u64 n, Vertex_Buffer *vb)
 
     vb->n += n;
 }
+

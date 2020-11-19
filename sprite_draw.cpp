@@ -8,6 +8,8 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
                        int sides_to_do = ALL_DIRECTIONS)
 {
     Assert(slicing || floats_equal(scale, 1.0f)); // Scale obviously only works with slicing.
+
+    v4 color = gfx->current_color;
     
     v2 uvs[3*2];
 
@@ -70,18 +72,18 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
             {
                 // Top left
                 quad_uvs(uvs, fuv0, suv0);
-                draw_rect_pp(rp0, sp0, gfx, uvs);
+                draw_rect_pp(rp0, sp0, color, gfx, uvs);
             }
 
             // Top
             quad_uvs(uvs, {suv0.x, fuv0.y}, {suv1.x, suv0.y});
-            draw_rect_pp({sp0.x, rp0.y}, {sp1.x, sp0.y}, gfx, uvs);
+            draw_rect_pp({sp0.x, rp0.y}, {sp1.x, sp0.y}, color, gfx, uvs);
 
             if(sides_to_do & RIGHT)
             {    
                 // Top right
                 quad_uvs(uvs, {suv1.x, fuv0.y}, {fuv1.x, suv0.y});
-                draw_rect_pp({sp1.x, rp0.y}, {rp1.x, sp0.y}, gfx, uvs);
+                draw_rect_pp({sp1.x, rp0.y}, {rp1.x, sp0.y}, color, gfx, uvs);
             }
         }
         
@@ -91,18 +93,18 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
             {
                 // Bottom left
                 quad_uvs(uvs, {fuv0.x, suv1.y}, {suv0.x, fuv1.y});
-                draw_rect_pp({rp0.x, sp1.y}, {sp0.x, rp1.y}, gfx, uvs);
+                draw_rect_pp({rp0.x, sp1.y}, {sp0.x, rp1.y}, color, gfx, uvs);
             }
     
             // Bottom
             quad_uvs(uvs, {suv0.x, suv1.y}, {suv1.x, fuv1.y});
-            draw_rect_pp({sp0.x, sp1.y}, {sp1.x, rp1.y}, gfx, uvs);
+            draw_rect_pp({sp0.x, sp1.y}, {sp1.x, rp1.y}, color, gfx, uvs);
             
             if(sides_to_do & RIGHT)
             {
                 // Bottom right
                 quad_uvs(uvs, suv1, fuv1);
-                draw_rect_pp(sp1, rp1, gfx, uvs);
+                draw_rect_pp(sp1, rp1, color, gfx, uvs);
             }
         }
     
@@ -110,20 +112,20 @@ void draw_sprite_frame(Sprite_Frame frame, Rect rect, v2 texture_size, Graphics 
         {
             // Left
             quad_uvs(uvs, {fuv0.x, suv0.y}, {suv0.x, suv1.y});
-            draw_rect_pp({rp0.x, sp0.y}, {sp0.x, sp1.y}, gfx, uvs);
+            draw_rect_pp({rp0.x, sp0.y}, {sp0.x, sp1.y}, color, gfx, uvs);
         }
         
         if(sides_to_do & RIGHT)
         {
             // Right
             quad_uvs(uvs, {suv1.x, suv0.y}, {fuv1.x, suv1.y});
-            draw_rect_pp({sp1.x, sp0.y}, {rp1.x, sp1.y}, gfx, uvs);
+            draw_rect_pp({sp1.x, sp0.y}, {rp1.x, sp1.y}, color, gfx, uvs);
         }
     }
     
     // Center
     quad_uvs(uvs, suv0, suv1);
-    draw_rect_pp(sp0, sp1, gfx, uvs);    
+    draw_rect_pp(sp0, sp1, color, gfx, uvs);    
 }
 
 //IMPORTANT: This DOES NOT set the texture.

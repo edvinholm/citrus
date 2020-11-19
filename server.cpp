@@ -316,7 +316,11 @@ void add_new_room_clients(Server *server)
                 clear(client);
                 continue;
             }
-                        
+                 
+            auto *clients = &server->room_clients[room_index];
+            client = array_add(*clients, *client);
+            Debug_Print("Added client (socket = %lld) to room %d.\n", client->sock.handle, client->room);       
+
             Assert(room != NULL);
             if(!initialize_room_client(client, room)) {
                 // @Cleanup @Boilerplate
@@ -324,10 +328,6 @@ void add_new_room_clients(Server *server)
                 clear(client);
                 continue;
             }
-
-            auto *clients = &server->room_clients[room_index];
-            array_add(*clients, *client);
-            Debug_Print("Added client (socket = %lld) to room %d.\n", client->sock.handle, client->room);
         }
 
         queue->num_clients = 0;

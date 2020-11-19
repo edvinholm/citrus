@@ -24,7 +24,8 @@ struct Graphics
     Vertex_Buffer vertex_buffer;
     
     GPU_Texture_ID     multisample_texture;
-    GPU_Framebuffer_ID multisample_framebuffer;
+    GPU_Texture_ID     depth_buffer_texture;
+    GPU_Framebuffer_ID framebuffer;
     
     u8 buffer_set_index;
     

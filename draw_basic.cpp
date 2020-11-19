@@ -40,7 +40,7 @@ void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
 
 
 
-void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v3 v[6] = {
         a, d, c,
@@ -67,8 +67,8 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Textur
     };
 
     v4 colors[6] = {
-        gfx->current_color, gfx->current_color, gfx->current_color,
-        gfx->current_color, gfx->current_color, gfx->current_color
+        color, color, color,
+        color, color, color
     };
 
     float t = bound_slot_for_texture(texture, gfx);
@@ -82,7 +82,6 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, Graphics *gfx, v2 *uvs = NULL, Textur
         uvs = (v2 *)default_uvs;
 
     triangles(v, uvs, colors, tex, 6, gfx);
-    
 }
 
 #if 0
@@ -139,20 +138,18 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 }
 #endif
 
-#if 0 // Feels slow to use this one...
-inline
-void draw_quad(v3 p0, v3 d1, v3 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
-{
-    // v3 a = p0;
 
-    float p0
-    
+// @Speed
+// @Speed
+// @Speed
+inline
+void draw_quad(v3 p0, v3 d1, v3 d2, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
+{
     v3 b = p0 + d1;
     v3 c = p0 + d2;
     v3 d = b + d2;
-    draw_quad_abs(a, b, c, d, gfx, uvs, tex);
+    draw_quad_abs(p0, b, c, d, color, gfx, uvs, tex);
 }
-#endif
 
 
 #if 0
@@ -188,9 +185,9 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 #endif
 
 inline
-void draw_rect_pp(v2 p0, v2 p1, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, gfx, uvs, texture);
+    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, color, gfx, uvs, texture);
 }
 
 #if 0 // @Speed
@@ -202,14 +199,14 @@ void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID 
 #endif
 
 inline
-void draw_rect_ps(v2 p, v2 s, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect_ps(v2 p, v2 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v2 p1 = p + s;
-    draw_rect_pp(p, p1, gfx, uvs, texture);
+    draw_rect_pp(p, p1, color, gfx, uvs, texture);
 }
 
 inline
-void draw_rect(Rect a, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    return draw_rect_ps(a.p, a.s, gfx, uvs, texture);
+    return draw_rect_ps(a.p, a.s, color, gfx, uvs, texture);
 }

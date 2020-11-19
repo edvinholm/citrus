@@ -56,10 +56,12 @@
 using namespace Client_Game;
 
 #include "packets.cpp"
+#include "net_client.h"
+#include "client.h"
+#include "net_client.cpp"
 
 //--
 
-#include "client.h"
 
 #include "body_text.h"
 
@@ -71,3 +73,5 @@ using namespace Client_Game;
 #include "font_draw.cpp"
 
 #include "body_text.cpp"
+
+#include "draw_client.cpp"

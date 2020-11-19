@@ -255,7 +255,7 @@ v2 string_size(String string, Font_Size size, Graphics *gfx)
 }
 
 //NOTE: Returns rect of drawn string
-Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics *gfx,
+Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
@@ -271,8 +271,8 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics 
     };
     
     v4 glyph_vertex_colors[6] = {
-        gfx->current_color, gfx->current_color, gfx->current_color,
-        gfx->current_color, gfx->current_color, gfx->current_color
+        color, color, color,
+        color, color, color
     };
     
     int default_previous_codepoint = 0;
@@ -345,24 +345,24 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, Graphics 
 }
 
 inline
-Rect draw_string(String string, v2 p, Font_Size size, Graphics *gfx,
+Rect draw_string(String string, v2 p, Font_Size size, v4 color, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    return draw_string(string, p, size, current_font_id(gfx), gfx, h_align, v_align, previous_codepoint);
+    return draw_string(string, p, size, current_font_id(gfx), color, gfx, h_align, v_align, previous_codepoint);
 }
 
 
 inline
-void draw_string_in_rect_centered(String string, Rect a, Font_Size size, Font_ID font, Graphics *gfx)
+void draw_string_in_rect_centered(String string, Rect a, Font_Size size, Font_ID font, v4 color, Graphics *gfx)
 {
     v2 string_s = string_size(string, size, font, gfx);
     v2 p = a.p + a.s/2.0f - string_s/2.0f;
-    draw_string(string, p, size, font, gfx);
+    draw_string(string, p, size, font, color, gfx);
 }
 
-void draw_string_in_rect_centered(String string, Rect a, Font_Size size, Graphics *gfx)
+void draw_string_in_rect_centered(String string, Rect a, Font_Size size, v4 color, Graphics *gfx)
 {
-    draw_string_in_rect_centered(string, a, size, current_font_id(gfx), gfx);
+    draw_string_in_rect_centered(string, a, size, current_font_id(gfx), color, gfx);
 }
 
