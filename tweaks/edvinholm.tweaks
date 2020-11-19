@@ -3,6 +3,6 @@
 
 vsync false
 
-window_border_color 0 0 0 1
+# window_border_color 0 0 0 1
 
-initial_os_window_rect 72 8 1440 1000
+# initial_os_window_rect 72 8 1440 1000

@@ -450,14 +450,18 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
     gfx->current_color = {0.8, 0.8, 0.8, 1.0};
     draw_rect(tf->a, gfx);
 
+    Rect inner_a = textfield_inner_rect(tf);
+    
+    Rect text_a = inner_a;
+    text_a.y -= tf->scroll.value;
+    
     String text = get_ui_string(tf->text, ui);
-
-    Rect text_a = textfield_text_a(tf);
+    Body_Text bt = create_textfield_body_text(text, inner_a, gfx->fonts);
+    
     Rect clip_rect = tf->a;
 
-    Body_Text bt = create_textfield_body_text(text, text_a, gfx->fonts);
-
     if(ui->active_element == id) {
+
         // CARET / HIGHLIGHT
         
         auto &tf_state = ui->active_textfield_state;
@@ -487,10 +491,18 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
             
             if(l == 0)                   start_x = highlight_p0.x;
             if(l == num_highlight_lines-1) end_x = highlight_p1.x;
+
+            // @Speed: Draw one rect for all "full" highlight lines
+            // @Speed: Break this loop if we go past clip rect y1.
             
             // TODO :PushPop color
             gfx->current_color = {0.10, 0.61, 0.53, 1};
-            draw_rect_ps({start_x - 2, highlight_p0.y + bt.line_height * l}, {end_x - start_x + 2, bt.line_height}, gfx);
+            Rect a = {start_x - 2,
+                      highlight_p0.y + bt.line_height * l,
+                      end_x - start_x + 2,
+                      bt.line_height};
+            a = rect_intersection(a, clip_rect);
+            draw_rect(a, gfx);
         }
         // ----------
 
@@ -505,19 +517,20 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
     
         // TODO :PushPop color
         gfx->current_color = {0, 0, 0, 1};
-        draw_rect_ps({caret_p.x - 2, caret_p.y}, {2, bt.line_height}, gfx);
+        Rect caret_a = {caret_p.x - 2, caret_p.y, 2, bt.line_height};
+        caret_a = rect_intersection(caret_a, clip_rect);
+        draw_rect(caret_a, gfx);
         // ----------
 
 #if DEBUG && true // DEBUG STUFF
         
 #if true && DEBUG // DEBUG DISPLAY: LAST VERTICAL NAV X
         gfx->current_color = {1, 0, 0, 0.5};
-        draw_rect_ps({text_a.x + ui->active_textfield_state.last_vertical_nav_x-2,
-                    text_a.y - 4}, {4, 4}, gfx);
-        draw_rect_ps(text_a.p + V2_X * (ui->active_textfield_state.last_vertical_nav_x-1), {2, text_a.h}, gfx);
+        draw_rect_ps({inner_a.x + ui->active_textfield_state.last_vertical_nav_x-2,
+                    inner_a.y - 4}, {4, 4}, gfx);
+        draw_rect_ps(inner_a.p + V2_X * (ui->active_textfield_state.last_vertical_nav_x-1), {2, inner_a.h}, gfx);
 #endif
 
-        
 #if true && DEBUG // DEBUG DISPLAY: CARET/HIGHLIGHT CODEPOINT INDEX
 
         { // CARET
@@ -525,10 +538,10 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
             gfx->current_color = {0, 0, 0, 1};
-            draw_rect_ps({text_a.x + text_a.w, text_a.y}, {cp_index_str_w + 4, 16}, gfx);
+            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y}, {cp_index_str_w + 4, 16}, gfx);
             
             gfx->current_color = {1, 1, 1, 1};
-            draw_string(cp_index_str, { text_a.x + text_a.w + 2, text_a.y + 2 }, FS_12, FONT_TITLE, gfx);   
+            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + 2 }, FS_12, FONT_TITLE, gfx);   
         }
 
         { // HIGHLIGHT
@@ -536,10 +549,10 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
             gfx->current_color = {0.10, 0.61, 0.53, 1};
-            draw_rect_ps({text_a.x + text_a.w, text_a.y + 16}, {cp_index_str_w + 4, 16}, gfx);
+            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + 16}, {cp_index_str_w + 4, 16}, gfx);
             
             gfx->current_color = {1, 1, 1, 1};
-            draw_string(cp_index_str, { text_a.x + text_a.w + 2, text_a.y + 2 + 16 }, FS_12, FONT_TITLE, gfx);   
+            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + 2 + 16 }, FS_12, FONT_TITLE, gfx);   
         }
         
 #endif
@@ -547,8 +560,33 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 #endif
         
     }
+
     
+#if false && DEBUG // DEBUG DISPLAY: INNER RECT
+    {
+        gfx->current_color = {1, 1, 1, 0.5};
+        draw_rect_ps(inner_a.p, inner_a.s, gfx);
+    }
+#endif
+
     draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect, &bt);
+
+    if(tf->scrollbar_visible)
+    {
+        Rect scrollbar_a;
+        Rect handle_a;
+        get_textfield_scrollbar_rects(tf->a, inner_a.h,
+                                      tf->scroll.value, bt.lines.n * bt.line_height,
+                                      &scrollbar_a, &handle_a);
+
+        // TODO :PushPop color        
+        gfx->current_color = {0.15, 0.8, 0.3, 1};
+        draw_rect(scrollbar_a, gfx);
+
+        // TODO :PushPop color
+        gfx->current_color = {0.05, 0.15, 0.6, 1};
+        draw_rect(handle_a, gfx);
+    }
 
     // TODO :PushPop color
     gfx->current_color = old_color;
@@ -1209,6 +1247,8 @@ void request_connection_to_room(Room_ID id, Client *client)
 bool foo_window(bool slider_disabled, UI_Context ctx, Client *client)
 {
     U(ctx);
+
+    return false;
     
     bool result = false;
 
@@ -1260,7 +1300,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 
     _SHRINK_(10);
     
-#if 0
+#if 1
     _GRID_(x, x, 10);
     int new_x = x;
     for(int i = 0; i < x*x; i++)
@@ -1509,7 +1549,8 @@ int client_entry_point(int num_args, char **arguments)
                 pop_layout(layout);
 
             }
-            end_ui_build(ui, &client.input, client.fonts, &cursor);
+            double t = platform_milliseconds() / 1000.0; // @Robustness: This is safe to do, right?
+            end_ui_build(ui, &client.input, client.fonts, t, &cursor);
             // //////// //
 
             reset_temporary_memory();

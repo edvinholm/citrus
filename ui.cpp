@@ -407,6 +407,62 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
 }
 
 
+
+float scrollbar_handle_height(float scrollbar_h, float content_h, float view_h)
+{
+    if(content_h  >= 0.0001f) // Avoid division by zero
+        return max(72, scrollbar_h * (view_h / content_h));
+
+    return scrollbar_h;
+}
+
+Rect scrollbar_handle_rect(Rect scrollbar_a, float content_h, float view_h, float scroll)
+{
+    float h = scrollbar_handle_height(scrollbar_a.h, content_h, view_h);
+    Rect a = top_of(scrollbar_a, h);
+    
+    float space      = scrollbar_a.h - h;
+    float max_scroll = max(0, content_h - view_h);
+    
+    if(max_scroll > 0.0001f) // Avoid division by zero
+        a.y += (scroll / max_scroll) * space;
+
+    return a;
+}
+
+void update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
+                      Rect scrollbar_a, float content_h, float view_h,
+                      Input_Manager *input, bool disabled = false)
+{
+    auto *mouse = &input->mouse;
+
+    Rect handle_a = scrollbar_handle_rect(scrollbar_a, content_h, view_h, scroll->value);
+
+    bool handle_hovered = (scrollbar_hovered && point_inside_rect(mouse->p, handle_a));
+    scroll->handle_click_state = evaluate_click_state(scroll->handle_click_state, handle_hovered, input, disabled);
+
+    float scroll_max = (content_h - view_h);
+
+    if(scroll->handle_click_state & PRESSED) {
+        
+        if(scroll->handle_click_state & PRESSED_NOW) {
+            scroll->handle_grab_rel_p = mouse->p.y - handle_a.y;
+        }
+
+        float space_h  = scrollbar_a.h - handle_a.h;
+
+        float handle_rel_y = mouse->p.y - scroll->handle_grab_rel_p - scrollbar_a.y;
+
+        if(space_h > 0.0001f) // Avoid division by zero
+            scroll->value = (handle_rel_y/space_h) * scroll_max;
+        else
+            scroll->value = 0;
+    }
+    
+    scroll->value = max(0, min(scroll_max, scroll->value));
+}
+
+
 void ui_text(String text, UI_Context ctx)
 {
     U(ctx);
@@ -463,9 +519,34 @@ bool is_allowed_input(u32 cp, bool single_line_mode /*= false*/)
     return true;
 }
 
-Rect textfield_text_a(UI_Textfield *tf)
+
+const float textfield_scrollbar_w = 10;
+
+inline
+Rect textfield_scrollbar_rect(Rect textfield_a)
 {
-    return shrunken(tf->a, 10, 10, 8, 8);
+    return right_of(textfield_a, textfield_scrollbar_w);
+}
+
+void get_textfield_scrollbar_rects(Rect textfield_a, float textfield_inner_h, float scroll,
+                                   float text_h, Rect *_scrollbar_a, Rect *_handle_a)
+{
+    Rect scrollbar_a = textfield_scrollbar_rect(textfield_a);
+
+    Rect handle_a = scrollbar_handle_rect(scrollbar_a, text_h, textfield_inner_h, scroll);
+    
+    *_handle_a    = handle_a;
+    *_scrollbar_a = scrollbar_a;
+}
+
+Rect textfield_inner_rect(UI_Textfield *tf)
+{
+    return shrunken(tf->a, 10, textfield_scrollbar_w, 8, 8);
+}
+
+Body_Text create_textfield_body_text(String text, Rect inner_a, Font *fonts)
+{
+    return create_body_text(text, inner_a, FS_16, FONT_INPUT, fonts);
 }
 
 
@@ -497,13 +578,13 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     // THE TEXTFIELD IS ACTIVE IF WE GET HERE //
     // ////////////////////////////////////// //
     
-    Rect text_a = textfield_text_a(tf);
+    Rect inner_a = textfield_inner_rect(tf);
 
     // RESET LAST NAV DIR ON RESIZE //
     auto *tf_state = &ui->active_textfield_state;
-    if(fabs(text_a.w - tf_state->last_resize_w) > 0.001f) {
+    if(fabs(inner_a.w - tf_state->last_resize_w) > 0.001f) {
         tf_state->last_nav_dir  = NO_DIRECTION;
-        tf_state->last_resize_w = text_a.w;
+        tf_state->last_resize_w = inner_a.w;
     }
     // /////////////////////////// //
     
@@ -641,21 +722,23 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
 #endif
     }
 
-    // //// //    
+    // //// //
 
-    if(!(*_text_did_change)) return text;
+    ui->active_textfield_state.text_did_change = *_text_did_change;
 
+    if(!(*_text_did_change)) {        
+        return text;
+    }
+    
     return get_ui_string(tf->text, ui);
 }
 
 
-Body_Text create_textfield_body_text(String text, Rect text_a, Font *fonts)
-{
-    return create_body_text(text, text_a, FS_16, FONT_INPUT, fonts);
-}
+
 
 // NOTE: Only one direction can be passed -- dir is not used as a bitmask.
-void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font *fonts)
+// NOTE: If the caret moved, the index of the line of the caret is returned. Otherwise -1.   
+int textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font *fonts)
 {        
     String &text = bt->text;
     auto *caret = &tf_state->caret;
@@ -663,6 +746,7 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
     int cp_delta = 0;
 
     bool did_go = false;
+    int line = -1;
 
     switch(dir) {
         case UP:
@@ -733,6 +817,7 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
             caret->cp = new_line_start_cp_index + codepoint_index_from_x(x, new_line_start, new_line_end, bt, fonts, true);
             // /////////// //
 
+            line = new_line_index;
             did_go = true;
             
         } break;
@@ -742,6 +827,8 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
             if(codepoint_start(caret->cp, text.data, text.data + text.length) > text.data)
             {    
                 caret->cp--;
+
+                line = line_from_codepoint_index(caret->cp, bt);
                 did_go = true;
             }
         } break;
@@ -753,11 +840,13 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
             if(codepoint_start(caret->cp, text.data, text.data + text.length) < end)
             {    
                 caret->cp++;
+
+                line = line_from_codepoint_index(caret->cp, bt);
                 did_go = true;
             }
         } break;
 
-        default: Assert(false); return;
+        default: Assert(false); return -1;
     }
 
     // Navigating without holding SHIFT removes highlight
@@ -767,6 +856,8 @@ void textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Tex
 
     if(did_go)
         tf_state->last_nav_dir = dir;
+
+    return line;
 }
 
 void reset_textfield_state(UI_Textfield_State *tf_state)
@@ -774,16 +865,69 @@ void reset_textfield_state(UI_Textfield_State *tf_state)
     Zero(*tf_state);
 }
 
-void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_Manager *ui, Font *fonts, bool became_active)
+// NOTE: If the line is already fully visible, the scroll won't change.
+void textfield_scroll_to_line(int line_index, float inner_h, float line_h, int num_lines, UI_Scrollbar *scroll)
+{
+    Assert(line_index >= 0 && line_index < num_lines);
+    
+    float line_y0 = line_h * line_index;
+    float line_y1 = line_y0 + line_h;
+
+    if(scroll->value > line_y0) {
+        scroll->value = line_y0;
+    } else if(scroll->value + inner_h < line_y1) {
+        scroll->value = line_y1 - inner_h;
+    }
+
+    scroll->value = clamp(scroll->value, 0.0f, max(0, (line_h * num_lines) - inner_h));
+}
+
+void textfield_scroll_to_codepoint_index(u64 cp_index, float inner_h, Body_Text *bt, UI_Scrollbar *scroll)
+{
+    int line = line_from_codepoint_index(cp_index, bt);
+    textfield_scroll_to_line(line, inner_h, bt->line_height, bt->lines.n, scroll);
+}
+
+void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_Manager *ui, Font *fonts, bool became_active, double t, bool *_use_i_beam_cursor)
 {
     Assert(e->type == TEXTFIELD);
     auto *tf = &e->textfield;
     auto *mouse = &input->mouse;
+
+    Rect inner_a = textfield_inner_rect(tf);
+    String text  = get_ui_string(tf->text, ui);
+    Body_Text bt = create_textfield_body_text(text, inner_a, fonts);
     
-    tf->click_state = evaluate_click_state(tf->click_state, e == hovered_element, input, tf->disabled);
+    float text_h = bt.lines.n * bt.line_height;
+    tf->scrollbar_visible = (text_h > inner_a.h);
+    
+    bool area_hovered = (e == hovered_element);
+    if(tf->scrollbar_visible)
+    {
+        Rect scrollbar_a;
+        Rect handle_a;
+        get_textfield_scrollbar_rects(tf->a, inner_a.h, tf->scroll.value, text_h, &scrollbar_a, &handle_a);
 
+        bool scrollbar_hovered = false;
+        if(point_inside_rect(mouse->p, scrollbar_a)) {
+            area_hovered = false;
+            scrollbar_hovered = true;
+        }
+        
+        update_scrollbar(&tf->scroll, scrollbar_hovered, scrollbar_a, text_h, inner_a.h, input);
+    }
+    else {
+        tf->scroll.value = 0;
+    }
+
+    
+    tf->click_state = evaluate_click_state(tf->click_state, area_hovered, input, tf->disabled);
+
+    
+    *_use_i_beam_cursor = (area_hovered && !(tf->scroll.handle_click_state & PRESSED));
+
+        
     if(tf->disabled) return;
-
     
     if(ui->active_element != id) return;
 
@@ -791,18 +935,18 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     // IF WE REACH THIS POINT, THE TEXTFIELD IS ACTIVE. //
     // //////////////////////////////////////////////// //
 
-    auto *caret           = &ui->active_textfield_state.caret;
-    auto *highlight_start = &ui->active_textfield_state.highlight_start;
-        
-    Rect text_a  = textfield_text_a(tf);
-    String text  = get_ui_string(tf->text, ui);
+    auto *tf_state = &ui->active_textfield_state;
+    auto *caret           = &tf_state->caret;
+    auto *highlight_start = &tf_state->highlight_start;
+    
+    Rect text_a = inner_a;
+    text_a.h  = text_h;
+    text_a.y -= tf->scroll.value;
+    
 
     if(became_active) {
         ui->active_textfield_state.last_resize_w = text_a.w;
     }
-
-    Body_Text bt;
-    bool body_text_created = false;
 
     bool shift_is_down = false;
     bool ctrl_is_down  = false;
@@ -815,29 +959,33 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     // SELECT ALL //
     if(ctrl_is_down && in_array(input->keys_down, VKEY_a)) {
         
-        if(!body_text_created)
-            bt = create_textfield_body_text(text, text_a, fonts);
-        
         highlight_start->cp = 0;
 
         caret->cp   = bt.num_codepoints;
     }
     // ////////// //
+
+    bool do_scroll_to_caret = tf_state->text_did_change;
     
     if(tf->click_state & PRESSED) {
-
-        if(!body_text_created)
-            bt = create_textfield_body_text(text, text_a, fonts);
         
         Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, text_a.p, fonts);
 
-        caret->cp   = mouse_text_location.cp_index;
+        caret->cp = mouse_text_location.cp_index;
+
+        // Scroll to caret?
+        if(t - tf_state->last_scroll_to_caret_by_mouse_t >= tweak_float(TWEAK_SCROLL_TO_CARET_REPEAT_INTERVAL))
+        {
+            do_scroll_to_caret = true;
+            tf_state->last_scroll_to_caret_by_mouse_t = t;
+        }
         
         if(tf->click_state & PRESSED_NOW && !shift_is_down) {
             highlight_start->cp   = mouse_text_location.cp_index;
         };
+
     }
-    
+
     // NAVIGATE //
     {
         for(int i = 0; i < input->key_hits.n; i++)
@@ -853,14 +1001,15 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
                 default: continue;
             }
 
-            if(!body_text_created)
-                bt = create_textfield_body_text(text, text_a, fonts);
-            
-            textfield_navigate(nav_dir, shift_is_down, &bt, &ui->active_textfield_state, fonts);
+            int line = textfield_navigate(nav_dir, shift_is_down, &bt, &ui->active_textfield_state, fonts);
+            if(line != -1) do_scroll_to_caret = true;
         }
-
     }
     // ///////// //
+
+    if(do_scroll_to_caret) {
+        textfield_scroll_to_codepoint_index(tf_state->caret.cp, inner_a.h, &bt, &tf->scroll);
+    }
 }
 
 
@@ -1218,7 +1367,7 @@ void begin_ui_build(UI_Manager *ui)
 #endif
 }
 
-void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon *_cursor)
+void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, Cursor_Icon *_cursor)
 {
     Array<u8, ALLOC_TMP> temp = {0};
 
@@ -1359,9 +1508,14 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
     if(input->mouse.buttons_down & MB_PRIMARY)
     {
         if(hovered_element &&
-           hovered_element->type == TEXTFIELD)
+           hovered_element->type == TEXTFIELD) // @Cleanup
         {
-            if(ui->active_element != hovered_element_id) {
+            Assert(hovered_element->type == TEXTFIELD);
+
+            // Activate if mouse is not on scrollbar:
+            if(ui->active_element != hovered_element_id &&
+               !point_inside_rect(mouse.p, textfield_scrollbar_rect(hovered_element->textfield.a))) {
+                
                 // ACTIVATE ELEMENT //
                 ui->active_element = hovered_element_id;
                 reset_textfield_state(&ui->active_textfield_state);
@@ -1374,6 +1528,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
         }   
     }
 
+    bool use_i_beam_cursor = false;
+
     // UPDATE ELEMENTS //
     for(s64 i = 0; i < ui->elements.n; i++)
     {
@@ -1384,7 +1540,10 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
             case BUTTON:    update_button(e, input, hovered_element);    break;
             case TEXTFIELD: {
                 bool became_active = (element_that_became_active == e);
-                update_textfield(e, ui->element_ids[i], input, hovered_element, ui, fonts, became_active); break;
+                bool area_hovered;
+                update_textfield(e, ui->element_ids[i], input, hovered_element, ui, fonts, became_active, t, &area_hovered);
+                if(area_hovered)
+                    use_i_beam_cursor = true;
             } break;
             case SLIDER:    update_slider(e, input, hovered_element);    break;
             case DROPDOWN:  update_dropdown(e, input, hovered_element);  break;
@@ -1398,8 +1557,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, Cursor_Icon
     }
     
 
-    if(hovered_element &&
-       hovered_element->type == TEXTFIELD)
+    if(use_i_beam_cursor)
         *_cursor = CURSOR_ICON_I_BEAM;
     else
         *_cursor = CURSOR_ICON_DEFAULT;

@@ -172,6 +172,14 @@ struct UI_Button
     bool selected;
 };
 
+struct UI_Scrollbar
+{
+    UI_Click_State handle_click_state;
+    float handle_grab_rel_p;
+    
+    float value;
+};
+
 struct UI_Textfield
 {
     Rect a;
@@ -179,6 +187,9 @@ struct UI_Textfield
 
     UI_Click_State click_state;
     bool disabled;
+
+    bool scrollbar_visible;
+    UI_Scrollbar scroll;
 };
 
 struct UI_Slider
@@ -238,12 +249,16 @@ struct UI_Textfield_State
     UI_Textfield_Caret caret;
     UI_Textfield_Caret highlight_start;
 
+    double last_scroll_to_caret_by_mouse_t;
+
     // NOTE: This is reset on textfield resize.
     Direction last_nav_dir;
     float last_vertical_nav_x; // Where the caret was on x (in pixels) before the last vertical navigation.
                                // This is relative to the textfield's text's position.
 
     float last_resize_w; // When a resize was last detected (or the textfield was marked active), this is the width the text area had.
+
+    bool text_did_change; // This loop
 };
 
 struct UI_Manager
