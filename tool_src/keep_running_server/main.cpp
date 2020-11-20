@@ -67,7 +67,7 @@ int main(int num_arguments, char **arguments)
                           NULL,
                           NULL,
                           FALSE,
-                          NORMAL_PRIORITY_CLASS | CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP,
+                          NORMAL_PRIORITY_CLASS | CREATE_NEW_PROCESS_GROUP,
                           NULL,
                           NULL,
                           &startup_info,
