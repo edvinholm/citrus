@@ -16,3 +16,6 @@ main.obj
 
 
 usr/
+
+
+tmp/.build_in_progress

@@ -7,6 +7,9 @@ REM local_env.bat should call vcvarsall.bat, and cd into the build directory.
 call local_env.bat
 REM --------
 
+REM Tell tools that a build is in progress.
+echo 1 > tmp/.build_in_progress
+
 
 echo ----------------------------------------------------------------
 DEL vc140.pdb
@@ -44,7 +47,7 @@ echo Done.
 
 REM Comment out 'goto' to build server.
 :server
-goto shaders
+REM goto shaders
 
 Taskkill /IM citrus_server.exe /F
 
@@ -70,3 +73,7 @@ echo Done.
 echo ----------------------------------------------------------------
 
 :end
+
+
+REM Tell tools that a build is no longer in progress.
+DEL tmp\.build_in_progress

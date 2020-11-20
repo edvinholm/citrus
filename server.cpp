@@ -143,7 +143,7 @@ DWORD listening_loop(void *server_)
         // @Cleanup close socket boilerplate...
 
         if(!platform_set_socket_read_timeout(&client_socket, 1000)) {
-            Debug_Print("Unable to set read timeout for new client's socket.\n");
+            Debug_Print("Unable to set read timeout for new client's socket (Last WSA Error: %d).\n", WSAGetLastError());
             
             if(!platform_close_socket(&client_socket)) {
                 Debug_Print("Unable to close new client's socket.\n");
