@@ -1,21 +1,12 @@
 
 local_env.bat
-local.tweaks
 local.dev_id
-
-citrus.exe
-citrus.pdb
-citrus_server.exe
-citrus_server.pdb
-citrus_release.exe
-citrus_release.pdb
+tweaks/local.tweaks
 
 main.obj
 .vscode
 .vs/**
 
-
-usr/
-
+usr/**
 
 tmp/.build_in_progress

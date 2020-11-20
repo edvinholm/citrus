@@ -5,11 +5,6 @@
 #include <utility>
 #include "../../defer.cpp"
 
-// TODO nocheckin: Wait for compile to complete!!!
-
-
-// TODO nocheckin: https://stackoverflow.com/questions/18291284/handle-ctrlc-on-win32
-
 // Not @ThreadSafe (@Robustness)
 bool should_exit = false;
 bool process_is_running = false;
@@ -79,7 +74,7 @@ int main(int num_arguments, char **arguments)
                           &process_info))
         {
             printf("Failed to launch server.\n");
-            return 1; // nocheckin: loop
+            return 1;
         }
                process_is_running = true;
 
