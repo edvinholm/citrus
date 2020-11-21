@@ -732,18 +732,9 @@ bool platform_get_iso_language(String *_iso, Allocator_ID allocator)
     return true;
 }
 
-
-void platform_sleep_microseconds(u64 microseconds)
+void platform_sleep_milliseconds(int ms)
 {
-    u64 start = platform_performance_counter();
-    while(true)
-    {
-        u64 now   = platform_performance_counter();
-        u64 delta = now - start;
-        double delta_us = ((double)delta / (double)platform_performance_counter_frequency()) * 1000 * 1000;
-
-        if(delta_us >= microseconds) break;
-    }
+    Sleep(ms);
 }
 
 void platform_set_cursor_icon(Cursor_Icon icon)

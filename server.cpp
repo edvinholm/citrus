@@ -127,7 +127,11 @@ DWORD listening_loop(void *server_)
         // @Norelease: Get IP address.
         bool error;
         if(!platform_accept_next_incoming_socket_connection(&listening_socket, &client_socket, &error)) {
-            if(!error) continue;
+            if(!error) {
+                // NOTE: Should not get here with a non-blocking listening socket.
+                platform_sleep_milliseconds(100);
+                continue;
+            }
 
             Debug_Print("Listening loop client accept failure\n");
             platform_close_socket(&listening_socket);
@@ -183,7 +187,7 @@ DWORD listening_loop(void *server_)
             // If the queue is full, wait..
             while(queue->num_clients == ARRLEN(queue->clients)) {
                 unlock_mutex(queue->mutex);
-                platform_sleep_microseconds(100);
+                platform_sleep_milliseconds(1);
                 lock_mutex(queue->mutex);
             }
             
@@ -346,9 +350,9 @@ bool start_listening_loop(Server *server, Thread *thread)
     while(!setup_listening_socket(&server->listening_socket))
     {
         Debug_Print("setup_listening_socket() failed. Retrying in 3...");
-        platform_sleep_microseconds(1000*1000);
-        Debug_Print("2..."); platform_sleep_microseconds(1000*1000);
-        Debug_Print("1..."); platform_sleep_microseconds(1000*1000);
+        platform_sleep_milliseconds(1000);
+        Debug_Print("2..."); platform_sleep_milliseconds(1000);
+        Debug_Print("1..."); platform_sleep_milliseconds(1000);
         Debug_Print("\n");
     }
     if(!platform_create_thread(&listening_loop, server, thread)) {
@@ -491,7 +495,7 @@ int server_entry_point(int num_args, char **arguments)
 
         add_new_room_clients(&server);
             
-        platform_sleep_microseconds(1000);
+//        platform_sleep_milliseconds(1);
     }
 
     platform_deinit_socket_use();

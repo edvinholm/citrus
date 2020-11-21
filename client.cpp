@@ -394,9 +394,6 @@ int client_entry_point(int num_args, char **arguments)
 #endif
         
         platform_set_cursor_icon(cursor);
-
-        // NOTE: Experienced stuttering when not sleeping here -- guessing that this thread kept locking the mutex without letting the render loop render its frame(s).
-        platform_sleep_microseconds(100);
     }
 
     stop_network_loop(&network_loop, &client);
