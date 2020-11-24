@@ -621,9 +621,13 @@ bool platform_create_thread(DWORD (*proc)(void *), void *param, Thread *_thread)
     return (_thread->handle != NULL);
 }
 
-void platform_join_thread(Thread &thread)
+// NOTE: If timeout_ms == -1, timeout will be infinite.
+void platform_join_thread(Thread &thread, s32 timeout_ms = -1)
 {
-    WaitForSingleObject(thread.handle, INFINITE);
+    auto timeout = INFINITE;
+    if(timeout_ms >= 0) timeout = timeout_ms;
+    
+    WaitForSingleObject(thread.handle, timeout);
 }
 
 void platform_create_mutex(Mutex *_mutex)

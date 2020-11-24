@@ -1,5 +1,42 @@
 
+// @Temporary?
+template<typename T>
+struct Atomic {
+    Mutex mutex;
+    T value;
+};
 
+template<typename T>
+void init_atomic(Atomic<T> *a)
+{
+    create_mutex(a->mutex);
+}
+
+template<typename T>
+void deinit_atomic(Atomic<T> *a)
+{
+    delete_mutex(a->mutex);
+}
+
+template<typename T>
+T get(Atomic<T> *a) {
+    T result;
+    lock_mutex(a->mutex);
+    {
+        result = a->value;
+    }
+    unlock_mutex(a->mutex);
+    return result;
+}
+
+template<typename T>
+void set(Atomic<T> *a, T value) {
+    lock_mutex(a->mutex);
+    {
+        a->value = value;
+    }
+    unlock_mutex(a->mutex);
+}
 
 
 inline

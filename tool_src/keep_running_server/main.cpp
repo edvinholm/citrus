@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <utility>
+
 #include "../../defer.cpp"
 
 // Not @ThreadSafe (@Robustness)
@@ -16,6 +17,7 @@ BOOL WINAPI console_ctrl_handler(DWORD signal) {
     if (signal == CTRL_C_EVENT ||
         signal == CTRL_CLOSE_EVENT)
     {
+        // TODO @Incomplete: Send message to process so it has a chance to shut down properly.
         TerminateProcess(process_info.hProcess, 99);
         should_exit = true;
         return TRUE;
@@ -88,6 +90,8 @@ int main(int num_arguments, char **arguments)
         
         printf("Server exited.\n");
         if(should_exit) break;
+
+        Sleep(100);
     }
     
     return 0;
