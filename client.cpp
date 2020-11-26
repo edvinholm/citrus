@@ -16,7 +16,7 @@ void bar_window(UI_Context ctx, Input_Manager *input)
 
 
     UI_ID window_id;
-    { _AREA_(begin_window(P(ctx), &window_id, STRING("REFRIGERATOR")));
+    { _WINDOW_(P(ctx), STRING("REFRIGERATOR"));
 
         _GRID_(1, c, 4);
 
@@ -43,7 +43,6 @@ void bar_window(UI_Context ctx, Input_Manager *input)
             }
         }
     }
-    end_window(window_id, ctx.manager);
 }
 
 void request_connection_to_room(Room_ID id, Client *client)
@@ -54,15 +53,77 @@ void request_connection_to_room(Room_ID id, Client *client)
     client->server_connections.room_connect_requested = true;
 }
 
-// @Temporary
-bool foo_window(UI_Context ctx, Client *client)
+void request_connection_to_user(String username, Client *client)
+{
+    Assert(client->server_connections.user_connect_requested == false);
+    
+    array_set(client->server_connections.requested_username, username.data, username.length);
+    client->server_connections.user_connect_requested = true;
+}
+
+void user_window(UI_Context ctx, Client *client)
 {
     U(ctx);
     
-    bool result = false;
+    char *usernames[] = {
+        "Tachophobia",
+        "Sailor88",
+        "WhoLetTheDogsOut",
+        "MrCool",
+        "kadlfgAJb!",
+        "LongLongWay.9000",
+        "_u_s_e_r_n_a_m_e_",
+        "generalW4ste",
+        "Snordolf101"
+    };
+
+    auto *user = &client->user;
+    
+    bool connected  = client->server_connections.user.status == USER_CONNECT__CONNECTED; // @Cleanup
+    bool connecting = client->server_connections.user_connect_requested;
+
+    _WINDOW_(P(ctx), user->shared.username, true, connected, user->shared.color);
+
+    if(connected) {
+        _TOP_CUT_(480);
+        cut_bottom(4, ctx.layout);
+
+        int cols = 8;
+        int rows = 14;
+        _GRID_(cols, rows, 2);
+        for(int r = 0; r < rows; r++) {
+            for(int c = 0; c < cols; c++) {
+                _CELL_();
+                button(PC(ctx, r * cols + c));
+            }
+        }
+    }
+    
+    auto *us_con = &client->server_connections.user;
+    String current_username = { us_con->current_username.e, us_con->current_username.n };
+
+    _GRID_(1, ARRLEN(usernames), 4);
+    for(int i = 0; i < ARRLEN(usernames); i++)
+    {
+        _CELL_();
+
+        String username = STRING(usernames[i]);
+        bool is_current = equal(username, current_username);
+        
+        if(button(PC(ctx, i), username, connecting, is_current) & CLICKED_ENABLED)
+        {
+            request_connection_to_user(username, client);
+        }
+    }
+}
+
+void room_window(UI_Context ctx, Client *client)
+{
+    U(ctx);
 
     float room_button_h = 64;
 
+#if 0
     // DETERMINE WINDOW RECT //
     Rect window_a;
     {
@@ -81,7 +142,8 @@ bool foo_window(UI_Context ctx, Client *client)
         window_a = grown(map_a, borders_and_stuff);
     }
     _AREA_(window_a);
-    // 
+    //
+#endif
 
     // @Temporary
     String_Builder sb = {0};
@@ -91,8 +153,8 @@ bool foo_window(UI_Context ctx, Client *client)
     Room_ID requested_room = (client->server_connections.room_connect_requested) ? client->server_connections.requested_room : -1;
     Room_ID current_room   = client->server_connections.room.current_room;
 
-    UI_ID window_id;
-    { _AREA_(begin_window(P(ctx), &window_id, STRING("FOO")));
+    // TODO @Cleanup: :PushPop Window
+    { _WINDOW_(P(ctx), STRING("ROOM"));
         { _TOP_CUT_(room_button_h);
             _GRID_(num_rooms, 1, 4);
             for(int r = 0; r < num_rooms; r++)
@@ -118,15 +180,8 @@ bool foo_window(UI_Context ctx, Client *client)
             //           We probably will want to know which operations succeeds and fails.
             //           And for some things we want to get stuff back.
             RSB_Packet(client, Click_Tile, clicked_tile);
-        }
-        
+        }   
     }
-    UI_Click_State close_button_state;
-    end_window(window_id, ctx.manager, &close_button_state);
-    if(close_button_state & CLICKED_ENABLED)
-        result = true;
-
-    return result;
 }
 
 void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
@@ -135,16 +190,29 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 
     Rect a = area(ctx.layout);
 
-    _SHRINK_(10);    
+//    _SHRINK_(10);
+
+    
 #if 1
 
+    { _LEFT_CUT_(64);
+        
+    }
+
+    { _RIGHT_CUT_(320);
+        user_window(P(ctx), client);
+    }
+
+    room_window(P(ctx), client);
+
+    /*
     { _RIGHT_HALF_();
-        foo_window(P(ctx), client);
     }
     { _LEFT_HALF_();
         _BOTTOM_HALF_();
         bar_window(P(ctx), input);
     }
+    */
 #else
     foo_window(false, P(ctx), client);
 #endif
@@ -313,7 +381,7 @@ int client_entry_point(int num_args, char **arguments)
     }
     //--
 
-    
+                         
     // UI SETUP //
     UI_Context ui_ctx = UI_Context();
     ui_ctx.manager = ui;
@@ -332,9 +400,8 @@ int client_entry_point(int num_args, char **arguments)
         Assert((u64)wglGetCurrentContext() == 0);
         
         // TIME //
-        u64 millisecond = platform_milliseconds();
-        u64 second = millisecond / 1000;
-        double t = millisecond / 1000.0;
+        double t = platform_get_time();
+        u64 second = t;
         // //// //
         
         // GET WINDOW SIZE, INIT LAYOUT MANAGER //
@@ -381,7 +448,7 @@ int client_entry_point(int num_args, char **arguments)
                 pop_layout(layout);
 
             }
-            double t = platform_milliseconds() / 1000.0; // @Robustness: This is safe to do, right?
+            double t = platform_get_time(); // @Robustness: This is safe to do, right?
             end_ui_build(ui, &client.input, client.fonts, t, &cursor);
             // //////// //
 

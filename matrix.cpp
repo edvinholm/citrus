@@ -117,7 +117,7 @@ m4x4 transposed(m4x4 matrix)
 }
 
 
-m4x4 inverted(m4x4 matrix)
+m4x4 inverse_of(m4x4 matrix)
 {
     m4x4 inverse;
     float det;
@@ -391,6 +391,13 @@ v3 vecmatmul(m4x4 m, v3 v)
     result.y = m4x4_get(m, 1, 0) * v.x + m4x4_get(m, 1, 1) * v.y + m4x4_get(m, 1, 2) * v.z + m4x4_get(m, 1, 3) * 1.0f;
     result.z = m4x4_get(m, 2, 0) * v.x + m4x4_get(m, 2, 1) * v.y + m4x4_get(m, 2, 2) * v.z + m4x4_get(m, 2, 3) * 1.0f;
     return result;
+}
+
+
+inline
+float vecmatmul_z(m4x4 m, v3 v)
+{
+    return m4x4_get(m, 2, 0) * v.x + m4x4_get(m, 2, 1) * v.y + m4x4_get(m, 2, 2) * v.z + m4x4_get(m, 2, 3) * 1.0f;
 }
 
 

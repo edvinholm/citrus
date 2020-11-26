@@ -18,6 +18,7 @@ struct Client
     // --
     
     // --
+    User user;
     Game game;
     // --
     

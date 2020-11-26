@@ -12,7 +12,8 @@
 #include "memory_macros.h"
 
 // --
-const u16 SERVER_PORT = 50888;
+const u16 ROOM_SERVER_PORT = 50888;
+const u16 USER_SERVER_PORT = 50999;
 // --
 
 #if DEBUG

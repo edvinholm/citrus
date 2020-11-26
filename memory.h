@@ -61,6 +61,8 @@ Allocator ui_allocator     = {0};
 Allocator network_allocator    = {0};
 Allocator dev_allocator    = {0};
 Allocator platform_allocator = {0};
+Allocator us_allocator = {0};
+Allocator rs_allocator = {0};
 
 Allocator *allocators[] = {
     NULL, // ALLOC_MALLOC
@@ -71,5 +73,7 @@ Allocator *allocators[] = {
     &ui_allocator,
     &network_allocator,
     &dev_allocator,
-    &platform_allocator
+    &platform_allocator,
+    &us_allocator,
+    &rs_allocator
 };

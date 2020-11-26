@@ -20,7 +20,10 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *t
 inline
 void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 {
-    add_vertices(p, uv, c, tex, n, &gfx->vertex_buffer);
+    auto *buffer = current_vertex_buffer(gfx);
+    Assert(buffer);
+    add_vertices(p, uv, c, tex, n, buffer);
+    
     //triangles_now(vertices, uvs, colors, n, gfx);
 }
 

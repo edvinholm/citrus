@@ -38,6 +38,20 @@ void gpu_set_depth_testing_enabled(bool enabled)
     else glDisable(GL_DEPTH_TEST);
 }
 
+inline
+bool gpu_get_depth_mask()
+{
+    GLboolean mask;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &mask);
+    return mask;
+}
+
+inline
+void gpu_set_depth_mask(bool mask)
+{
+    glDepthMask(mask);
+}
+
 void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader)
 {   
     Assert(set_index < ARRLEN(vertex_shader->buffer_sets));

@@ -560,7 +560,7 @@ void ensure_buffer_set_capacity(u64 required_capacity, u64 *capacity,
 
     if(old_capacity != 0) {
         Assert(*(buffers[0]) != NULL);
-        dealloc(*(buffers[0]), allocator);
+        dealloc_if_legal(*(buffers[0]), allocator);
     }
     else {
         Assert(*(buffers[0]) == NULL);

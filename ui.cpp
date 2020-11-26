@@ -1168,7 +1168,8 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     // ////////////// //
 }
 
-Rect begin_window(UI_Context ctx, UI_ID *_id, String title = EMPTY_STRING, bool use_default_padding = true)
+Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool use_default_padding = true,
+                  bool use_custom_border_color = false, v4 custom_border_color = V4_ZERO)
 {
     U(ctx);
 
@@ -1188,6 +1189,7 @@ Rect begin_window(UI_Context ctx, UI_ID *_id, String title = EMPTY_STRING, bool 
         win->current_a = win->initial_a;
 
     win->title = push_ui_string(title, ui);
+    win->border_color = (use_custom_border_color) ? custom_border_color : tweak_v4(TWEAK_WINDOW_BORDER_COLOR);
 
     // NOTE: We do this when we begin the window, instead of in the UI update phase.
     //       Because we don't want the children of the window to lag behind. This

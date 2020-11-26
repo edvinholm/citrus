@@ -1,8 +1,15 @@
- 
+
+inline
+Vertex_Buffer<ALLOC_GFX> *current_vertex_buffer(Graphics *gfx)
+{
+    return current(gfx->vertex_buffer_stack, &gfx->default_vertex_buffer);
+}
 
 
 
-void ensure_capacity(Vertex_Buffer *vb, u64 required_capacity)
+
+template<Allocator_ID A>
+void ensure_capacity(Vertex_Buffer<A> *vb, u64 required_capacity)
 {
     void **buffers[] = {
         (void **)&vb->p,
@@ -20,10 +27,11 @@ void ensure_capacity(Vertex_Buffer *vb, u64 required_capacity)
 
     Assert(ARRLEN(buffers) == ARRLEN(element_sizes));
 
-    ensure_buffer_set_capacity(required_capacity, &vb->capacity, buffers, element_sizes, ARRLEN(buffers), ALLOC_GFX);
+    ensure_buffer_set_capacity(required_capacity, &vb->capacity, buffers, element_sizes, ARRLEN(buffers), A);
 }
 
-void add_vertices(v3 *p, v2 *uv, v4 *c, float *tex, u64 n, Vertex_Buffer *vb)
+template<Allocator_ID A>
+void add_vertices(v3 *p, v2 *uv, v4 *c, float *tex, u64 n, Vertex_Buffer<A> *vb)
 {
     ensure_capacity(vb, vb->n + n);
 

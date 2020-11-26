@@ -140,6 +140,7 @@ struct UI_Window
     Rect current_a;
 
     UI_String title;
+    v4 border_color;
     
     bool pressed;
     UI_Click_State close_button_state;
@@ -289,3 +290,12 @@ struct UI_Manager
         UI_Textfield_State active_textfield_state;
     };
 };
+
+
+#define _WINDOW___INTERNAL_(Ident, ...) \
+    UI_ID Ident; \
+    _AREA_(begin_window(&Ident, __VA_ARGS__)); \
+    defer(end_window(Ident, ctx.manager);)
+
+#define _WINDOW_(...) \
+    _WINDOW___INTERNAL_(CONCAT(window_id_, __COUNTER__), __VA_ARGS__)

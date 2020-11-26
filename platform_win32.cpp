@@ -581,13 +581,6 @@ void platform_end_frame(Window *window)
 }
 
 
-//IMPORTANT: This is not milliseconds since 1 Jan 1970!
-inline
-u64 platform_milliseconds()
-{
-    return GetTickCount64();
-}
-
 
 // Counts per second
 inline
@@ -605,6 +598,23 @@ s64 platform_performance_counter()
     QueryPerformanceCounter(&i);
     return i.QuadPart;
 }
+
+
+//IMPORTANT: This is not since 1 Jan 1970!
+inline
+u64 platform_milliseconds()
+{
+    return GetTickCount64();
+}
+
+
+//IMPORTANT: This is not since 1 Jan 1970!
+inline
+double platform_get_time()
+{
+    return platform_performance_counter() / (double)platform_performance_counter_frequency();
+}
+
 
 
 bool platform_init()
@@ -862,6 +872,7 @@ bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
     while(at < end) {
         int result = send(sock->handle, (const char *)at, end - at, 0);
         if(result == SOCKET_ERROR) return false;
+		Assert(result > 0);
         at += result;
     }
     

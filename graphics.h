@@ -1,4 +1,5 @@
 
+
 struct Graphics_Debug
 {
     u64 num_draw_calls;
@@ -6,6 +7,8 @@ struct Graphics_Debug
     String_Builder sb;
 };
 
+
+template<Allocator_ID A>
 struct Vertex_Buffer
 {
     u64 capacity;
@@ -16,12 +19,108 @@ struct Vertex_Buffer
     v4    *c;
     float *tex;
 };
+template<Allocator_ID A>
+void reset(Vertex_Buffer<A> *buffer)
+{
+    buffer->n = 0;
+}
+
+// @Incomplete: This is supposed to determine if we should give the gpu a mesh ID or vertices...
+enum Render_Object_Type
+{
+    VERTEX_OBJECT
+    // @Incomplete: MESH_OBJECT    or something..
+};
+
+struct Render_Object
+{
+    Render_Object_Type type;
+    float screen_z;
+    m4x4 transform;
+
+    union {
+        struct { // VERTEX_OBJECT
+            u64 vertex0;
+            u64 vertex1;
+        };
+    };
+};
+
+// @Incomplete: :VertexObjectBufferIncomplete Sort objects by screen z before rendering them.
+struct Render_Object_Buffer
+{
+    bool current_vertex_object_began;
+    Render_Object current_vertex_object;
+    
+    Array<Render_Object, ALLOC_GFX> objects;
+    Vertex_Buffer<ALLOC_GFX> vertices;
+};
+
+void reset(Render_Object_Buffer *buffer)
+{
+    buffer->objects.n = 0;
+    reset(&buffer->vertices);
+}
+
+struct World_Render_Buffer
+{
+    Render_Object_Buffer opaque;
+    Render_Object_Buffer translucent;
+};
+void reset(World_Render_Buffer *buffer)
+{
+    reset(&buffer->opaque);
+    reset(&buffer->translucent);
+}
+
+enum Vertex_Destination
+{
+    VD_DEFAULT          = 0,
+    VD_WORLD_OPAQUE,
+    VD_WORLD_TRANSLUCENT
+};
+
+// TODO @Cleanup: Move
+template<typename T, int Max>
+struct Static_Stack
+{
+    T e[Max];
+    int size;
+};
+
+template<typename T, int Max>
+void push(Static_Stack<T, Max> &stack, T elem)
+{
+    Assert(stack.size < Max);
+    Assert(stack.size >= 0);
+    stack.e[stack.size++] = elem;
+}
+
+template<typename T, int Max>
+T pop(Static_Stack<T, Max> &stack)
+{
+    Assert(stack.size <= Max);
+    Assert(stack.size > 0);
+    return stack.e[--stack.size];
+}
+
+template<typename T, int Max>
+T current(Static_Stack<T, Max> &stack, T default_if_empty)
+{
+    Assert(stack.size <= Max);
+    Assert(stack.size >= 0);
+    if(stack.size == 0) return default_if_empty;
+    else return stack.e[stack.size-1];
+}
 
 struct Graphics
 {
     GPU_Context gpu_ctx;
 
-    Vertex_Buffer vertex_buffer;
+    Vertex_Buffer<ALLOC_GFX> default_vertex_buffer;
+    World_Render_Buffer world_render_buffer;
+    
+    Static_Stack<Vertex_Buffer<ALLOC_GFX> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
     
     GPU_Texture_ID     multisample_texture;
     GPU_Texture_ID     depth_buffer_texture;

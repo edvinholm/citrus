@@ -20,7 +20,7 @@ echo ----------------------------------------------------------------
 
 REM Comment out 'goto' to build client.
 :client
-goto server
+REM goto server
 
 Taskkill /IM citrus.exe /F 
 Taskkill /IM citrus_release.exe /F

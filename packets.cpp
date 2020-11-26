@@ -1,44 +1,4 @@
 
-// IMPORTANT: Must fit in a u64
-enum Room_Connect_Status
-{
-    ROOM_CONNECT__NO_STATUS = 0, // This is used to indicate that we failed to read a status.
-
-    
-    ROOM_CONNECT__REQUEST_RECEIVED = 1,
-    ROOM_CONNECT__CONNECTED        = 2,
-    
-    ROOM_CONNECT__INVALID_ROOM_ID  = 3
-
-};
-
-enum RCB_Packet_Type
-{
-    RCB_GOODBYE = 1,
-    RCB_ROOM_INIT = 3,
-    
-    RCB_TILES_CHANGED = 2,
-};
-
-// Room Client Bound Packet Header
-struct RCB_Packet_Header
-{
-    RCB_Packet_Type type;
-};
-
-enum RSB_Packet_Type
-{
-    RSB_GOODBYE = 1,
-
-    RSB_CLICK_TILE = 2,
-};
-
-// Room Server Bound Packet Header
-struct RSB_Packet_Header
-{
-    RSB_Packet_Type type;
-};
-
 
 
 // @NoRelease
@@ -103,6 +63,39 @@ bool read_u64(u64 *_i, Socket *sock)
     return read_from_socket(_i, sizeof(*_i), sock);
 }
 
+inline
+bool read_v4(v4 *_u, Socket *sock)
+{
+    Assert(sizeof(_u->x) == sizeof(u32));
+    Assert(sizeof(_u->x) == 4);
+    u32 x, y, z, w;    
+    if(!read_u32(&x, sock)) return false;
+    if(!read_u32(&y, sock)) return false;
+    if(!read_u32(&z, sock)) return false;
+    if(!read_u32(&w, sock)) return false;
+
+    memcpy(&_u->x, &x, 4);
+    memcpy(&_u->y, &y, 4);
+    memcpy(&_u->z, &z, 4);
+    memcpy(&_u->w, &w, 4);
+
+    return true;
+}
+
+inline
+bool read_String(String *_str, Socket *sock, Allocator_ID allocator)
+{
+    u64 length;
+    if(!read_u64(&length, sock)) return false;
+    _str->length = length;
+    _str->data = alloc(length, allocator); // @Norelease: TODO @Security: Should have a max length for strings. If the client sends a huge number here, we would try to alloc it and fail and crash and..........
+    if(!read_from_socket(_str->data, _str->length, sock)) {
+        dealloc_if_legal(_str->data, allocator);
+        return false;
+    }
+    return true;
+}
+
 
 
 inline
@@ -162,193 +155,64 @@ bool write_u64(u64 i, Socket *sock)
     return write_to_socket(&i, sizeof(i), sock);
 }
 
+inline
+bool write_float(float f, Socket *sock)
+{
+    Assert(sizeof(f) == sizeof(u32));
+    Assert(sizeof(f) == 4);
+    u32 i;
+    memcpy(&i, &f, 4);
+    return write_u32(i, sock);
+}
+
+inline
+bool write_v4(v4 u, Socket *sock)
+{
+    Assert(sizeof(u.x) == sizeof(u32));
+    Assert(sizeof(u.x) == 4);
+    u32 x, y, z, w;
+    memcpy(&x, &u.x, 4);
+    memcpy(&y, &u.y, 4);
+    memcpy(&z, &u.z, 4);
+    memcpy(&w, &u.w, 4);
+
+    if(!write_u32(x, sock)) return false;
+    if(!write_u32(y, sock)) return false;
+    if(!write_u32(z, sock)) return false;
+    if(!write_u32(w, sock)) return false;
+
+    return true;
+}
+
+inline
+bool write_String(String str, Socket *sock)
+{
+    // @Norelease: TODO @Security: Assert str.length < max length for strings... See note in read_String.
+    if(!write_u64(str.length, sock)) return false;
+    if(!write_to_socket(str.data, str.length, sock)) return false;
+
+    return true;
+}
+
+
 #define Read_Bytes(Dest, Length, Sock_Ptr)      \
     Fail_If_True(!read_from_socket(Dest, Length, Sock_Ptr))
 
 #define Write_Bytes(Src, Length, Sock_Ptr)      \
     Fail_If_True(!write_to_socket(Src, Length, Sock_Ptr))
 
-#define Read_To_Ptr(Type, Dest, Sock_Ptr) \
-    Fail_If_True(!read_##Type(Dest, Sock_Ptr))
+#define Read_To_Ptr(Type, Dest, ...) \
+    Fail_If_True(!read_##Type(Dest, __VA_ARGS__))
 
-#define Read(Type, Ident, Sock_Ptr) \
+#define Read(Type, Ident, ...) \
     Type Ident;                                 \
-    Fail_If_True(!read_##Type(&Ident, Sock_Ptr))
+    Fail_If_True(!read_##Type(&Ident, __VA_ARGS__))
 
 #define Write(Type, Val, Sock_Ptr) \
     Fail_If_True(!write_##Type(Val, Sock_Ptr))
 
-#define Write_RSB_Header(Packet_Type, Sock_Ptr)    \
-    Fail_If_True(!write_RSB_Packet_Header({Packet_Type}, Sock_Ptr))
-
-#define Write_RCB_Header(Packet_Type, Sock_Ptr)    \
-    Fail_If_True(!write_RCB_Packet_Header({Packet_Type}, Sock_Ptr))
-
-
-inline
-Room_Connect_Status read_room_connect_status_code(Socket *sock)
-{
-    u64 i;
-    bool result = read_u64(&i, sock);
-    if(!result) return ROOM_CONNECT__NO_STATUS;
-
-    return (Room_Connect_Status)i;
-}
-
-inline
-bool write_room_connect_status_code(Room_Connect_Status status, Socket *sock)
-{
-    return write_u64(status, sock);
-}
 
 
 
-
-inline
-bool read_Tile(Tile *_tile, Socket *sock)
-{
-    u8 i;
-    if(!read_u8(&i, sock)) return false;
-    *_tile = (Tile)i;
-    return true;
-}
-
-inline
-bool write_Tile(Tile tile, Socket *sock)
-{
-    return write_u8(tile, sock);
-}
-
-
-
-
-inline
-bool read_RSB_Packet_Type(RSB_Packet_Type *_type, Socket *sock)
-{
-    u64 i;
-    if(!read_u64(&i, sock)) return false;
-    *_type = (RSB_Packet_Type)i;
-    return true;
-}
-
-inline
-bool write_RSB_Packet_Type(RSB_Packet_Type type, Socket *sock)
-{
-    return write_u64(type, sock);
-}
-
-
-inline
-bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Socket *sock)
-{
-    Zero(*_header);
-    Read_To_Ptr(RSB_Packet_Type, &_header->type, sock);
-    return true;
-}
-
-inline
-bool write_RSB_Packet_Header(RSB_Packet_Header header, Socket *sock)
-{
-    Write(RSB_Packet_Type, header.type, sock);
-    return true;
-}
-
-
-// NOTE: tiles should point to all_tiles + tile0
-bool write_rsb_Goodbye_packet(Socket *sock)
-{
-    Write_RSB_Header(RSB_GOODBYE, sock);
-
-    return true;
-}
-
-
-
-
-inline
-bool read_RCB_Packet_Type(RCB_Packet_Type *_type, Socket *sock)
-{
-    u64 i;
-    if(!read_u64(&i, sock)) return false;
-    *_type = (RCB_Packet_Type)i;
-    return true;
-}
-
-inline
-bool write_RCB_Packet_Type(RCB_Packet_Type type, Socket *sock)
-{
-    return write_u64(type, sock);
-}
-
-
-inline
-bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Socket *sock)
-{
-    Zero(*_header);
-    Read_To_Ptr(RCB_Packet_Type, &_header->type, sock);
-    return true;
-}
-
-inline
-bool write_RCB_Packet_Header(RCB_Packet_Header header, Socket *sock)
-{
-    Write(RCB_Packet_Type, header.type, sock);
-    return true;
-}
-
-
-// NOTE: tiles should point to all_tiles + tile0
-bool write_rcb_Goodbye_packet(Socket *sock)
-{
-    Write_RCB_Header(RCB_GOODBYE, sock);
-
-    return true;
-}
-
-
-// NOTE: tiles should point to all_tiles + tile0
-bool write_rcb_Tiles_Changed_packet(Socket *sock,
-                                    u64 tile0, u64 tile1, Tile *tiles)
-{
-    Write_RCB_Header(RCB_TILES_CHANGED, sock);
-
-    /* Header */
-    Write(u64, tile0, sock);
-    Write(u64, tile1, sock);
-    /* ------ */
-
-#if 0
-    Tile *at  = tiles;
-    Tile *end = tiles + (tile1 - tile0);
-
-    while(at < end) {
-        Write(Tile, *at++, sock);
-    }
-#else
-    Assert(sizeof(Tile) == 1);
-    Write_Bytes(tiles, (tile1 - tile0), sock);
-#endif
-
-    return true;
-}
-
-
-bool write_rcb_Room_Init_packet(Socket *sock, Tile *tiles)
-{
-    Write_RCB_Header(RCB_ROOM_INIT, sock);
-
-    Assert(sizeof(Tile) == 1);
-    Write_Bytes(tiles, room_size_x * room_size_y, sock);
-
-    return true;
-}
-
-
-bool read_rcb_Tiles_Changed_header(Socket *sock,
-                                  u64 *_tile0, u64 *_tile1)
-{
-    Read_To_Ptr(u64, _tile0, sock);
-    Read_To_Ptr(u64, _tile1, sock);
-
-    return true;
-}
+#include "packets_room.cpp"
+#include "packets_user.cpp"

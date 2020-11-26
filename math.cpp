@@ -1,8 +1,5 @@
  
 
-const double PI = 3.14159265359;
-const double PI_2 = 2 * 3.14159265359;
-
 #define round(x) round(x)
 #define log10(x) log10(x)
 #define abs(x) abs(x)
@@ -142,8 +139,8 @@ float euler_angle(Vector_Component axis, Quat q)
 inline
 float normalized_angle(double angle)
 {
-    int revolutions = angle / (double)PI_2;
-    angle -= revolutions * (double)PI_2;
+    int revolutions = angle / (double)PIx2;
+    angle -= revolutions * (double)PIx2;
     return angle;
 }
 

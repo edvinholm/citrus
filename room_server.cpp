@@ -1,15 +1,22 @@
 
+const char *LOG_TAG_RS      = ":RS:"; // Room Server
+const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
+
 #define RS_Log_T(Tag, ...) \
-    printf("[:RS:]");                \
-    Global_Log_T(Tag, __VA_ARGS__)
+    printf("[%s]", LOG_TAG_RS);                            \
+    Log_T(Tag, __VA_ARGS__)
 #define RS_Log(...)                     \
-    Global_Log_T(":RS:", __VA_ARGS__)
+    Log_T(LOG_TAG_RS, __VA_ARGS__)
+#define RS_Log_No_T(...)                     \
+    Log(__VA_ARGS__)
 
 #define RS_LIST_Log_T(Tag, ...) \
-    printf("[:RS:][LIST]");                \
-    RS_Log_T(Tag, __VA_ARGS__)
+    printf("[%s]", LOG_TAG_RS_LIST);      \
+    Log_T(Tag, __VA_ARGS__)
 #define RS_LIST_Log(...)                     \
-    RS_Log_T("LIST", __VA_ARGS__)
+    Log_T(LOG_TAG_RS_LIST, __VA_ARGS__)
+#define RS_LIST_No_T(...)                     \
+    Log(__VA_ARGS__)
 
 
 void create_dummy_rooms(Room_Server *server)
@@ -86,7 +93,8 @@ void update_room(Room *room, int index) {
                 
                 int y = (at - tiles) / room_size_x;
                 int x = (at - tiles) % room_size_x;
-                
+
+#if 0
                 if(y > 0) {
                     
                     Tile *north = at - room_size_x;
@@ -99,6 +107,8 @@ void update_room(Room *room, int index) {
                         room->did_change = true;
                     }
                 }
+#endif
+                
             }
             
             at++;
@@ -111,45 +121,22 @@ void update_room(Room *room, int index) {
     }
 }
 
-bool setup_room_server_listening_socket(Socket *_sock)
-{
-    bool blocking = false;
-    
-    if(!platform_create_tcp_socket(_sock, blocking)) return false;
-    
-    if(!platform_bind_socket(_sock, SERVER_PORT)) return false;
-    if(!platform_start_listening_to_socket(_sock, LISTENING_SOCKET_BACKLOG_SIZE)) return false;
-    
-    return true;
-}
-
 
 // TODO @Norelease @Robustness @Speed: This thing should have enough information to dismiss clients with invalid room IDs or login credentials.
-DWORD room_server_listening_loop(void *server_)
-{
-    Room_Server *server = &((Server *)server_)->room_server;
-    
-    Socket listening_socket = server->listening_socket;
+DWORD room_server_listening_loop(void *room_server_)
+{    
+    auto *server = (Room_Server *)room_server_;
     auto *queue = &server->client_queue;
-    
-    while(!get(&server->listening_loop_should_exit))
+
+    Listening_Loop *loop = &server->listening_loop;
+
+    RS_LIST_Log("Running.\n");
+
+    bool   client_accepted;
+    Socket client_socket;
+    while(listening_loop_running(loop, &client_accepted, &client_socket, LOG_TAG_RS_LIST))
     {
-        Socket client_socket;
-
-        // @Norelease: Get IP address.
-        bool error;
-        if(!platform_accept_next_incoming_socket_connection(&listening_socket, &client_socket, &error)) {
-            if(!error) {
-                // We should only get here if the socket is non-blocking.
-                platform_sleep_milliseconds(100);
-                continue;
-            }
-
-            RS_LIST_Log("Listening loop client accept failure\n");
-            set(&server->listening_loop_client_accept_failed, true);
-
-            break;
-        }
+        if(!client_accepted) continue;
         
         RS_LIST_Log("Client accepted.\n");
 
@@ -180,6 +167,7 @@ DWORD room_server_listening_loop(void *server_)
             continue;
         }
 
+        // TODO @Cleanup? Is this necessary?
         if(!write_room_connect_status_code(ROOM_CONNECT__REQUEST_RECEIVED, &client_socket)) {
             RS_LIST_Log("Unable to write status.\n");
         }
@@ -213,10 +201,8 @@ DWORD room_server_listening_loop(void *server_)
         // /// ///// // ///// //
     }
 
-    
-    platform_close_socket(&listening_socket);
 
-    RS_LIST_Log("Listening loop exiting.\n");
+    RS_LIST_Log("Exiting.\n");
     return 0;
 }
 
@@ -290,7 +276,7 @@ bool initialize_room_client(Room_Client *client, Room *room)
     return true;
 }
 
-void add_new_clients(Room_Server *server)
+void add_new_room_clients(Room_Server *server)
 {
     auto *queue = &server->client_queue;
     lock_mutex(queue->mutex);
@@ -353,31 +339,6 @@ void add_new_clients(Room_Server *server)
     unlock_mutex(queue->mutex);
 }
 
-// NOTE: Assumes we've already zeroed queue.
-void init_room_client_queue(Room_Client_Queue *queue)
-{
-    create_mutex(queue->mutex);
-}
-
-bool start_room_server_listening_loop(Room_Server *server, Thread *thread)
-{
-    set(&server->listening_loop_should_exit, false);
-    
-    while(!setup_room_server_listening_socket(&server->listening_socket))
-    {
-        RS_Log("setup_listening_socket() failed. Retrying in 3...");
-        platform_sleep_milliseconds(1000);
-        RS_Log("2..."); platform_sleep_milliseconds(1000);
-        RS_Log("1..."); platform_sleep_milliseconds(1000);
-        RS_Log("\n");
-    }
-    if(!platform_create_thread(&room_server_listening_loop, server, thread)) {
-        RS_Log("Unable to create listening loop thread.\n");
-        false;
-    }
-    return true;
-}
-
 bool read_and_handle_rsb_packet(Room_Client *client, RSB_Packet_Header header, Room *room)
 {
     // NOTE: RSB_GOODBYE is handled somewhere else.
@@ -405,23 +366,12 @@ bool read_and_handle_rsb_packet(Room_Client *client, RSB_Packet_Header header, R
 }
 
 
-void init_room_server(Room_Server *server)
+
+bool start_room_server_listening_loop(Room_Server *server, Thread *thread)
 {
-    init_atomic(&server->should_exit);
-
-    init_atomic(&server->listening_loop_should_exit);
-    init_atomic(&server->listening_loop_client_accept_failed);
-
-    init_room_client_queue(&server->client_queue);
-    create_dummy_rooms(server);
-}
-
-void deinit_room_server(Room_Server *server)
-{
-    deinit_atomic(&server->should_exit);
-
-    deinit_atomic(&server->listening_loop_should_exit);    
-    deinit_atomic(&server->listening_loop_client_accept_failed);
+    return start_listening_loop(&server->listening_loop, ROOM_SERVER_PORT,
+                                &room_server_listening_loop, server, thread,
+                                LOG_TAG_RS);
 }
 
 // REMEMBER to init_room_server before starting this.
@@ -430,34 +380,44 @@ void deinit_room_server(Room_Server *server)
 DWORD room_server_main_loop(void *server_)
 {
     Room_Server *server = (Room_Server *)server_;
+    auto *listening_loop = &server->listening_loop;
     
     defer(deinit_room_server(server););
+    
+    RS_Log("Running.\n");
+    
+    create_dummy_rooms(server);
 
     // START LISTENING LOOP //
     Thread listening_loop_thread;
-    if(!start_room_server_listening_loop(server, &listening_loop_thread))
-        return 3;
+    if(!start_room_server_listening_loop(server, &listening_loop_thread)) {
+        RS_Log("Failed to start listening loop.");
+        return 1; // TODO @Norelease: Main server program must know about this!
+    }
     // 
            
     double t = get_time();
 
-    RS_Log("Running.\n");
-
     Array<int, ALLOC_APP> clients_to_disconnect = {0};
     while(!get(&server->should_exit)) {
 
-        if(get(&server->listening_loop_client_accept_failed))
-        {
+        if(get(&listening_loop->client_accept_failed)){
+            // RESTART LISTENING LOOP //
             RS_Log("Listening loop failed. Joining thread...\n");
             platform_join_thread(listening_loop_thread);
+            
             RS_Log("Restarting listening loop...\n");
-            set(&server->listening_loop_client_accept_failed, false);
+            deinit_listening_loop(&server->listening_loop);
+            Zero(server->listening_loop);
             if(!start_room_server_listening_loop(server, &listening_loop_thread)) {
+                RS_Log("Failed to restart listening loop.\n");
                 // TODO @Norelease Disconnect all clients. (Say goodbye etc)
-                return 3;
+                // TODO @Norelease: Main server program must know about this!
+                return 1;
             }
         }
 
+        Assert(server->clients.n == server->rooms.n);
         for(int i = 0; i < server->rooms.n; i++) {
             Assert(server->room_ids[i] > 0); // Only positive numbers are allowed room IDs.
             
@@ -522,20 +482,18 @@ DWORD room_server_main_loop(void *server_)
             }
         }
 
-        add_new_clients(server);
+        add_new_room_clients(server);
             
 //        platform_sleep_milliseconds(1);
     }
 
-    RS_Log("Exiting.\n");
+    RS_Log("Stopping listening loop...");
+    stop_listening_loop(listening_loop, &listening_loop_thread);
+    RS_Log_No_T("Done.\n");
 
-    if(!get(&server->listening_loop_client_accept_failed)) {
-        set(&server->listening_loop_should_exit, true);
-        platform_join_thread(listening_loop_thread, 10*1000);
-    }
-
-    
     // TODO @Incomplete: Disconnect all clients here, after exiting listening loop
+
+    RS_Log("Exiting.\n");
 
     return 0;
 }

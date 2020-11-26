@@ -64,8 +64,8 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
         Assert(gpu_resources_update_result);
     }
 
-
-    gfx->vertex_buffer.n = 0;
+    reset(&gfx->default_vertex_buffer);
+    reset(&gfx->world_render_buffer);
 
     // BIND TEXTURES //
     Assert(ARRLEN(gfx->bound_textures) >= TEX_NONE_OR_NUM);
@@ -276,7 +276,7 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     const float visible_border_w = 2;
     Rect r = shrunken(a, window_border_width-visible_border_w);
     
-    quad(r, tweak_v4(TWEAK_WINDOW_BORDER_COLOR), gfx);
+    quad(r, win->border_color, gfx);
 
     r = shrunken(r, visible_border_w);
 
@@ -694,10 +694,10 @@ void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
         0, 0, -0.2, -0.5,
         0, 0, 0, 1);
 
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, 2 * PI * 0.125));
+    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, PIx2 * 0.125));
     world_projection = matmul(rotation, world_projection);
 
-    rotation = rotation_matrix(axis_rotation(V3_Z, 2 * PI * 0.375));
+    rotation = rotation_matrix(axis_rotation(V3_Z, PIx2 * -0.125));
     world_projection = matmul(rotation, world_projection);
 
     float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
@@ -717,36 +717,132 @@ void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
     // ///////////////////////// //
 
 
-    
-    const v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
-    const v4 grass = {0.25, 0.6,  0.1, 1.0f};
-    const v4 stone = {0.42, 0.4, 0.35, 1.0f};
-    const v4 water = {0.1,  0.3, 0.5, 1.0f};
+    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
+    v4 grass = {0.25, 0.6,  0.1, 1.0f};
+    v4 stone = {0.42, 0.4, 0.35, 1.0f};
+    v4 water = {0.1,  0.3, 0.5,  0.9f};
 
     auto *tiles = room->shared.tiles;
 
     const float tile_s = 1;
-    
-    for(int y = 0; y < room_size_y; y++) {
-        for(int x = 0; x < room_size_x; x++) {
 
-            Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
-            
-            switch(tiles[y * room_size_x + x]) {
-                case TILE_SAND:  quad(tile_a, sand,  gfx); break;
-                case TILE_GRASS: quad(tile_a, grass, gfx); break;
-                case TILE_STONE: quad(tile_a, stone, gfx); break;
-                case TILE_WATER: {
-                    draw_quad({tile_a.x, tile_a.y, 1}, {1, 0, 0}, {0, 1, 0}, water, gfx);
-                    break;
+    m4x4 world_transform = rotation_around_point_matrix(axis_rotation(V3_Z, PIx2 * t / 10.0), { room_size_x / 2.0f, room_size_y / 2.0f });
+    
+    m4x4 combined_matrix = matmul(world_transform, world_projection);
+    
+    // OPAQUE //
+    {
+        _OPAQUE_WORLD_VERTEX_OBJECT_(world_transform);
+        
+        for(int y = 0; y < room_size_y; y++) {
+            for(int x = 0; x < room_size_x; x++) {
+                
+                Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
+
+                auto tile = tiles[y * room_size_x + x];
+                
+                v4 *color = NULL;
+                float z = -0.1f;
+                switch(tile) {
+                    case TILE_SAND:  color = &sand; break;
+                    case TILE_GRASS: color = &grass; break;
+                    case TILE_STONE: color = &stone; break;
+                    case TILE_WATER: color = &stone; z = -0.5; break;
+                    default: Assert(false); break;
                 }
-                default: break;
+
+                if(tile == TILE_WATER) {
+                    draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
+
+                    // WEST
+                    if(x == 0 || tiles[y * room_size_x + x - 1] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    // NORTH
+                    if(y == 0 || tiles[(y-1) * room_size_x + x] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                    // EAST
+                    if(x == room_size_x-1 || tiles[y * room_size_x + x + 1] != TILE_WATER)
+                        draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    // SOUTH
+                    if(y == room_size_y-1 || tiles[(y+1) * room_size_x + x] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                }
+                else if(color){
+                    draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+                }
             }
         }
     }
+
+    // TRANSLUCENT //
+    {
+        for(int y = 0; y < room_size_y; y++) {
+            for(int x = 0; x < room_size_x; x++) {
+
+                Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
+
+                if(tiles[y * room_size_x + x] == TILE_WATER) {
+#if 1
+                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
+                    float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
+                    _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                    draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
+
+#else
+                    // @Temporary
+                    // THIS IS A TEST OF TRANSLUCENT RENDERING OF AN OBJECT THAT OVERLAPS ITSELF...
+                    // So we break it up in multiple objects.......... Is this the way to do it?
+                    
+                    v3 origin = {tile_a.x, tile_a.y, 0.5f + (float)cos((x * y)/50.0 + t) / 2.0f};
+                    
+                    // Top
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {1, 0, 0},  {0, 1, 0}, {0, 0.5, 0.5, 0.65}, gfx);
+                    }
+                    
+                    // Side towards negative X
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0, -0.5));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {0, 0, -1}, {1, 0, 0}, {0.75, 0.0, 0.0, 0.75}, gfx);
+                    }
+                    
+                    // Side towards negative Y
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0, 0.5, -0.5));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {0, 0, -1}, {0, 1, 0}, {0.0, 0.75, 0.0, 0.75}, gfx);
+                    }
 #endif
 
-    flush_vertex_buffer(gfx);
+                }
+            }
+        }
+        
+    }
+
+    
+#endif
+
+#if 1
+    // @Temporary
+    {
+        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);
+        draw_string(STRING("Abc"), V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, gfx);
+    }
+#endif
+    
+    bool old_depth_mask = gpu_get_depth_mask();
+
+    gpu_set_depth_mask(true);
+    flush_render_object_buffer(&gfx->world_render_buffer.opaque, false, gfx);
+
+    gpu_set_depth_mask(false);
+    flush_render_object_buffer(&gfx->world_render_buffer.translucent, true, gfx);
+
+    gpu_set_depth_mask(old_depth_mask);
 
     // TODO :PushPop (@Robustness, @Cleanup)
     config_gpu_for_ui(gfx);
@@ -793,14 +889,14 @@ DWORD render_loop(void *loop_)
 
     
     bool first_frame = true;
-    u64 last_second = platform_milliseconds() / 1000;
+    u64 last_second = platform_get_time();
     
     while(true)
     {   
         lock_mutex(client->mutex);
         {
             triangles_this_frame = 0;
-            double t = platform_milliseconds() / 1000.0;
+            double t = platform_get_time();
             
             if(loop->state == Render_Loop::SHOULD_EXIT) {
                 unlock_mutex(client->mutex);
@@ -808,14 +904,13 @@ DWORD render_loop(void *loop_)
             }
                 
             gpu_set_vsync_enabled(tweak_bool(TWEAK_VSYNC));
-            
 #if DEBUG
             draw_calls_last_frame = gfx.debug.num_draw_calls;
 #endif
 
             frame_begin(main_window, first_frame, client->main_window_a.s, &gfx);
 
-            u64 second = platform_milliseconds() / 1000;
+            u64 second = platform_get_time();
             
             // //
             config_gpu_for_ui(&gfx);
@@ -843,9 +938,9 @@ DWORD render_loop(void *loop_)
                     case WORLD_VIEW: {
                         draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, &gfx);
 
-                        // Flush our buffer, because world view will set uniforms etc.                        
-                        triangles_this_frame += gfx.vertex_buffer.n/3;
-                        flush_vertex_buffer(&gfx);
+                        // Flush our buffer, because world view will set uniforms etc.
+                        Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
+                        flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
                         
                         draw_world_view(e, &client->game.room, t, &gfx); break;
                     }
@@ -874,9 +969,16 @@ DWORD render_loop(void *loop_)
             update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
         }
 
-        
-        triangles_this_frame += gfx.vertex_buffer.n/3;
-        flush_vertex_buffer(&gfx);
+        Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
+        flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
+
+        // Make sure we've flushed all vertex buffers //
+        Assert(gfx.default_vertex_buffer.n == 0);
+        Assert(gfx.world_render_buffer.opaque.vertices.n == 0);
+        Assert(gfx.world_render_buffer.opaque.objects.n == 0);
+        Assert(gfx.world_render_buffer.translucent.vertices.n == 0);
+        Assert(gfx.world_render_buffer.translucent.objects.n == 0);
+        //
         
         frame_end(main_window, &gfx);
     }

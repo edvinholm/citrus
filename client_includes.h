@@ -55,6 +55,9 @@
 #include "game_client.h"
 using namespace Client_Game;
 
+#include "user.h"
+using namespace Client_User;
+
 #include "packets.cpp"
 #include "net_client.h"
 #include "client.h"
