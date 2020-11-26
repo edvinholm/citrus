@@ -1,0 +1,18 @@
+
+
+Item_Types {
+
+    Tank {
+        PLACEABLE {
+            sx = 2
+            sy = 2
+        }
+
+        CONTAINER {
+            States_Of_Matter {
+                LIQUID
+            }
+        }
+    }
+    
+}

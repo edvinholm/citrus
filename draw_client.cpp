@@ -755,16 +755,16 @@ void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
                     draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
 
                     // WEST
-                    if(x == 0 || tiles[y * room_size_x + x - 1] != TILE_WATER)
+                    if(x != 0 && tiles[y * room_size_x + x - 1] != TILE_WATER)
                         draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
                     // NORTH
-                    if(y == 0 || tiles[(y-1) * room_size_x + x] != TILE_WATER)
+                    if(y != 0 && tiles[(y-1) * room_size_x + x] != TILE_WATER)
                         draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
                     // EAST
-                    if(x == room_size_x-1 || tiles[y * room_size_x + x + 1] != TILE_WATER)
+                    if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != TILE_WATER)
                         draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
                     // SOUTH
-                    if(y == room_size_y-1 || tiles[(y+1) * room_size_x + x] != TILE_WATER)
+                    if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != TILE_WATER)
                         draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
                 }
                 else if(color){
