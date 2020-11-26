@@ -399,7 +399,6 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
     }
     
     if(!(mouse.buttons & MB_PRIMARY)) {
-        Assert(!(state & PRESSED_NOW));
         state &= ~PRESSED;
     }
 
