@@ -119,9 +119,14 @@ void swap(T *a, T *b)
     *b = tmp;
 }
 
+// IMPORTANT: We cannot use temporary memory in this proc since we call it when the mutex is unlocked.
 void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graphics *gfx)
 {
     Assert(!buffer->current_vertex_object_began);
+    
+    defer(reset(&buffer->vertices); buffer->objects.n = 0;);
+
+    if (buffer->objects.n == 0) return;
 
     // NOTE: We copy the whole Vertex_Buffer struct here. This is for @Speed, but not good for @Robustness if we are not careful.
     auto vertices = buffer->vertices;
@@ -131,19 +136,27 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
         // SORT OBJECTS //
         auto num_objects = buffer->objects.n;
         
-        int *object_indices = (int *)tmp_alloc(sizeof(int) * num_objects);
-        
+        int *object_indices = (int *)gfx_alloc(sizeof(int) * num_objects); // @Speed
+		defer(gfx_dealloc(object_indices););
+
         // NOTE: These values don't move around when we sort.
         //       An object's z does not necessarily live at the
         //       same index in object_z as its index does in
         //       object_indices.
-        float *object_z = (float *)tmp_alloc(sizeof(float) * num_objects);
+        float *object_z = (float *)gfx_alloc(sizeof(float) * num_objects); // @Speed
+		defer(gfx_dealloc(object_z););
         
         // @Speed
         for(int o = 0; o < num_objects; o++) {
             object_indices[o] = o;
             object_z[o]       = buffer->objects[o].screen_z; // @Speed: screen_z should be store in a separate array already.
         }
+
+#if DEBUG
+		for (int o = 0; o < num_objects; o++) {
+			Assert(object_indices[o] >= 0 && object_indices[o] < buffer->objects.n);
+		}
+#endif
 
         // @Speed @Speed @Speed: This is a bubblesort.
         int at = 1;
@@ -158,6 +171,12 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
             }
             at++;
         }
+
+#if DEBUG
+        for (int o = 0; o < num_objects; o++) {
+            Assert(object_indices[o] >= 0 && object_indices[o] < buffer->objects.n);
+        }
+#endif
 
         // DRAW //
         // NOTE: Here we try to combine objects that can be drawn with
@@ -183,6 +202,8 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
             while(obj_ix < num_objects)
             {
                 auto *obj = &buffer->objects[object_indices[obj_ix]];
+
+                Assert(obj->type == VERTEX_OBJECT);
                 
                 if(obj_ix > first_ix && obj->transform != temporary_object.transform) break;
                
@@ -201,11 +222,30 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
     }
     else
     {
-        for(int o = 0; o < buffer->objects.n; o++)
-        {
-            draw_render_object(&buffer->objects[o], vertices, gfx);
+        // DRAW UNSORTED //
+        // Tries to combine objects with the same transform.
+        
+        int obj_ix = 0;
+        while(obj_ix < buffer->objects.n) {
+
+            int first_ix = obj_ix;
+            Render_Object temporary_object = buffer->objects[first_ix];
+
+            while(obj_ix < buffer->objects.n)
+            {
+                auto *obj = &buffer->objects[obj_ix];
+
+                Assert(obj->type == VERTEX_OBJECT);
+
+                if(obj_ix > first_ix && (obj->transform != temporary_object.transform ||
+                                         obj->vertex0 != temporary_object.vertex1)) break;
+
+                temporary_object.vertex1 = obj->vertex1;
+                
+                obj_ix++;
+            }
+            
+            draw_render_object(&temporary_object, vertices, gfx);
         }
     }
-    buffer->objects.n = 0;
-    reset(&buffer->vertices);
 }
