@@ -10,11 +10,25 @@
     begin_vertex_render_object(Buffer_Ptr, __VA_ARGS__); \
     defer(end_vertex_render_object(Buffer_Ptr););
 
+// WORLD
 #define _OPAQUE_WORLD_VERTEX_OBJECT_(Transform_Matrix)                 \
     _VERTEX_OBJECT_(VD_WORLD_OPAQUE, &gfx->world_render_buffer.opaque, Transform_Matrix, 0)
 
 #define _TRANSLUCENT_WORLD_VERTEX_OBJECT_(Transform_Matrix, Screen_Z) \
     _VERTEX_OBJECT_(VD_WORLD_TRANSLUCENT, &gfx->world_render_buffer.translucent, Transform_Matrix, Screen_Z)
+
+// UI
+#define _OPAQUE_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z)                 \
+    _VERTEX_OBJECT_(VD_UI_OPAQUE, &gfx->ui_render_buffer.opaque, Transform_Matrix, 0)
+
+#define _TRANSLUCENT_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z) \
+    _VERTEX_OBJECT_(VD_UI_TRANSLUCENT, &gfx->ui_render_buffer.translucent, Transform_Matrix, Screen_Z)
+
+#define _OPAQUE_UI_() \
+    _OPAQUE_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d)
+
+#define _TRANSLUCENT_UI_() \
+    _TRANSLUCENT_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d)
 
 
 
@@ -27,8 +41,12 @@ void push_vertex_destination(Vertex_Destination dest, Graphics *gfx)
     
     switch(dest) {
         case VD_DEFAULT: break;
+            
         case VD_WORLD_OPAQUE:      buffer = &gfx->world_render_buffer.opaque.vertices; break;
         case VD_WORLD_TRANSLUCENT: buffer = &gfx->world_render_buffer.translucent.vertices; break;
+
+        case VD_UI_OPAQUE:      buffer = &gfx->ui_render_buffer.opaque.vertices; break;
+        case VD_UI_TRANSLUCENT: buffer = &gfx->ui_render_buffer.translucent.vertices; break;
             
         default: Assert(false); break;
     }

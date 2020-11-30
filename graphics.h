@@ -73,11 +73,27 @@ void reset(World_Render_Buffer *buffer)
     reset(&buffer->translucent);
 }
 
+struct UI_Render_Buffer
+{
+    Render_Object_Buffer opaque;
+    Render_Object_Buffer translucent;
+};
+void reset(UI_Render_Buffer *buffer)
+{
+    reset(&buffer->opaque);
+    reset(&buffer->translucent);
+}
+
+
 enum Vertex_Destination
 {
     VD_DEFAULT          = 0,
+    
     VD_WORLD_OPAQUE,
-    VD_WORLD_TRANSLUCENT
+    VD_WORLD_TRANSLUCENT,
+
+    VD_UI_OPAQUE,
+    VD_UI_TRANSLUCENT
 };
 
 // TODO @Cleanup: Move
@@ -119,6 +135,7 @@ struct Graphics
 
     Vertex_Buffer<ALLOC_GFX> default_vertex_buffer;
     World_Render_Buffer world_render_buffer;
+    UI_Render_Buffer    ui_render_buffer;
     
     Static_Stack<Vertex_Buffer<ALLOC_GFX> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
     
@@ -140,6 +157,8 @@ struct Graphics
     Sprite_Map glyph_maps[NUM_FONTS];
     Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
 
+    float   z_for_2d; // This is the Z value that will be set for "2D vertices"
+                      // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.
     v4      current_color;
     Font_ID current_font;
 

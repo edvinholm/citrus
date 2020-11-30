@@ -89,6 +89,10 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
         }
     }
     // 
+
+
+    gfx->z_for_2d = 1;
+    eat_z_for_2d(gfx); // So we don't draw the first thing at 1, which is the clear value.
     
 
     #if DEBUG
@@ -194,10 +198,54 @@ void config_gpu_for_ui(Graphics *gfx)
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
 
     gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
-    
-    gpu_set_depth_testing_enabled(false);
 }
 
+
+void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
+{
+    gpu_set_viewport(viewport.x, gfx->frame_s.h - viewport.y - viewport.h, viewport.w, viewport.h);
+    
+    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
+    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+}
+
+
+m4x4 world_projection_matrix(Rect viewport, float z_offset)
+{
+    float x_mul, y_mul;
+    if(viewport.w < viewport.h) {
+        x_mul = 1;
+        y_mul = 1.0f/(viewport.h / max(0.0001f, viewport.w));
+    }
+    else {
+        y_mul = 1;
+        x_mul = 1.0f/(viewport.w / max(0.0001f, viewport.h));
+    }
+
+    // TODO @Speed: @Cleanup: Combine matrices
+
+    m4x4 world_projection = make_m4x4(
+        x_mul, 0, 0, 0,
+        0, y_mul, 0, 0,
+        0, 0, -0.01, -0.1 + z_offset,
+        0, 0, 0, 1);
+
+    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, PIx2 * 0.125));
+    world_projection = matmul(rotation, world_projection);
+
+    rotation = rotation_matrix(axis_rotation(V3_Z, PIx2 * -0.125));
+    world_projection = matmul(rotation, world_projection);
+
+    float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
+   
+    m4x4 scale = scale_matrix(V3_ONE * (2.0 / diagonal_length));
+    world_projection = matmul(scale, world_projection);
+
+    m4x4 translation = translation_matrix({-(float)room_size_x/2.0, -(float)room_size_y/2.0, 0});
+    world_projection = matmul(translation, world_projection);
+
+    return world_projection;
+}
 
 struct Render_Loop
 {
@@ -215,68 +263,24 @@ struct Render_Loop
 
 
 
-void quad(Rect a, v4 color, Graphics *gfx, Texture_ID texture = TEX_NONE_OR_NUM)
-{
-    v3 v[6] = {
-        { a.x,       a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y,       0 },
-
-        { a.x + a.w, a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y + a.h, 0 }
-    };
-    
-    v2 uv[6] = {
-        0, 0,
-        0, 1,
-        1, 0,
-
-        1, 0,
-        0, 1,
-        1, 1
-    };
-    
-    v4 c[6] = {
-        color,
-        color,
-        color,
-        
-        color,
-        color,
-        color
-    };
-
-
-    float t = 0;
-
-    if(texture != TEX_NONE_OR_NUM)
-    {
-        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
-        t = (float)texture+1;
-    }
-             
-    float tex[6] = {
-        t, t, t,
-        t, t, t
-    };
-
-    triangles(v, uv, c, tex, 6, gfx);
-}
-
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == WINDOW);
     auto *win = &e->window;
     auto a = win->current_a;
 
-    const v4 shadow_c = { 0, 0, 0, 0.05 };
-    quad(a, shadow_c, gfx);
-
+    {
+        _TRANSLUCENT_UI_();
+        const v4 shadow_c = { 0, 0, 0, 0.05 };
+        draw_rect(a, shadow_c, gfx);
+    }
+    
+    _OPAQUE_UI_();
+    
     const float visible_border_w = 2;
     Rect r = shrunken(a, window_border_width-visible_border_w);
     
-    quad(r, win->border_color, gfx);
+    draw_rect(r, win->border_color, gfx);
 
     r = shrunken(r, visible_border_w);
 
@@ -286,13 +290,13 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     draw_string_in_rect_centered(get_ui_string(win->title, ui), title_a, FS_20, FONT_TITLE, c_white, gfx);
     //---------
 
-    quad(r, c_white, gfx);
+    draw_rect(r, c_white, gfx);
 
     const v4 c_red    = { 1, 0, 0, 1 };
-    if(win->resize_dir_x < 0) quad(left_of(  a, window_border_width), c_red, gfx);
-    if(win->resize_dir_x > 0) quad(right_of( a, window_border_width), c_red, gfx);
-    if(win->resize_dir_y < 0) quad(top_of(   a, window_border_width), c_red, gfx);
-    if(win->resize_dir_y > 0) quad(bottom_of(a, window_border_width), c_red, gfx);
+    if(win->resize_dir_x < 0) draw_rect(left_of(  a, window_border_width), c_red, gfx);
+    if(win->resize_dir_x > 0) draw_rect(right_of( a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y < 0) draw_rect(top_of(   a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y > 0) draw_rect(bottom_of(a, window_border_width), c_red, gfx);
 
     // CLOSE BUTTON //
     if(win->has_close_button)
@@ -308,13 +312,15 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
         Rect btn_a = right_square_of(title_a);
         btn_a.h -= visible_border_w;
-        quad(btn_a, btn_c, gfx);
+        draw_rect(btn_a, btn_c, gfx);
     }
 }
 
 
 void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
+    _TRANSLUCENT_UI_();
+    
     Assert(e->type == UI_TEXT);
     auto &txt = e->text;
     auto a = txt.a;
@@ -326,19 +332,23 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 }
 
 void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
-{    
+{
+    _OPAQUE_UI_();    
+
     Assert(e->type == BUTTON);
     auto &btn = e->button;
     auto a = btn.a;
 
+    float z = eat_z_for_2d(gfx);
+    
     v3 v[6] = {
-        { a.x,       a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y,       0 },
+        { a.x,       a.y,       z },
+        { a.x,       a.y + a.h, z },
+        { a.x + a.w, a.y,       z },
 
-        { a.x + a.w, a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y + a.h, 0 }
+        { a.x + a.w, a.y,       z },
+        { a.x,       a.y + a.h, z },
+        { a.x + a.w, a.y + a.h, z }
     };
         
     v2 uv[6] = {0};
@@ -442,6 +452,8 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
 void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 {
+    _OPAQUE_UI_();    
+
     Assert(e->type == TEXTFIELD);
     auto *tf = &e->textfield;
     
@@ -574,6 +586,8 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 
 void draw_slider(UI_Element *e, Graphics *gfx)
 {    
+    _OPAQUE_UI_();    
+
     Assert(e->type == SLIDER);
     auto *slider = &e->slider;
     auto a = slider->a;
@@ -655,67 +669,30 @@ void draw_slider(UI_Element *e, Graphics *gfx)
     v4 handle_c   = {0, 0.25, 0.45, 1};
     v4 handle_c_p = {0.1, 0.1, 0.1, 1};
     
-    quad(slider_handle_rect(a, slider->value), (slider->pressed) ? handle_c_p : handle_c, gfx);
+    draw_rect(slider_handle_rect(a, slider->value), (slider->pressed) ? handle_c_p : handle_c, gfx);
 }
 
 void draw_dropdown(UI_Element *e, Graphics *gfx)
 {
+    _OPAQUE_UI_();    
+
     Assert(e->type == DROPDOWN);
     auto *dd = &e->dropdown;
     
-    quad(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
+    draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
-void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
+void draw_world_view_background(UI_Element *e, Graphics *gfx)
 {
+    _OPAQUE_UI_();
+
     Assert(e->type == WORLD_VIEW);
-    auto *view = &e->world_view;
+    draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, gfx);
+}
 
+void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
+{
 #if 1
-
-    Rect a = view->a;
-
-    // SETUP WORLD SPACE STUFF //
-    gpu_set_viewport(a.x, gfx->frame_s.h - a.y - a.h, a.w, a.h);
-
-    float x_mul, y_mul;
-    if(a.w < a.h) {
-        x_mul = 1;
-        y_mul = 1.0f/(a.h / max(0.0001f, a.w));
-    }
-    else {
-        y_mul = 1;
-        x_mul = 1.0f/(a.w / max(0.0001f, a.h));
-    }
-
-    m4x4 world_projection = make_m4x4(
-        x_mul, 0, 0, 0,
-        0, y_mul, 0, 0,
-        0, 0, -0.2, -0.5,
-        0, 0, 0, 1);
-
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, PIx2 * 0.125));
-    world_projection = matmul(rotation, world_projection);
-
-    rotation = rotation_matrix(axis_rotation(V3_Z, PIx2 * -0.125));
-    world_projection = matmul(rotation, world_projection);
-
-    float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
-   
-    m4x4 scale = scale_matrix(V3_ONE * (2.0 / diagonal_length));
-    world_projection = matmul(scale, world_projection);
-
-    m4x4 translation = translation_matrix({-(float)room_size_x/2.0, -(float)room_size_y/2.0, 0});
-    world_projection = matmul(translation, world_projection);
-    
-    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, world_projection);
-    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
-
-    gpu_set_depth_testing_enabled(true);
-    gpu_clear_depth_buffer();
-    
-    // ///////////////////////// //
-
 
     v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
     v4 grass = {0.25, 0.6,  0.1, 1.0f};
@@ -728,7 +705,7 @@ void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
 
     m4x4 world_transform = rotation_around_point_matrix(axis_rotation(V3_Z, PIx2 * t / 10.0), { room_size_x / 2.0f, room_size_y / 2.0f });
     
-    m4x4 combined_matrix = matmul(world_transform, world_projection);
+    m4x4 combined_matrix = matmul(world_transform, projection);
     
     // OPAQUE //
     {
@@ -833,19 +810,6 @@ void draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx)
         draw_string(STRING("Abc"), V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, gfx);
     }
 #endif
-    
-    bool old_depth_mask = gpu_get_depth_mask();
-
-    gpu_set_depth_mask(true);
-    flush_render_object_buffer(&gfx->world_render_buffer.opaque, false, gfx);
-
-    gpu_set_depth_mask(false);
-    flush_render_object_buffer(&gfx->world_render_buffer.translucent, true, gfx);
-
-    gpu_set_depth_mask(old_depth_mask);
-
-    // TODO :PushPop (@Robustness, @Cleanup)
-    config_gpu_for_ui(gfx);
 }
 
 
@@ -887,6 +851,11 @@ DWORD render_loop(void *loop_)
     }
     unlock_mutex(client->mutex);
 
+
+    // @Cleanup?
+    UI_World_View *world_view = NULL;
+    m4x4 world_projection;
+    
     
     bool first_frame = true;
     u64 last_second = platform_get_time();
@@ -895,6 +864,7 @@ DWORD render_loop(void *loop_)
     {   
         lock_mutex(client->mutex);
         {
+            
             triangles_this_frame = 0;
             double t = platform_get_time();
             
@@ -911,14 +881,9 @@ DWORD render_loop(void *loop_)
             frame_begin(main_window, first_frame, client->main_window_a.s, &gfx);
 
             u64 second = platform_get_time();
-            
-            // //
-            config_gpu_for_ui(&gfx);
-            // //////// //
 
             const v4 background_color = { 0.3, 0.36, 0.42, 1 };
-            quad(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
-        
+            draw_rect(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
                 
             // Draw UI
             for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
@@ -936,14 +901,23 @@ DWORD render_loop(void *loop_)
                     case DROPDOWN: draw_dropdown(e, &gfx); break;
 
                     case WORLD_VIEW: {
-                        draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, &gfx);
+                        draw_world_view_background(e, &gfx);
 
-                        // Flush our buffer, because world view will set uniforms etc.
-                        Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
-                        flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
+                        if(world_view != NULL) {
+                            Assert(false);
+                            break;
+                        }
+                       
+                        m4x4 projection = world_projection_matrix(e->world_view.a, gfx.z_for_2d);
                         
-                        draw_world_view(e, &client->game.room, t, &gfx); break;
-                    }
+                        world_view = &e->world_view;
+                        world_projection = projection;
+
+                        draw_world(&client->game.room, t, projection, &gfx);
+
+                        gfx.z_for_2d -= 0.2;
+                        
+                    } break;
                         
                     default: Assert(false); break;
                 }
@@ -969,9 +943,47 @@ DWORD render_loop(void *loop_)
             update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
         }
 
-        Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
-        flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
+        gpu_set_depth_testing_enabled(true);
+        gpu_set_depth_mask(true);
+        gpu_clear_depth_buffer(); 
 
+        // DEFAULT VERTEX BUFFER (@Temporary?)
+        config_gpu_for_ui(&gfx); 
+        {
+            gpu_set_depth_mask(false);
+            flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
+        }
+
+        // OPAQUE UI //
+        config_gpu_for_ui(&gfx); 
+        {
+            gpu_set_depth_mask(true);
+            flush_render_object_buffer(&gfx.ui_render_buffer.opaque, false, &gfx);
+        }
+
+        // WORLD //
+        if(world_view) {
+            config_gpu_for_world(&gfx, world_view->a, world_projection);
+            {       
+                gpu_set_depth_mask(true);
+                flush_render_object_buffer(&gfx.world_render_buffer.opaque, false, &gfx);
+
+                gpu_set_depth_mask(false);
+                flush_render_object_buffer(&gfx.world_render_buffer.translucent, true, &gfx);
+            }
+            world_view = NULL;
+        }
+
+        // TRANSLUCENT UI //
+        config_gpu_for_ui(&gfx);
+        {
+            gpu_set_depth_mask(false);
+            flush_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);
+        }
+        
+        
+        Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
+        
         // Make sure we've flushed all vertex buffers //
         Assert(gfx.default_vertex_buffer.n == 0);
         Assert(gfx.world_render_buffer.opaque.vertices.n == 0);

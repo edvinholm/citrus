@@ -106,10 +106,11 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
             uv1.x += uv_dx * (clip_x1 - (a.x + a.w))/a.w;
             uv1.y += uv_dy * (clip_y1 - (a.y + a.h))/a.h;
 
+            float z = eat_z_for_2d(gfx);
             
             v3 pos[6] = {
-                {clip_a.x, clip_a.y, 0}, {clip_x1, clip_y1, 0}, {clip_a.x, clip_y1, 0},
-                {clip_a.x, clip_a.y, 0}, {clip_x1, clip_y1, 0}, {clip_x1, clip_a.y, 0}
+                {clip_a.x, clip_a.y, z}, {clip_x1, clip_y1, z}, {clip_a.x, clip_y1, z},
+                {clip_a.x, clip_a.y, z}, {clip_x1, clip_y1, z}, {clip_x1, clip_a.y, z}
             };
             
             v2 uvs[6] = {
@@ -124,9 +125,11 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
             float x1 = p.x + a.w;
             float y1 = p.y + a.h;
             
+            float z = eat_z_for_2d(gfx);
+            
             v3 pos[6] = {
-                {p.x, p.y, 0}, {x1, y1, 0}, {p.x, y1, 0},
-                {p.x, p.y, 0}, {x1, y1, 0}, {x1, p.y, 0}
+                {p.x, p.y, z}, {x1, y1, z}, {p.x, y1, z},
+                {p.x, p.y, z}, {x1, y1, z}, {x1, p.y, z}
             };
             /*
             v2 uvs[6] = {

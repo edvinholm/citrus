@@ -132,6 +132,7 @@ void gpu_frame_init() // TODO @Robustness: Pass in which buffers to clear.
 inline
 void gpu_clear_depth_buffer()
 {
+    Assert(gpu_get_depth_mask() == GL_TRUE); // Stupid
     glClear(GL_DEPTH_BUFFER_BIT);
 }
 

@@ -39,11 +39,12 @@ String texture_name(Texture_ID texture_id)
     return STRING("UNKNOWN TEXTURE");
 }
 
-const char *texture_filenames[TEX_NONE_OR_NUM] = {
+const char *texture_filenames[] = {
     NULL, // Font
     NULL, // Font
     NULL // Font
 };
+static_assert(ARRLEN(texture_filenames) == TEX_NONE_OR_NUM);
 
 struct Texture_Catalog
 {

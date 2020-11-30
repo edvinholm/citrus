@@ -187,29 +187,68 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 
 #endif
 
+void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+{
+    float z = eat_z_for_2d(gfx);
+    
+    v3 v[6] = {
+        { a.x,       a.y,       z },
+        { a.x,       a.y + a.h, z },
+        { a.x + a.w, a.y,       z },
+
+        { a.x + a.w, a.y,       z },
+        { a.x,       a.y + a.h, z },
+        { a.x + a.w, a.y + a.h, z }
+    };
+
+    v2 default_uvs[6] = {
+        0, 0,
+        0, 1,
+        1, 0,
+
+        1, 0,
+        0, 1,
+        1, 1
+    };
+
+    if(!uvs)
+        uvs = default_uvs;
+    
+    v4 c[6] = {
+        color,
+        color,
+        color,
+        
+        color,
+        color,
+        color
+    };
+
+
+    float t = 0;
+
+    if(texture != TEX_NONE_OR_NUM)
+    {
+        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
+        t = (float)texture+1;
+    }
+             
+    float tex[6] = {
+        t, t, t,
+        t, t, t
+    };
+
+    triangles(v, uvs, c, tex, 6, gfx);
+}
+
 inline
 void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_quad_abs({p0.x, p0.y, 0}, {p1.x, p0.y, 0}, {p0.x, p1.y, 0}, {p1.x, p1.y, 0}, color, gfx, uvs, texture);
-}
-
-#if 0 // @Speed
-inline
-void draw_rect_d(v2 p0, v2 d1, v2 d2, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
-{
-    draw_quad(V3(p0), V3(d1), V3(d2), gfx, uvs, texture);
-}
-#endif
-
-inline
-void draw_rect_ps(v2 p, v2 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
-{
-    v2 p1 = p + s;
-    draw_rect_pp(p, p1, color, gfx, uvs, texture);
+    draw_rect({p0, (p1 - p0)}, color, gfx, uvs, texture);
 }
 
 inline
-void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    return draw_rect_ps(a.p, a.s, color, gfx, uvs, texture);
+    draw_rect({p0, s}, color, gfx, uvs, texture);
 }
