@@ -137,14 +137,14 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
         auto num_objects = buffer->objects.n;
         
         int *object_indices = (int *)gfx_alloc(sizeof(int) * num_objects); // @Speed
-		defer(gfx_dealloc(object_indices););
+        defer(gfx_dealloc(object_indices););
 
         // NOTE: These values don't move around when we sort.
         //       An object's z does not necessarily live at the
         //       same index in object_z as its index does in
         //       object_indices.
         float *object_z = (float *)gfx_alloc(sizeof(float) * num_objects); // @Speed
-		defer(gfx_dealloc(object_z););
+        defer(gfx_dealloc(object_z););
         
         // @Speed
         for(int o = 0; o < num_objects; o++) {
@@ -153,9 +153,9 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
         }
 
 #if DEBUG
-		for (int o = 0; o < num_objects; o++) {
-			Assert(object_indices[o] >= 0 && object_indices[o] < buffer->objects.n);
-		}
+        for (int o = 0; o < num_objects; o++) {
+            Assert(object_indices[o] >= 0 && object_indices[o] < buffer->objects.n);
+        }
 #endif
 
         // @Speed @Speed @Speed: This is a bubblesort.
@@ -186,8 +186,9 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
         //       them in.
         
         int obj_ix = 0;
-        Vertex_Buffer<ALLOC_TMP> temporary_vertex_buffer = {0};
+        Vertex_Buffer<ALLOC_GFX> temporary_vertex_buffer = {0}; // IMPORTANT: Do not use temporary memory here. We cannot use that when we don't have the mutex locked. (@Speed: Make one temp mem per thread)
         ensure_capacity(&temporary_vertex_buffer, vertices.n);
+        defer(clear(&temporary_vertex_buffer););
 
         while(obj_ix < num_objects) {
 

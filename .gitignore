@@ -14,3 +14,5 @@ tmp/.build_in_progress
 citrus.exe
 citrus_release.exe
 citrus_server.exe
+
+*.pdb

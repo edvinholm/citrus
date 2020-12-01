@@ -682,6 +682,101 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
+void draw_room(Room *room, double t, bool translucent_pass, m4x4 projection, Graphics *gfx)
+{
+    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
+    v4 grass = {0.25, 0.6,  0.1, 1.0f};
+    v4 stone = {0.42, 0.4, 0.35, 1.0f};
+    v4 water = {0.1,  0.3, 0.5,  0.9f};
+
+    auto *tiles = room->shared.tiles;
+
+    const float tile_s = 1;
+
+    auto *opaque_object_buffer = &gfx->world_render_buffer.opaque;
+    if(!translucent_pass) {
+        push_vertex_destination(VD_WORLD_OPAQUE, gfx);
+        begin_vertex_render_object(opaque_object_buffer, M_IDENTITY);
+    }
+
+    
+    for(int y = 0; y < room_size_y; y++) {
+        for(int x = 0; x < room_size_x; x++) {
+            
+            Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
+            
+            auto tile = tiles[y * room_size_x + x];
+            
+            v4 *color = NULL;
+            float z = 0;
+            switch(tile) {
+                case TILE_SAND:  color = &sand; break;
+                case TILE_GRASS: color = &grass; break;
+                case TILE_STONE: color = &stone; break;
+                case TILE_WATER: color = &stone; z = -0.5; break;
+                default: Assert(false); break;
+            }
+
+            if(tile == TILE_WATER)
+            {
+                if(translucent_pass)
+                {
+                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
+                    float screen_z = vecmatmul_z(projection, origin + V3(0.5, 0.5, 0));
+                    _TRANSLUCENT_WORLD_VERTEX_OBJECT_(M_IDENTITY, screen_z);
+
+
+                    draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
+
+                    String str = STRING("WATER");
+                    
+                    m4x4 text_transform = rotation_matrix(axis_rotation(V3_X, PI/2.0f));    
+                    text_transform = matmul(text_transform, scale_matrix({1.0f/string_width(str, FS_10, &gfx->fonts[FONT_TITLE]), 0, 1.0f/10.0f}));
+                    for(int i = 0; i < 4; i++)
+                    {
+                        v3 text_p = origin;
+                        text_p.z  = 1;
+
+                        float zrot = i * (PI/2.0f);
+
+                        text_p.y += (i == 1 || i == 2) ? 1.01f : -0.01f;
+                        text_p.x += (i == 2 || i == 3) ? 1.01f : -0.01f;
+
+                        m4x4 m = matmul(text_transform, rotation_matrix(axis_rotation(V3_Z, zrot)));
+                        m = matmul(m, translation_matrix(text_p));
+                        draw_string_3d(str, V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, m, gfx); // @Temporary @Norelease
+                    }
+                }
+                else
+                {
+                    draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
+                    // WEST
+                    if(x == 0 || tiles[y * room_size_x + x - 1] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    // NORTH
+                    if(y == 0 || tiles[(y-1) * room_size_x + x] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                    // EAST
+                    if(x == room_size_x-1 || tiles[y * room_size_x + x + 1] != TILE_WATER)
+                        draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    // SOUTH
+                    if(y == room_size_y-1 || tiles[(y+1) * room_size_x + x] != TILE_WATER)
+                        draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                }
+            }
+            else if(color){
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+            }
+        }
+    }
+
+    if(!translucent_pass) {
+        end_vertex_render_object(opaque_object_buffer);
+        pop_vertex_destination(gfx);
+    }
+}
+
+
 void draw_world_view_background(UI_Element *e, Graphics *gfx)
 {
     _OPAQUE_UI_();
@@ -694,116 +789,12 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 {
 #if 1
 
-    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
-    v4 grass = {0.25, 0.6,  0.1, 1.0f};
-    v4 stone = {0.42, 0.4, 0.35, 1.0f};
-    v4 water = {0.1,  0.3, 0.5,  0.9f};
-
-    auto *tiles = room->shared.tiles;
-
-    const float tile_s = 1;
-
-    m4x4 world_transform = rotation_around_point_matrix(axis_rotation(V3_Z, PIx2 * t / 10.0), { room_size_x / 2.0f, room_size_y / 2.0f });
-    
-    m4x4 combined_matrix = matmul(world_transform, projection);
-    
-    // OPAQUE //
-    {
-        _OPAQUE_WORLD_VERTEX_OBJECT_(world_transform);
-        
-        for(int y = 0; y < room_size_y; y++) {
-            for(int x = 0; x < room_size_x; x++) {
-                
-                Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
-
-                auto tile = tiles[y * room_size_x + x];
-                
-                v4 *color = NULL;
-                float z = -0.1f;
-                switch(tile) {
-                    case TILE_SAND:  color = &sand; break;
-                    case TILE_GRASS: color = &grass; break;
-                    case TILE_STONE: color = &stone; break;
-                    case TILE_WATER: color = &stone; z = -0.5; break;
-                    default: Assert(false); break;
-                }
-
-                if(tile == TILE_WATER) {
-                    draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
-
-                    // WEST
-                    if(x != 0 && tiles[y * room_size_x + x - 1] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
-                    // NORTH
-                    if(y != 0 && tiles[(y-1) * room_size_x + x] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
-                    // EAST
-                    if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != TILE_WATER)
-                        draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
-                    // SOUTH
-                    if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
-                }
-                else if(color){
-                    draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
-                }
-            }
-        }
-    }
-
-    // TRANSLUCENT //
-    {
-        for(int y = 0; y < room_size_y; y++) {
-            for(int x = 0; x < room_size_x; x++) {
-
-                Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
-
-                if(tiles[y * room_size_x + x] == TILE_WATER) {
-#if 1
-                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
-                    float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
-                    _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                    draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
-
-#else
-                    // @Temporary
-                    // THIS IS A TEST OF TRANSLUCENT RENDERING OF AN OBJECT THAT OVERLAPS ITSELF...
-                    // So we break it up in multiple objects.......... Is this the way to do it?
-                    
-                    v3 origin = {tile_a.x, tile_a.y, 0.5f + (float)cos((x * y)/50.0 + t) / 2.0f};
-                    
-                    // Top
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {1, 0, 0},  {0, 1, 0}, {0, 0.5, 0.5, 0.65}, gfx);
-                    }
-                    
-                    // Side towards negative X
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0, -0.5));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {0, 0, -1}, {1, 0, 0}, {0.75, 0.0, 0.0, 0.75}, gfx);
-                    }
-                    
-                    // Side towards negative Y
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0, 0.5, -0.5));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {0, 0, -1}, {0, 1, 0}, {0.0, 0.75, 0.0, 0.75}, gfx);
-                    }
-#endif
-
-                }
-            }
-        }
-        
-    }
-
+    draw_room(room, t, false, projection, gfx);
+    draw_room(room, t, true,  projection, gfx);
     
 #endif
 
-#if 1
+#if 0
     // @Temporary
     {
         _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);

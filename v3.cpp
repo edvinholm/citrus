@@ -169,8 +169,6 @@ void operator += (v3 &v, v3 u)
 }
 
 
-
-
 inline
 float magnitude(v3 v)
 {

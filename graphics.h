@@ -14,16 +14,25 @@ struct Vertex_Buffer
     u64 capacity;
     u64 n;
 
-    v3    *p;
-    v2    *uv;
-    v4    *c;
-    float *tex;
+    v3    *p;   // positions
+    v2    *uv;  // texture coordinates
+    v4    *c;   // colors
+    float *tex; // textures
 };
+
 template<Allocator_ID A>
 void reset(Vertex_Buffer<A> *buffer)
 {
     buffer->n = 0;
 }
+
+template<Allocator_ID A>
+void clear(Vertex_Buffer<A> *buffer)
+{
+    if(buffer->p)
+        dealloc_buffer_set(buffer->p, A);
+}
+
 
 // @Incomplete: This is supposed to determine if we should give the gpu a mesh ID or vertices...
 enum Render_Object_Type

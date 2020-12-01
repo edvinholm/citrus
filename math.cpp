@@ -144,14 +144,6 @@ float normalized_angle(double angle)
     return angle;
 }
 
-/*
-inline
-int abs(int x)
-{
-    return (x < 0) ? -x : x;
-}
-*/
-
 template<typename T>
 T clamp(T value, T min = 0, T max = 1)
 {
@@ -186,19 +178,19 @@ u32 NextPowerOfTwo(u32 x)
 
 
 inline
-bool point_inside_circle(v2 p, v2 center, float radius)
+bool circle_contains_point(v2 p, v2 center, float radius)
 {
     return (magnitude(p - center) <= radius);
 }
 
 
-float TriangleArea(float x1, float y1, float x2, float y2, float x3, float y3)
+float area_of_triangle(float x1, float y1, float x2, float y2, float x3, float y3)
 {
     return fabs((x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2))/2.0f);
 }
 
 //NOTE: A, B and C are the triangle's vertices. P is the point.
-bool PointInsideTriangle(v2 P, v2 A, v2 B, v2 C)
+bool triangle_contains_point(v2 P, v2 A, v2 B, v2 C)
 {
     //yeeeez! This is from
     //        https://www.youtube.com/watch?v=hyAgJN3x4GA
@@ -216,39 +208,21 @@ bool PointInsideTriangle(v2 P, v2 A, v2 B, v2 C)
     
 }
 
-bool PointInsideTriangle(float Px, float Py,
-                         float Ax, float Ay, float Bx, float By, float Cx, float Cy)
+bool triangle_contains_point(float Px, float Py,
+                             float Ax, float Ay, float Bx, float By, float Cx, float Cy)
 {
-    return PointInsideTriangle({ Px, Py }, { Ax, Ay },
-                               { Bx, By }, { Cx, Cy });
-}
-
-
-
-
-inline
-Quat quat(float x, float y, float z, float w)
-{
-    Quat q = {x, y, z, w};
-    return q;
-}
-
-inline
-Quat quat(v4 xyzw)
-{
-    Quat q;
-    q.xyzw = xyzw;
-    return q;
+    return triangle_contains_point({ Px, Py }, { Ax, Ay },
+                                   { Bx, By }, { Cx, Cy });
 }
 
 
 //NOTE: a is in radians
 Quat axis_rotation(v3 axis, float a)
 {
-    return quat(sin(a/2.0f)*axis.x,
-                sin(a/2.0f)*axis.y,
-                sin(a/2.0f)*axis.z,
-                cos(a/2.0f));
+    return { sinf(a/2.0f) * axis.x,
+             sinf(a/2.0f) * axis.y,
+             sinf(a/2.0f) * axis.z,
+             cosf(a/2.0f) };
 }
 
 //NOTE: a is in radians
@@ -287,7 +261,6 @@ Quat operator * (Quat q, Quat r)
     result.w = q.w*r.w - q.x*r.x - q.y*r.y - q.z*r.z;
     */
 
-    
     result.w = r.w * q.w - r.x * q.x - r.y * q.y - r.z * q.z;
     result.x = r.w * q.x + r.x * q.w + r.y * q.z - r.z * q.y;
     result.y = r.w * q.y - r.x * q.z + r.y * q.w + r.z * q.x;
@@ -313,7 +286,7 @@ void operator *= (Quat &q, Quat r)
 inline
 Quat operator - (Quat q)
 {
-    return quat(q.x, q.y, q.z, -q.w);
+    return { q.x, q.y, q.z, -q.w };
 }
 
 

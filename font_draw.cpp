@@ -355,6 +355,21 @@ Rect draw_string(String string, v2 p, Font_Size size, v4 color, Graphics *gfx,
     return draw_string(string, p, size, current_font_id(gfx), color, gfx, h_align, v_align, previous_codepoint);
 }
 
+inline
+void draw_string_3d(String string, v2 p, Font_Size size, Font_ID font, v4 color, m4x4 transform, Graphics *gfx)
+{
+    auto *vertex_buffer = current_vertex_buffer(gfx);
+    auto v0 = vertex_buffer->n;
+    draw_string(string, p, size, font, color, gfx);
+
+    auto num_vertices = (vertex_buffer->n - v0);
+
+    v3 *transformed_vertices = (v3 *)tmp_alloc(sizeof(v3) * num_vertices);
+    vecmatmuls(transform, vertex_buffer->p + v0, transformed_vertices, num_vertices);
+
+    memcpy(vertex_buffer->p + v0, transformed_vertices, sizeof(v3) * num_vertices);
+}
+
 
 inline
 void draw_string_in_rect_centered(String string, Rect a, Font_Size size, Font_ID font, v4 color, Graphics *gfx)

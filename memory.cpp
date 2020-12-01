@@ -571,6 +571,14 @@ void ensure_buffer_set_capacity(u64 required_capacity, u64 *capacity,
     }
 }
 
+inline
+void dealloc_buffer_set(void *first_buffer, Allocator_ID allocator)
+{
+    dealloc(first_buffer, allocator);
+}
+
+
+
 
 
 
