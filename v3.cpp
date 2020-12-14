@@ -177,7 +177,7 @@ float magnitude(v3 v)
 
 
 inline
-v3 normalized(v3 v)
+v3 normalize(v3 v)
 {
     float mag = magnitude(v);
     if(mag <= 0.0f) return V3_ZERO;

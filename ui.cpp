@@ -1339,6 +1339,9 @@ u64 world_view(UI_Context ctx)
     auto *view = &e->world_view;
     view->a = area(ctx.layout);
 
+    view->camera.projection = world_projection_matrix(view->a);
+    view->camera.projection_inverse = inverse_of(view->camera.projection);
+
     return view->clicked_tile_ix;
 }
 
@@ -1370,6 +1373,9 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 
     if(!(view->click_state & PRESSED))
         view->pressed_tile_ix = U64_MAX;
+
+    view->mouse_p = input->mouse.p;
+    view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
 }
 
 
@@ -1556,7 +1562,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
             }
         }
         else {
-            ui->active_element = 0;
+            ui->active_element = NO_UI_ELEMENT;
         }   
     }
 

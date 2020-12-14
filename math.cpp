@@ -42,7 +42,7 @@
 #include "v4s.h"
 #include "v4u.h"
 
-v3 vecmatmul(m4x4 m, v3 v);
+v3 vecmatmul(v3 v, m4x4 m);
 
 struct Quad
 {
@@ -78,7 +78,7 @@ enum Vector_Component
     COMP_W = 3,
 };
 
-void vecmatmuls(m4x4 m, v3 *in, v3 *_out, u32 n);
+void vecmatmuls(v3 *in, m4x4 m, v3 *_out, u32 n);
 
 
 

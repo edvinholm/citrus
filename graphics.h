@@ -164,6 +164,8 @@ struct Graphics
     u8 num_bound_textures;
     
     Sprite_Map glyph_maps[NUM_FONTS];
+
+    // TODO @Robustness no_checkin: Make a Font_Table struct, so we don't accidentially pass &fonts[font_id] instead of fonts.
     Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
 
     float   z_for_2d; // This is the Z value that will be set for "2D vertices"

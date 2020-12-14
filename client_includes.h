@@ -43,6 +43,8 @@
 
 #include "input.cpp"
 
+#include "world.h"
+
 #include "ui.h"
 
 //--
@@ -65,6 +67,7 @@ using namespace Client_User;
 
 //--
 
+#include "world.cpp"
 
 #include "body_text.h"
 

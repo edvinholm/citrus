@@ -96,7 +96,6 @@ struct UI_ID_Manager
     };
 
     Path_Bucket path_buckets[256]; // Hash is 8 bits, and created from a Path.
-
     
 };
 
@@ -222,6 +221,10 @@ struct UI_World_View
 {
     Rect a;
 
+    Camera camera;
+    Ray mouse_ray;
+    v2 mouse_p; // no_checkin
+    
     UI_Click_State click_state;
     
     u64 pressed_tile_ix; // U64_MAX == no tile

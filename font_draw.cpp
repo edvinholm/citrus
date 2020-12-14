@@ -365,7 +365,7 @@ void draw_string_3d(String string, v2 p, Font_Size size, Font_ID font, v4 color,
     auto num_vertices = (vertex_buffer->n - v0);
 
     v3 *transformed_vertices = (v3 *)tmp_alloc(sizeof(v3) * num_vertices);
-    vecmatmuls(transform, vertex_buffer->p + v0, transformed_vertices, num_vertices);
+    vecmatmuls(vertex_buffer->p + v0, transform, transformed_vertices, num_vertices);
 
     memcpy(vertex_buffer->p + v0, transformed_vertices, sizeof(v3) * num_vertices);
 }

@@ -14,12 +14,14 @@ Texture_ID font_textures[NUM_FONTS] = {
     TEX_FONT_BODY,   // FONT_BODY
     TEX_FONT_INPUT,  // FONT_BODY
 };
+static_assert(ARRLEN(font_textures) == NUM_FONTS);
 
 const char *font_filenames[NUM_FONTS] = {
     "RussoOne-Regular.ttf",    // FONT_TITLE
     "Varela-Regular.ttf",      // FONT_BODY
     "VarelaRound-Regular.ttf", // FONT_INPUT
 };
+static_assert(ARRLEN(font_filenames) == NUM_FONTS);
 
 
 

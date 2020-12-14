@@ -210,43 +210,6 @@ void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
 }
 
 
-m4x4 world_projection_matrix(Rect viewport, float z_offset)
-{
-    float x_mul, y_mul;
-    if(viewport.w < viewport.h) {
-        x_mul = 1;
-        y_mul = 1.0f/(viewport.h / max(0.0001f, viewport.w));
-    }
-    else {
-        y_mul = 1;
-        x_mul = 1.0f/(viewport.w / max(0.0001f, viewport.h));
-    }
-
-    // TODO @Speed: @Cleanup: Combine matrices
-
-    m4x4 world_projection = make_m4x4(
-        x_mul, 0, 0, 0,
-        0, y_mul, 0, 0,
-        0, 0, -0.01, -0.1 + z_offset,
-        0, 0, 0, 1);
-
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, PIx2 * 0.125));
-    world_projection = matmul(rotation, world_projection);
-
-    rotation = rotation_matrix(axis_rotation(V3_Z, PIx2 * -0.125));
-    world_projection = matmul(rotation, world_projection);
-
-    float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
-   
-    m4x4 scale = scale_matrix(V3_ONE * (2.0 / diagonal_length));
-    world_projection = matmul(scale, world_projection);
-
-    m4x4 translation = translation_matrix({-(float)room_size_x/2.0, -(float)room_size_y/2.0, 0});
-    world_projection = matmul(translation, world_projection);
-
-    return world_projection;
-}
-
 struct Render_Loop
 {
     enum State
@@ -260,7 +223,6 @@ struct Render_Loop
     Thread thread;
     Client *client;
 };
-
 
 
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -722,7 +684,7 @@ void draw_room(Room *room, double t, bool translucent_pass, m4x4 projection, Gra
                 if(translucent_pass)
                 {
                     v3 origin = {tile_a.x, tile_a.y, -0.18f};
-                    float screen_z = vecmatmul_z(projection, origin + V3(0.5, 0.5, 0));
+                    float screen_z = vecmatmul_z(origin + V3(0.5, 0.5, 0), projection);
                     _TRANSLUCENT_WORLD_VERTEX_OBJECT_(M_IDENTITY, screen_z);
 
 
@@ -790,7 +752,7 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 #if 1
 
     draw_room(room, t, false, projection, gfx);
-    draw_room(room, t, true,  projection, gfx);
+    draw_room(room, t, true,  projection, gfx);    
     
 #endif
 
@@ -803,6 +765,37 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 #endif
 }
 
+
+void no_checkin_draw_ground_pos(Ray rrray, v2 mouse_p, Graphics *gfx)
+{
+    { _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        v3 dir    = rrray.dir * 5.0f;
+        v3 shadow = { dir.x, dir.y, 0 };
+
+
+        
+        draw_quad(V3_ZERO, dir,    normalize(cross(V3_Z, dir)) * 0.2f,
+                  { 1, 0, 0, 1 }, gfx);
+        
+        draw_quad(V3_ZERO, shadow, normalize(cross(V3_Z, shadow)) * 0.2f,
+                  { 0, 0, 0, 0.5f }, gfx);
+
+        v3 ground_p = rrray.p0 + rrray.dir * (-rrray.p0.z / rrray.dir.z);
+        
+        if(ground_p.x >= 0 && ground_p.x < room_size_x &&
+           ground_p.y >= 0 && ground_p.y < room_size_y)
+        {
+            v3 tile = ground_p - V3_XY * 0.5f;
+            tile = { roundf(tile.x), roundf(tile.y), tile.z };
+            
+            draw_quad(tile + V3_Z * 0.01f, V3_X, V3_Y, { 1, 0, 0, 1 }, gfx);
+            /*
+            draw_quad(tile, V3_Z, V3_Y, { 0, 1, 0, 1 }, gfx);
+            draw_quad(tile, V3_X, V3_Z, { 0, 0, 1, 1 }, gfx);
+            */
+        }
+    }
+}
 
 DWORD render_loop(void *loop_)
 {
@@ -898,13 +891,19 @@ DWORD render_loop(void *loop_)
                             Assert(false);
                             break;
                         }
-                       
-                        m4x4 projection = world_projection_matrix(e->world_view.a, gfx.z_for_2d);
+
+                        m4x4 projection = e->world_view.camera.projection;
+                        projection._23 += -0.1f + gfx.z_for_2d; // Translate in Z
                         
                         world_view = &e->world_view;
                         world_projection = projection;
 
                         draw_world(&client->game.room, t, projection, &gfx);
+
+                        Ray rrray = e->world_view.mouse_ray;
+                        
+                        no_checkin_draw_ground_pos(rrray, e->world_view.mouse_p, &gfx);
+
 
                         gfx.z_for_2d -= 0.2;
                         
