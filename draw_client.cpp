@@ -50,9 +50,6 @@ bool update_gpu_resources(Graphics *gfx)
 
 void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 {
-    platform_begin_frame(window);
-    gpu_frame_init();
-
     v2 old_frame_s = gfx->frame_s;
     gfx->frame_s = frame_s;
 
@@ -107,7 +104,7 @@ void frame_end(Window *window, Graphics *gfx)
     auto h = gfx->frame_s.h;
     //@Temporary: Move to GPU layer @Cleanup @Cleanup @Cleanup
 #if 0
-    glBlitNamedFramebuffer(gfx->multisample_framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBlitNamedFramebuffer(gfx->framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 #else
     GLint old_framebuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_framebuffer);
@@ -125,7 +122,7 @@ void frame_end(Window *window, Graphics *gfx)
     // Switch buffer set //
     gfx->buffer_set_index++;
     gfx->buffer_set_index %= ARRLEN(gfx->vertex_shader.buffer_sets);
-    gpu_set_buffer_set(gfx->buffer_set_index, &gfx->vertex_shader);
+    gpu_set_buffer_set(&gfx->vertex_shader.buffer_sets[gfx->buffer_set_index], &gfx->vertex_shader);
     //--
         
     platform_end_frame(window);
@@ -181,7 +178,10 @@ bool init_graphics(Window *window, Graphics *gfx)
     // Create multisample framebuffer
     gpu_create_framebuffers(1, &gfx->framebuffer);
 
-
+    // Init World_Graphics
+    gfx->world.static_opaque_vao = create_vao();
+    //--
+    
     return true;
 }
 
@@ -353,46 +353,13 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
         
     v2 uv[6] = {0};
 
-    /* Cool gradient:
-    v4 c[6] = {
-        { 0, 0, 1, 1 },
-        { 1, 0, 1, 1 },
-        { 0, 1, 1, 1 },
-                    
-        { 0, 0, 1, 1 },
-        { 1, 0, 1, 1 },
-        { 0, 1, 1, 1 }
-    };
-       
-    v4 h[6] = {
-        { 0, 0, 0.5, 1 },
-        { 1, 0, 0.5, 1 },
-        { 0, 1, 0.5, 1 },
-                    
-        { 0, 0, 0.5, 1 },
-        { 1, 0, 0.5, 1 },
-        { 0, 1, 0.5, 1 }
-    };
+    // @Cleanup: Better names, single v4 to set a color.
 
-    v4 p[6] = {
-        { 0, 0, 0.5, 1 },
-        { 0.5, 0, 1.0, 1 },
-        { 0, 1, 0.5, 1 },
-                    
-        { 0, 0, 0.5, 1 },
-        { 0.5, 0, 1.0, 1 },
-        { 0, 1, 0.5, 1 }
-    };
-    */
+    v4 cc = { 0.05, 0.6, 0.3, 1 };
     
     v4 c[6] = {
-        { 0.05, 0.6, 0.3, 1 },
-        { 0.05, 0.6, 0.3, 1 },
-        { 0.05, 0.6, 0.3, 1 },
-        
-        { 0.05, 0.6, 0.3, 1 },
-        { 0.05, 0.6, 0.3, 1 },
-        { 0.05, 0.6, 0.3, 1 },
+        cc, cc, cc,
+        cc, cc, cc
     };
     
     v4 h[6] = {
@@ -682,101 +649,6 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
-void draw_room(Room *room, double t, bool translucent_pass, m4x4 projection, Graphics *gfx)
-{
-    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
-    v4 grass = {0.25, 0.6,  0.1, 1.0f};
-    v4 stone = {0.42, 0.4, 0.35, 1.0f};
-    v4 water = {0.1,  0.3, 0.5,  0.9f};
-
-    auto *tiles = room->shared.tiles;
-
-    const float tile_s = 1;
-
-    auto *opaque_object_buffer = &gfx->world_render_buffer.opaque;
-    if(!translucent_pass) {
-        push_vertex_destination(VD_WORLD_OPAQUE, gfx);
-        begin_vertex_render_object(opaque_object_buffer, M_IDENTITY);
-    }
-
-    
-    for(int y = 0; y < room_size_y; y++) {
-        for(int x = 0; x < room_size_x; x++) {
-            
-            Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
-            
-            auto tile = tiles[y * room_size_x + x];
-            
-            v4 *color = NULL;
-            float z = 0;
-            switch(tile) {
-                case TILE_SAND:  color = &sand; break;
-                case TILE_GRASS: color = &grass; break;
-                case TILE_STONE: color = &stone; break;
-                case TILE_WATER: color = &stone; z = -0.5; break;
-                default: Assert(false); break;
-            }
-
-            if(tile == TILE_WATER)
-            {
-                if(translucent_pass)
-                {
-                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
-                    float screen_z = vecmatmul_z(projection, origin + V3(0.5, 0.5, 0));
-                    _TRANSLUCENT_WORLD_VERTEX_OBJECT_(M_IDENTITY, screen_z);
-
-
-                    draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
-
-                    String str = STRING("WATER");
-                    
-                    m4x4 text_transform = rotation_matrix(axis_rotation(V3_X, PI/2.0f));    
-                    text_transform = matmul(text_transform, scale_matrix({1.0f/string_width(str, FS_10, &gfx->fonts[FONT_TITLE]), 0, 1.0f/10.0f}));
-                    for(int i = 0; i < 4; i++)
-                    {
-                        v3 text_p = origin;
-                        text_p.z  = 1;
-
-                        float zrot = i * (PI/2.0f);
-
-                        text_p.y += (i == 1 || i == 2) ? 1.01f : -0.01f;
-                        text_p.x += (i == 2 || i == 3) ? 1.01f : -0.01f;
-
-                        m4x4 m = matmul(text_transform, rotation_matrix(axis_rotation(V3_Z, zrot)));
-                        m = matmul(m, translation_matrix(text_p));
-                        draw_string_3d(str, V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, m, gfx); // @Temporary @Norelease
-                    }
-                }
-                else
-                {
-                    draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
-                    // WEST
-                    if(x == 0 || tiles[y * room_size_x + x - 1] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
-                    // NORTH
-                    if(y == 0 || tiles[(y-1) * room_size_x + x] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
-                    // EAST
-                    if(x == room_size_x-1 || tiles[y * room_size_x + x + 1] != TILE_WATER)
-                        draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
-                    // SOUTH
-                    if(y == room_size_y-1 || tiles[(y+1) * room_size_x + x] != TILE_WATER)
-                        draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
-                }
-            }
-            else if(color){
-                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
-            }
-        }
-    }
-
-    if(!translucent_pass) {
-        end_vertex_render_object(opaque_object_buffer);
-        pop_vertex_destination(gfx);
-    }
-}
-
-
 void draw_world_view_background(UI_Element *e, Graphics *gfx)
 {
     _OPAQUE_UI_();
@@ -785,16 +657,149 @@ void draw_world_view_background(UI_Element *e, Graphics *gfx)
     draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, gfx);
 }
 
+void draw_static_world_geometry(Room *room, Graphics *gfx)
+{
+    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
+    v4 grass = {0.25, 0.6,  0.1, 1.0f};
+    v4 stone = {0.42, 0.4, 0.35, 1.0f};
+    v4 water = {0.1,  0.3, 0.5,  0.9f};
+
+    auto *tiles = room->shared.tiles;
+
+    float tile_s = 1;
+    
+    for(int y = 0; y < room_size_y; y++) {
+        for(int x = 0; x < room_size_x; x++) {
+                
+            Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
+
+            auto tile = tiles[y * room_size_x + x];
+                
+            v4 *color = NULL;
+            float z = -0.1f;
+            switch(tile) {
+                case TILE_SAND:  color = &sand; break;
+                case TILE_GRASS: color = &grass; break;
+                case TILE_STONE: color = &stone; break;
+                case TILE_WATER: color = &stone; z = -0.5; break;
+                default: Assert(false); break;
+            }
+
+            if(tile == TILE_WATER) {
+                draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
+
+                // WEST
+                if(x != 0 && tiles[y * room_size_x + x - 1] != TILE_WATER)
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                // NORTH
+                if(y != 0 && tiles[(y-1) * room_size_x + x] != TILE_WATER)
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                // EAST
+                if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != TILE_WATER)
+                    draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                // SOUTH
+                if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != TILE_WATER)
+                    draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+            }
+            else if(color){
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+            }
+        }
+    }
+}
+
+void maybe_update_static_opaque_vao(Room *room, Graphics *gfx)
+{
+    World_Graphics *wgfx = &gfx->world;
+    if(!wgfx->static_opaque_vao_up_to_date) {
+        wgfx->static_opaque_vao.vertex0 = gfx->universal_vertex_buffer.n;
+
+        push(gfx->vertex_buffer_stack, &gfx->universal_vertex_buffer);
+        draw_static_world_geometry(room, gfx);
+        pop(gfx->vertex_buffer_stack);
+
+        wgfx->static_opaque_vao.vertex1 = gfx->universal_vertex_buffer.n;
+        wgfx->static_opaque_vao.needs_push = true;
+                            
+        wgfx->static_opaque_vao_up_to_date = true;
+    }
+}
+
 void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 {
+    maybe_update_static_opaque_vao(room, gfx);
+    
 #if 1
 
-    draw_room(room, t, false, projection, gfx);
-    draw_room(room, t, true,  projection, gfx);
+    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
+    v4 grass = {0.25, 0.6,  0.1, 1.0f};
+    v4 stone = {0.42, 0.4, 0.35, 1.0f};
+    v4 water = {0.1,  0.3, 0.5,  0.9f};
+
+    auto *tiles = room->shared.tiles;
+
+    const float tile_s = 1;
+    
+    
+    // OPAQUE //
+    {
+        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        // REMEMBER: Some things are in the static vao.
+    }
+
+    // TRANSLUCENT //
+    {
+        for(int y = 0; y < room_size_y; y++) {
+            for(int x = 0; x < room_size_x; x++) {
+
+                Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
+
+                if(tiles[y * room_size_x + x] == TILE_WATER) {
+#if 1
+                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
+                    float screen_z = vecmatmul_z(projection, origin + V3(0.5, 0.5, 0));
+                    _TRANSLUCENT_WORLD_VERTEX_OBJECT_(M_IDENTITY, screen_z);
+                    draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
+
+#else
+                    // @Temporary
+                    // THIS IS A TEST OF TRANSLUCENT RENDERING OF AN OBJECT THAT OVERLAPS ITSELF...
+                    // So we break it up in multiple objects.......... Is this the way to do it?
+                    
+                    v3 origin = {tile_a.x, tile_a.y, 0.5f + (float)cos((x * y)/50.0 + t) / 2.0f};
+                    
+                    // Top
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {1, 0, 0},  {0, 1, 0}, {0, 0.5, 0.5, 0.65}, gfx);
+                    }
+                    
+                    // Side towards negative X
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0, -0.5));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {0, 0, -1}, {1, 0, 0}, {0.75, 0.0, 0.0, 0.75}, gfx);
+                    }
+                    
+                    // Side towards negative Y
+                    {
+                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0, 0.5, -0.5));
+                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
+                        draw_quad(origin, {0, 0, -1}, {0, 1, 0}, {0.0, 0.75, 0.0, 0.75}, gfx);
+                    }
+#endif
+
+                }
+            }
+        }
+        
+    }
+
     
 #endif
 
-#if 0
+#if 1
     // @Temporary
     {
         _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);
@@ -841,21 +846,21 @@ DWORD render_loop(void *loop_)
         loop->state = Render_Loop::RUNNING;
     }
     unlock_mutex(client->mutex);
-
-
-    // @Cleanup?
-    UI_World_View *world_view = NULL;
-    m4x4 world_projection;
-    
     
     bool first_frame = true;
     u64 last_second = platform_get_time();
+
+    Array<Rect, ALLOC_GFX> dirty_rects = {0};
+    defer(clear(&dirty_rects););
     
     while(true)
-    {   
+    {        
+        // @Cleanup?
+        UI_World_View *world_view = NULL;
+        m4x4 world_projection;
+    
         lock_mutex(client->mutex);
         {
-            
             triangles_this_frame = 0;
             double t = platform_get_time();
             
@@ -864,57 +869,111 @@ DWORD render_loop(void *loop_)
                 break;
             }
                 
-            gpu_set_vsync_enabled(tweak_bool(TWEAK_VSYNC));
 #if DEBUG
             draw_calls_last_frame = gfx.debug.num_draw_calls;
 #endif
-
+            
             frame_begin(main_window, first_frame, client->main_window_a.s, &gfx);
-
+            
             u64 second = platform_get_time();
 
-            const v4 background_color = { 0.3, 0.36, 0.42, 1 };
-            draw_rect(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
-                
-            // Draw UI
+
+            // Find dirty rects //
+            if(first_frame) {
+                Rect frame_a = { 0, 0, gfx.frame_s.w, gfx.frame_s.h }; // TODO: Do this when window size changes
+                array_add(dirty_rects, frame_a);
+            }
             for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
             {
                 UI_ID id      = ui->elements_in_depth_order[i];
                 UI_Element *e = find_ui_element(id, ui);
                 Assert(e);
 
-                switch(e->type) {
-                    case WINDOW:   draw_window(e, ui, &gfx); break;
-                    case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
-                    case BUTTON:   draw_button(e, ui, &gfx); break;
-                    case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
-                    case SLIDER:   draw_slider(e, &gfx);     break;
-                    case DROPDOWN: draw_dropdown(e, &gfx); break;
+                if(e->needs_redraw) {
+                    // Add dirty rects for element
+                    for(int r = 0; r < 2; r++) {
 
-                    case WORLD_VIEW: {
-                        draw_world_view_background(e, &gfx);
-
-                        if(world_view != NULL) {
-                            Assert(false);
-                            break;
+                        Rect a;
+                        if(r == 0) {
+                            a = e->last_dirty_rect;
+                            if(a.w < 0.001f && a.h < 0.001f) continue;
+                        } else {
+                            a = ui_element_rect(e);
+                            if(equal(a, e->last_dirty_rect)) continue;
+                            e->last_dirty_rect = a;
+                            Assert(r == 1);
                         }
-                       
-                        m4x4 projection = world_projection_matrix(e->world_view.a, gfx.z_for_2d);
                         
-                        world_view = &e->world_view;
-                        world_projection = projection;
+                        bool added = false;
+                        
+                        for(int j = 0; j < dirty_rects.n; j++) {
+                            Rect *b = &dirty_rects[j];
 
-                        draw_world(&client->game.room, t, projection, &gfx);
+                            if(rect_inside_rect(a, *b)) {
+                                added = true;
+                                break;
+                            }
 
-                        gfx.z_for_2d -= 0.2;
-                        
-                    } break;
-                        
-                    default: Assert(false); break;
+                            if(rects_overlap(a, *b)) {
+                                *b = rect_union(a, *b);
+                                added = true;
+                                break;
+                            }
+                        }
+
+                        if(!added) {
+                            array_add(dirty_rects, a);
+                        }
+                    }
+                    
+                    e->needs_redraw = false;
                 }
-
             }
+            // --
 
+            if(dirty_rects.n > 0)
+            {
+                // Draw UI //
+                const v4 background_color = { 0.3, 0.36, 0.42, 1 };
+                draw_rect(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
+            
+                for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
+                {
+                    UI_ID id      = ui->elements_in_depth_order[i];
+                    UI_Element *e = find_ui_element(id, ui);
+                    Assert(e);
+
+                    switch(e->type) {
+                        case WINDOW:   draw_window(e, ui, &gfx); break;
+                        case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
+                        case BUTTON:   draw_button(e, ui, &gfx); break;
+                        case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
+                        case SLIDER:   draw_slider(e, &gfx);     break;
+                        case DROPDOWN: draw_dropdown(e, &gfx); break;
+
+                        case WORLD_VIEW: {
+                            draw_world_view_background(e, &gfx);
+
+                            if(world_view != NULL) {
+                                Assert(false);
+                                break;
+                            }
+                       
+                            m4x4 projection = world_projection_matrix(e->world_view.a, gfx.z_for_2d);
+                        
+                            world_view = &e->world_view;
+                            world_projection = projection;
+
+                            draw_world(&client->game.room, t, projection, &gfx);
+
+                            gfx.z_for_2d -= 0.2;
+                        
+                        } break;
+                        
+                        default: Assert(false); break;
+                    }
+                }
+            }
 
             if(second != last_second) {
                 fps = frames_this_second;
@@ -928,50 +987,79 @@ DWORD render_loop(void *loop_)
         }
         unlock_mutex(client->mutex);
 
+        gpu_set_vsync_enabled(tweak_bool(TWEAK_VSYNC));
+            
+        auto *default_buffer_set = current_default_buffer_set(&gfx);
+
+        maybe_push_vao_to_gpu(&gfx.world.static_opaque_vao, &gfx.universal_vertex_buffer, &gfx);
         
         for(int i = 0; i < ARRLEN(gfx.glyph_maps); i++)
         {
             update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
         }
 
-        gpu_set_depth_testing_enabled(true);
-        gpu_set_depth_mask(true);
-        gpu_clear_depth_buffer(); 
-
-        // DEFAULT VERTEX BUFFER (@Temporary?)
-        config_gpu_for_ui(&gfx); 
+        gpu_disable_scissor();
+        
+        for(int i = 0; i < dirty_rects.n; i++)
         {
-            gpu_set_depth_mask(false);
-            flush_vertex_buffer(&gfx.default_vertex_buffer, &gfx);
-        }
+            Rect dirty_rect = dirty_rects[i];
 
-        // OPAQUE UI //
-        config_gpu_for_ui(&gfx); 
-        {
-            gpu_set_depth_mask(true);
-            flush_render_object_buffer(&gfx.ui_render_buffer.opaque, false, &gfx);
-        }
-
-        // WORLD //
-        if(world_view) {
-            config_gpu_for_world(&gfx, world_view->a, world_projection);
-            {       
+            gpu_set_scissor(dirty_rect.x, gfx.frame_s.h - dirty_rect.y - dirty_rect.h, dirty_rect.w, dirty_rect.h);
+            {   
+                gpu_set_depth_testing_enabled(true);
                 gpu_set_depth_mask(true);
-                flush_render_object_buffer(&gfx.world_render_buffer.opaque, false, &gfx);
+                gpu_clear_depth_buffer();
+                
+                // DEFAULT VERTEX BUFFER (@Temporary?)
+                config_gpu_for_ui(&gfx); 
+                {
+                    gpu_set_depth_mask(false);
+                    draw_vertex_buffer(&gfx.default_vertex_buffer, true, default_buffer_set);
+                }
 
-                gpu_set_depth_mask(false);
-                flush_render_object_buffer(&gfx.world_render_buffer.translucent, true, &gfx);
+                // OPAQUE UI //
+                config_gpu_for_ui(&gfx); 
+                {
+                    gpu_set_depth_mask(true);
+                    draw_render_object_buffer(&gfx.ui_render_buffer.opaque, false, &gfx);
+                }
+
+                // WORLD //
+                if(world_view) {
+                    config_gpu_for_world(&gfx, world_view->a, world_projection);
+                    {
+                        // Opaque
+                        gpu_set_depth_mask(true);
+                        draw_render_object_buffer(&gfx.world_render_buffer.opaque, false, &gfx);
+
+                        draw_vao(&gfx.world.static_opaque_vao, &gfx);
+
+                        // Translucent
+                        gpu_set_depth_mask(false);
+                        draw_render_object_buffer(&gfx.world_render_buffer.translucent, true, &gfx);
+                    }
+                }
+
+                // TRANSLUCENT UI //
+                config_gpu_for_ui(&gfx);
+                {
+                    gpu_set_depth_mask(false);
+                    
+                    draw_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);
+                }
+                
             }
-            world_view = NULL;
-        }
-
-        // TRANSLUCENT UI //
-        config_gpu_for_ui(&gfx);
-        {
-            gpu_set_depth_mask(false);
-            flush_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);
+            gpu_disable_scissor();
         }
         
+
+        // Reset render buffers //
+        reset_vertex_buffer(&gfx.default_vertex_buffer);
+        reset_render_object_buffer(&gfx.ui_render_buffer.opaque);
+        reset_render_object_buffer(&gfx.world_render_buffer.opaque);
+        reset_render_object_buffer(&gfx.world_render_buffer.translucent);
+        reset_render_object_buffer(&gfx.ui_render_buffer.translucent);
+        // ------------ //
         
         Assert(current_vertex_buffer(&gfx) == &gfx.default_vertex_buffer);
         
@@ -984,6 +1072,9 @@ DWORD render_loop(void *loop_)
         //
         
         frame_end(main_window, &gfx);
+
+        // Reset dirty rects //
+        dirty_rects.n = 0;
     }
 
     return 0;

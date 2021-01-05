@@ -232,6 +232,10 @@ struct UI_World_View
 struct UI_Element
 {
     UI_Element_Type type;
+    
+    // @Speed: Put in its own array?
+    bool needs_redraw;
+    Rect last_dirty_rect; // The dirty rect that was used when we last drew this element.
 
     union {
         UI_Window    window;
@@ -284,6 +288,7 @@ struct UI_Manager
     Array<UI_ID, ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
     Array<u8, ALLOC_UI> string_data;
     // ////////////////////////////////// //
+    Array<u8, ALLOC_UI> last_string_data; // String data last build, so we can see if someone's data has changed between builds.
 
     UI_ID active_element;
     union {

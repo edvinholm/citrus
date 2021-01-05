@@ -76,7 +76,11 @@ void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, fl
 void end_vertex_render_object(Render_Object_Buffer *buffer)
 {
     Assert(buffer->current_vertex_object_began);
-    Assert(buffer->vertices.n);
+    buffer->current_vertex_object_began = false;
+    
+    Assert(buffer->vertices.n >= 0);
+
+    if(buffer->vertices.n == 0) return;
     
     auto &obj = buffer->current_vertex_object;
     
@@ -84,30 +88,46 @@ void end_vertex_render_object(Render_Object_Buffer *buffer)
     obj.vertex1 = buffer->vertices.n;
 
     array_add(buffer->objects, obj);
-    buffer->current_vertex_object_began = false;
 }
 
 template<Allocator_ID A>
-void flush_vertex_buffer(Vertex_Buffer<A> *buffer, Graphics *gfx)
+void draw_vertex_buffer(Vertex_Buffer<A> *buffer, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, u64 vertex0 = 0, u64 vertex1 = U64_MAX)
 {
-    triangles_now(buffer->p, buffer->uv, buffer->c, buffer->tex, buffer->n, gfx);
+    vertex1 = min(buffer->n, vertex1);
+    Assert(vertex0 < vertex1);
+
+    triangles_now(buffer->p   + vertex0,
+                  buffer->uv  + vertex0,
+                  buffer->c   + vertex0,
+                  buffer->tex + vertex0,
+                  vertex1 - vertex0,
+                  buffer_set,
+                  do_dynamic_draw_now);
+}
+
+
+template<Allocator_ID A>
+void reset_vertex_buffer(Vertex_Buffer<A> *buffer)
+{
     buffer->n = 0;
 }
 
 
+
 template<Allocator_ID A>
-void draw_render_object(Render_Object *obj, Vertex_Buffer<A> vertices, Graphics *gfx)
+void draw_render_object(Render_Object *obj, Vertex_Buffer<A> vertices, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, Graphics *gfx)
 {
     auto vertex0 = obj->vertex0;
     auto num_vertices = (obj->vertex1 - vertex0);
 
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
-        
+
     triangles_now(vertices.p   + vertex0,
                   vertices.uv  + vertex0,
                   vertices.c   + vertex0,
                   vertices.tex + vertex0,
-                  num_vertices, gfx);
+                  num_vertices, buffer_set,
+                  do_dynamic_draw_now);
 }
 
 // TODO @Cleanup: Move this
@@ -119,12 +139,16 @@ void swap(T *a, T *b)
     *b = tmp;
 }
 
+void reset_render_object_buffer(Render_Object_Buffer *buffer)
+{
+    reset(&buffer->vertices);
+    buffer->objects.n = 0;
+}
+
 // IMPORTANT: We cannot use temporary memory in this proc since we call it when the mutex is unlocked.
-void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graphics *gfx)
+void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graphics *gfx)
 {
     Assert(!buffer->current_vertex_object_began);
-    
-    defer(reset(&buffer->vertices); buffer->objects.n = 0;);
 
     if (buffer->objects.n == 0) return;
 
@@ -216,7 +240,7 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
                 obj_ix++;
             }
             
-            draw_render_object(&temporary_object, temporary_vertex_buffer, gfx);
+            draw_render_object(&temporary_object, temporary_vertex_buffer, true, current_default_buffer_set(gfx), gfx);
             reset(&temporary_vertex_buffer);
         }
         
@@ -246,7 +270,7 @@ void flush_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Grap
                 obj_ix++;
             }
             
-            draw_render_object(&temporary_object, vertices, gfx);
+            draw_render_object(&temporary_object, vertices, true, current_default_buffer_set(gfx), gfx);
         }
     }
 }

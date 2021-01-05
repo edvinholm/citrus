@@ -14,17 +14,70 @@ UI_String push_ui_string(String string, UI_Manager *ui)
 
 //IMPORTANT: This is a temporary string that will not be valid after begin_ui_build, or after push_ui_string.
 inline
-String get_ui_string(UI_String string, UI_Manager *ui)
-{
+String get_ui_string(UI_String string, UI_Manager *ui, bool from_last_build = false)
+{    
+    auto *arr = (from_last_build) ? &ui->last_string_data : &ui->string_data;
+
     Assert(string.offset >= 0);
     Assert(string.length >= 0);
-    Assert(string.offset + string.length <= ui->string_data.n);
-
+    Assert(string.offset + string.length <= arr->n);
+    
     String str = {0};
-    str.data   = ui->string_data.e + string.offset;
+    str.data   = arr->e + string.offset;
     str.length = string.length;
     return str;
 }
+
+
+
+// @Cleanup: I don't like this!
+inline
+void ui_set(UI_Element *e, float *dest, float new_value)
+{
+    if(floats_equal(*dest, new_value)) return;
+    *dest = new_value;
+    e->needs_redraw = true;
+}
+
+template<typename T>
+void ui_set(UI_Element *e, T *dest, T new_value)
+{
+    if(*dest == new_value) return;
+    *dest = new_value;
+    e->needs_redraw = true;
+}
+
+inline
+void ui_set(UI_Element *e, UI_String *dest, String new_value, UI_Manager *ui)
+{
+    // We always need to push the string because string_data has been reset.
+    defer(*dest = push_ui_string(new_value, ui););
+    
+    if(dest->length == new_value.length) {
+        String old_value = get_ui_string(*dest, ui, true);
+        if(equal(new_value, old_value)) return;
+    }
+
+    e->needs_redraw = true;
+}
+
+
+inline
+void ui_set(UI_Element *e, Rect *dest, Rect new_value)
+{
+    if(floats_equal(dest->x, new_value.x) &&
+       floats_equal(dest->y, new_value.y) &&
+       floats_equal(dest->w, new_value.w) &&
+       floats_equal(dest->h, new_value.h))
+    {
+        return;
+    }
+
+    *dest = new_value;
+    e->needs_redraw = true;
+}
+
+
 
 
 inline
@@ -157,6 +210,7 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
 {
     Zero(*_e);
     _e->type  = type;
+    _e->needs_redraw = true;
 
     switch(_e->type) {
         case WINDOW:
@@ -429,16 +483,24 @@ Rect scrollbar_handle_rect(Rect scrollbar_a, float content_h, float view_h, floa
     return a;
 }
 
-void update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
+// NOTE: Returns true if the scrollbar needs redraw.
+bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
                       Rect scrollbar_a, float content_h, float view_h,
                       Input_Manager *input, bool disabled = false)
 {
+    bool needs_redraw = false;
+    
     auto *mouse = &input->mouse;
 
     Rect handle_a = scrollbar_handle_rect(scrollbar_a, content_h, view_h, scroll->value);
 
     bool handle_hovered = (scrollbar_hovered && point_inside_rect(mouse->p, handle_a));
-    scroll->handle_click_state = evaluate_click_state(scroll->handle_click_state, handle_hovered, input, disabled);
+
+    auto new_click_state = evaluate_click_state(scroll->handle_click_state, handle_hovered, input, disabled);
+    if(new_click_state != scroll->handle_click_state) {
+        scroll->handle_click_state = new_click_state;
+        needs_redraw = true;
+    }
 
     float scroll_max = (content_h - view_h);
 
@@ -456,9 +518,13 @@ void update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
             scroll->value = (handle_rel_y/space_h) * scroll_max;
         else
             scroll->value = 0;
+
+        needs_redraw = true;
     }
     
     scroll->value = max(0, min(scroll_max, scroll->value));
+
+    return needs_redraw;
 }
 
 
@@ -468,9 +534,11 @@ void ui_text(String text, UI_Context ctx)
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
 
+    Rect a = area(ctx.layout);
+    
     auto *txt = &e->text;
-    txt->a    = area(ctx.layout);
-    txt->text = push_ui_string(text, ctx.manager);
+    ui_set(e, &txt->a, area(ctx.layout));
+    ui_set(e, &txt->text, text, ctx.manager);
 }
 
 
@@ -479,13 +547,15 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled
     U(ctx);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
+
+    Rect a = area(ctx.layout); 
     
     auto *btn = &e->button;
-    btn->a = area(ctx.layout);
-    btn->label = push_ui_string(label, ctx.manager);
-    btn->disabled = disabled;
-    btn->selected = selected;
-
+    ui_set(e, &btn->a, a);
+    ui_set(e, &btn->label,    label,     ctx.manager);
+    ui_set(e, &btn->disabled, disabled);
+    ui_set(e, &btn->selected, selected);
+    
     return btn->state;
 }
 
@@ -494,7 +564,7 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     Assert(e->type == BUTTON);
     auto &btn   = e->button;
     
-    btn.state = evaluate_click_state(btn.state, e == hovered_element, input, btn.disabled);
+    ui_set(e, &btn.state, evaluate_click_state(btn.state, e == hovered_element, input, btn.disabled));
 }
 
 
@@ -738,7 +808,7 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
 // NOTE: Only one direction can be passed -- dir is not used as a bitmask.
 // NOTE: If the caret moved, the index of the line of the caret is returned. Otherwise -1.   
 int textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font *fonts)
-{        
+{
     String &text = bt->text;
     auto *caret = &tf_state->caret;
     
@@ -913,14 +983,17 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
             scrollbar_hovered = true;
         }
         
-        update_scrollbar(&tf->scroll, scrollbar_hovered, scrollbar_a, text_h, inner_a.h, input);
+        bool needs_redraw = update_scrollbar(&tf->scroll, scrollbar_hovered, scrollbar_a, text_h, inner_a.h, input);
+        if(needs_redraw) {
+            e->needs_redraw = true;
+        }
     }
     else {
-        tf->scroll.value = 0;
+        ui_set(e, &tf->scroll.value, 0);
     }
 
     
-    tf->click_state = evaluate_click_state(tf->click_state, area_hovered, input, tf->disabled);
+    ui_set(e, &tf->click_state, evaluate_click_state(tf->click_state, area_hovered, input, tf->disabled));
 
     
     *_use_i_beam_cursor = (area_hovered && !(tf->scroll.handle_click_state & PRESSED));
@@ -967,6 +1040,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     bool do_scroll_to_caret = tf_state->text_did_change;
     
     if(tf->click_state & PRESSED) {
+        e->needs_redraw = true;
         
         Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, text_a.p, fonts);
 
@@ -1002,12 +1076,15 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
 
             int line = textfield_navigate(nav_dir, shift_is_down, &bt, &ui->active_textfield_state, fonts);
             if(line != -1) do_scroll_to_caret = true;
+            
+            e->needs_redraw = true;
         }
     }
     // ///////// //
 
     if(do_scroll_to_caret) {
         textfield_scroll_to_codepoint_index(tf_state->caret.cp, inner_a.h, &bt, &tf->scroll);
+        e->needs_redraw = true;
     }
 }
 
@@ -1020,10 +1097,10 @@ float slider(float value, UI_Context ctx, bool disabled = false)
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), SLIDER, ctx.manager, &was_created);
     
     auto *slider = &e->slider;
-    slider->a = area(ctx.layout);
-    slider->disabled = disabled;
+    ui_set(e, &slider->a, area(ctx.layout));
+    ui_set(e, &slider->disabled, disabled);
     
-    if(!slider->pressed) slider->value = value;
+    if(!slider->pressed) ui_set(e, &slider->value, value);
 
     return slider->value;
 }
@@ -1078,7 +1155,7 @@ void dropdown(UI_Context ctx)
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), DROPDOWN, ctx.manager);
     
     auto *dd = &e->dropdown;
-    dd->box_a = area(ctx.layout);
+    ui_set(e, &dd->box_a, area(ctx.layout));
 
     //TODO @Incomplete Options
 }
@@ -1096,12 +1173,17 @@ void update_dropdown(UI_Element *e, Input_Manager *input, UI_Element *hovered_el
         box_hovered = point_inside_rect(mouse.p, dd->box_a);
     }
 
-    dd->box_click_state = evaluate_click_state(dd->box_click_state, box_hovered, input);
+    ui_set(e, &dd->box_click_state, evaluate_click_state(dd->box_click_state, box_hovered, input));
+
+    bool was_open = dd->open;
     
     if(dd->box_click_state & CLICKED_ENABLED) dd->open = !dd->open;
     else if(dd->open && !(dd->box_click_state & HOVERED)) {
         if(mouse.buttons_down & MB_PRIMARY) dd->open = false;
     }
+
+    if(dd->open != was_open)
+        e->needs_redraw = true;
 }
 
 
@@ -1127,6 +1209,7 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     auto &mouse = client->input.mouse;
 
     v2 min_size = { 250, 250 };
+    Rect a0 = win->current_a;
 
     // RESIZE IF RESIZING //
     if(win->resize_dir_x == 1) {
@@ -1165,6 +1248,9 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
         win->current_a.p = mouse.p - win->mouse_offset_on_move_start;
     }
     // ////////////// //
+
+    if(!equal(a0, win->current_a))
+        e->needs_redraw = true;
 }
 
 Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool use_default_padding = true,
@@ -1185,10 +1271,10 @@ Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool 
     auto *win = &e->window;
     win->initial_a = area(ctx.layout);
     if(!win->was_resized_or_moved)
-        win->current_a = win->initial_a;
+        ui_set(e, &win->current_a, win->initial_a);
 
-    win->title = push_ui_string(title, ui);
-    win->border_color = (use_custom_border_color) ? custom_border_color : tweak_v4(TWEAK_WINDOW_BORDER_COLOR);
+    ui_set(e, &win->title, title, ui);
+    ui_set(e, &win->border_color, (use_custom_border_color) ? custom_border_color : tweak_v4(TWEAK_WINDOW_BORDER_COLOR));
 
     // NOTE: We do this when we begin the window, instead of in the UI update phase.
     //       Because we don't want the children of the window to lag behind. This
@@ -1261,11 +1347,13 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             Rect close_button_a = right_square_of(title_a);
             close_button_hovered = point_inside_rect(mouse.p, close_button_a);
         }
-        win->close_button_state = evaluate_click_state(win->close_button_state, close_button_hovered, input);
+        ui_set(e, &win->close_button_state, evaluate_click_state(win->close_button_state, close_button_hovered, input));
     }
     //
 
-    if(!(mouse.buttons & MB_PRIMARY)) {
+    if(win->pressed && !(mouse.buttons & MB_PRIMARY)) {
+        e->needs_redraw = true;
+        
         // PRESS END //
         win->pressed = false;
         win->resize_dir_x = 0;
@@ -1276,8 +1364,10 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     bool move_to_top = false;
     
     if(!win->pressed && (mouse.buttons_down & MB_PRIMARY))
-    {   
+    {
         if(e == hovered_element) {
+            e->needs_redraw = true;
+        
             // PRESS START //    
             win->pressed = true;
 
@@ -1313,6 +1403,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
     // MOVE TO TOP //
     if(move_to_top) {
+        e->needs_redraw = true;
+        
         s64 index_in_stack;
         if(in_array(ui->window_stack, id, &index_in_stack)) {
             array_ordered_remove(ui->window_stack, index_in_stack);
@@ -1337,7 +1429,9 @@ u64 world_view(UI_Context ctx)
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), WORLD_VIEW, ctx.manager);
     
     auto *view = &e->world_view;
-    view->a = area(ctx.layout);
+    ui_set(e, &view->a, area(ctx.layout));
+
+    e->needs_redraw = true;
 
     return view->clicked_tile_ix;
 }
@@ -1349,7 +1443,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     auto *mouse = &input->mouse;
 
     view->clicked_tile_ix = U64_MAX;
-    view->click_state = evaluate_click_state(view->click_state, e == hovered_element, input);
+    ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
     if(e == hovered_element)
     {
@@ -1374,6 +1468,24 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 
 
 
+Rect ui_element_rect(UI_Element *e)
+{
+    switch(e->type) {
+        case WINDOW:    return e->window.current_a;
+        case BUTTON:    return e->button.a;
+        case TEXTFIELD: return e->textfield.a;
+        case SLIDER:    return e->slider.a;
+        case DROPDOWN:  return dropdown_rect(e->dropdown.box_a, e->dropdown.open);
+        case UI_TEXT:   return e->text.a;
+
+        case WORLD_VIEW: return e->world_view.a;
+    }
+
+    return {0};
+}
+
+
+
 
 
 
@@ -1392,7 +1504,12 @@ void begin_ui_build(UI_Manager *ui)
     Assert(ui->elements.n == ui->elements_in_depth_order.n);
     ui->elements_in_depth_order.n = 0;
 
+    // SWAP STRING DATA //
+    auto last_string_data = ui->string_data;
+    ui->string_data = ui->last_string_data;
     ui->string_data.n = 0;
+    ui->last_string_data = last_string_data;
+    // --
 
 #if DEBUG
     ui->id_manager.used_ids_this_build.n = 0;

@@ -34,6 +34,23 @@ void clear(Vertex_Buffer<A> *buffer)
 }
 
 
+struct VAO
+{
+    GPU_Vertex_Array_ID id;
+    GPU_Buffer_Set buffer_set;
+
+    
+    bool needs_push; // if true, we should push the updated vertices to the gpu.
+
+    // Absolute values of vertex0 and vertex1 are only valid
+    // if needs_push is true. BUT, vertex1-vertex0 should always
+    // give the number of vertices the vao consists of.
+    u64 vertex0; // In the vertex buffer we used. (Usually gfx.universal_vertex_buffer)
+    u64 vertex1;
+};
+
+
+
 // @Incomplete: This is supposed to determine if we should give the gpu a mesh ID or vertices...
 enum Render_Object_Type
 {
@@ -138,27 +155,44 @@ T current(Static_Stack<T, Max> &stack, T default_if_empty)
     else return stack.e[stack.size-1];
 }
 
+struct World_Graphics
+{
+    bool static_opaque_vao_up_to_date;
+    VAO  static_opaque_vao; // For things that doesn't change very often. Like floors and walls.
+};
+
 struct Graphics
 {
     GPU_Context gpu_ctx;
 
+    // Buffered draw data
     Vertex_Buffer<ALLOC_GFX> default_vertex_buffer;
+    Vertex_Buffer<ALLOC_GFX> universal_vertex_buffer;
     World_Render_Buffer world_render_buffer;
     UI_Render_Buffer    ui_render_buffer;
-    
+
+    // Draw context
+    v2 frame_s;
+
+    // State
+    u8 buffer_set_index;
     Static_Stack<Vertex_Buffer<ALLOC_GFX> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
     
+    float   z_for_2d; // This is the Z value that will be set for "2D vertices"
+                      // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.
+    
+    v4      current_color;
+    Font_ID current_font;
+
+    // GPU resources
     GPU_Texture_ID     multisample_texture;
     GPU_Texture_ID     depth_buffer_texture;
     GPU_Framebuffer_ID framebuffer;
     
-    u8 buffer_set_index;
-    
     Vertex_Shader   vertex_shader;
     Fragment_Shader fragment_shader;
 
-    v2 frame_s;
-
+    // "Assets"
     Texture_Catalog textures;
     Texture_ID bound_textures[4]; // In fragment shader
     u8 num_bound_textures;
@@ -166,11 +200,10 @@ struct Graphics
     Sprite_Map glyph_maps[NUM_FONTS];
     Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
 
-    float   z_for_2d; // This is the Z value that will be set for "2D vertices"
-                      // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.
-    v4      current_color;
-    Font_ID current_font;
+    // World
+    World_Graphics world;
 
+    // Debug
 #if DEBUG
     Graphics_Debug debug;
 #endif

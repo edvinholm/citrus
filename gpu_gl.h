@@ -1,5 +1,6 @@
 
 typedef GLuint GPU_Buffer_ID;
+typedef GLuint GPU_Vertex_Array_ID;
 
 typedef GLuint GPU_Framebuffer_ID;
 

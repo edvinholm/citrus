@@ -619,6 +619,8 @@ DWORD network_loop(void *loop_)
             }
         }
         unlock_mutex(client->mutex);
+
+        platform_sleep_milliseconds(1);
     }
     
     return 0;

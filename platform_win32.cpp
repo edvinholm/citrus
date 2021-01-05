@@ -570,11 +570,6 @@ bool platform_set_window_size_and_position(Window *window, int x, int y, int w, 
 }
 
 inline
-void platform_begin_frame(Window *window)
-{
-}
-
-inline
 void platform_end_frame(Window *window)
 {
     SwapBuffers(window->DeviceContext);
@@ -872,7 +867,7 @@ bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
     while(at < end) {
         int result = send(sock->handle, (const char *)at, end - at, 0);
         if(result == SOCKET_ERROR) return false;
-		Assert(result > 0);
+        Assert(result > 0);
         at += result;
     }
     

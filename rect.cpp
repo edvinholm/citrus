@@ -22,6 +22,13 @@ struct Rect
     };
 };
 
+bool equal(Rect a, Rect b) {
+    return (floats_equal(a.x, b.x) &&
+            floats_equal(a.y, b.y) &&
+            floats_equal(a.w, b.w) &&
+            floats_equal(a.h, b.h));
+}
+
 
 inline
 bool operator == (Rect a, Rect b)
@@ -50,35 +57,6 @@ Rect rect(v2 P, v2 S)
     Result.s = S;
     return Result;
 }
-
-
-inline
-Rect rect_intersection(Rect A, Rect B)
-{
-    float a_x1 = A.x + A.w;
-    float a_y1 = A.y + A.h;
-    
-    float b_x1 = B.x + B.w;
-    float b_y1 = B.y + B.h;
-
-    if(A.x >= b_x1 || A.y >= b_y1 ||
-       B.x >= a_x1 || B.y >= a_y1)
-        return {0, 0, 0, 0};
-
-    float x0 = max(A.x, B.x);
-    float y0 = max(A.y, B.y);
-
-    float x1 = min(a_x1, b_x1);
-    float y1 = min(a_y1, b_y1);
-
-    float w = x1 - x0;
-    float h = y1 - y0;
-
-    Assert(w >= 0 && h >= 0);
-    
-    return { x0, y0, w, h };
-}
-
 
 inline
 float bottom_y(Rect A)
@@ -559,25 +537,73 @@ bool point_inside_rect(v2 p, Rect a)
 
 
 inline
-bool Rect_inside_Rect(Rect inner, Rect outer)
+bool rect_inside_rect(Rect inner, Rect outer)
 {
-    if(!point_inside_rect(inner.p, outer))
-    {
-        return false;
-    }
-    if(!point_inside_rect({ inner.x + inner.w, inner.y }, outer))
-    {
-        return false;
+    v2 inner_p1 = inner.p + inner.s;
+    v2 outer_p1 = outer.p + outer.s;
 
-    }
-    if(!point_inside_rect({ inner.x, inner.y + inner.h }, outer))
-    {
-        return false;
-    }
-    if(!point_inside_rect(inner.p + inner.s, outer))
-    {
-        return false;
-    }
-    return true;
+    bool x_inside = (inner.x >= outer.x && inner_p1.x <= outer_p1.x);
+    bool y_inside = (inner.y >= outer.y && inner_p1.y <= outer_p1.y);
+
+    return (x_inside && y_inside);
 }
 
+
+inline
+bool rects_overlap(Rect a, Rect b)
+{
+    v2 a_p1 = a.p + a.s;
+    v2 b_p1 = b.p + b.s;
+
+    bool x_overlap = ((a.p.x < b_p1.x && a_p1.x >= b_p1.x) ||
+                      (b.p.x < a_p1.x && b_p1.x >= a_p1.x));
+
+    bool y_overlap = ((a.p.y < b_p1.y && a_p1.y >= b_p1.y) ||
+                      (b.p.y < a_p1.y && b_p1.y >= a_p1.y));
+    
+    return (x_overlap && y_overlap);
+}
+
+
+
+
+inline
+Rect rect_intersection(Rect A, Rect B)
+{
+    float a_x1 = A.x + A.w;
+    float a_y1 = A.y + A.h;
+    
+    float b_x1 = B.x + B.w;
+    float b_y1 = B.y + B.h;
+
+    if(A.x >= b_x1 || A.y >= b_y1 ||
+       B.x >= a_x1 || B.y >= a_y1)
+        return {0, 0, 0, 0};
+
+    float x0 = max(A.x, B.x);
+    float y0 = max(A.y, B.y);
+
+    float x1 = min(a_x1, b_x1);
+    float y1 = min(a_y1, b_y1);
+
+    float w = x1 - x0;
+    float h = y1 - y0;
+
+    Assert(w >= 0 && h >= 0);
+    
+    return { x0, y0, w, h };
+}
+
+Rect rect_union(Rect a, Rect b)
+{
+    v2 a_p1 = a.p + a.s;
+    v2 b_p1 = b.p + b.s;
+    v2 p1 = compmax(a_p1, b_p1);
+    
+    Rect result;
+    result.x = min(a.x, b.x);
+    result.y = min(a.y, b.y);
+    result.s = p1 - result.p;
+
+    return result;
+}

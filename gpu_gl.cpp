@@ -52,14 +52,11 @@ void gpu_set_depth_mask(bool mask)
     glDepthMask(mask);
 }
 
-void gpu_set_buffer_set(int set_index, Vertex_Shader *vertex_shader)
-{   
-    Assert(set_index < ARRLEN(vertex_shader->buffer_sets));
-    auto &set = vertex_shader->buffer_sets[set_index];
-           
-    for(int b = 0; b < ARRLEN(set.buffers); b++)
+void gpu_set_buffer_set(GPU_Buffer_Set *set, Vertex_Shader *vertex_shader)
+{
+    for(int b = 0; b < ARRLEN(set->buffers); b++)
     {
-        auto &buffer = set.buffers[b];
+        auto &buffer = set->buffers[b];
         glBindBuffer(GL_ARRAY_BUFFER, buffer); Assert(glGetError() == 0);
 
         // @Hack
@@ -112,7 +109,7 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     glGenBuffers(ARRLEN(vertex_shader->all_buffers), vertex_shader->all_buffers);
     Assert(glGetError() == 0);
 
-    gpu_set_buffer_set(0, vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
+    gpu_set_buffer_set(&vertex_shader->buffer_sets[0], vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
     // //////////////// //
         
     fragment_shader->texture_1_uniform = glGetUniformLocation(program, "texture_1");
@@ -121,12 +118,6 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     fragment_shader->texture_4_uniform = glGetUniformLocation(program, "texture_4");
 
     return (glGetError()) ? false : true;
-}
-
-inline
-void gpu_frame_init() // TODO @Robustness: Pass in which buffers to clear.
-{
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 inline
@@ -174,13 +165,13 @@ bool gpu_compile_shaders(u8 *vertex_shader_code, u8 *fragment_shader_code,
 
 // NOTE: You need to do a gpu_ensure_buffer_size before calling this.
 inline
-void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size)
+void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size, bool static_data)
 {
     Assert(data != NULL);
     Assert(size >= 0);
     
     glBindBuffer(GL_ARRAY_BUFFER, buffer);                      { auto err = glGetError(); Assert(err == 0); }
-    glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
+    glBufferData(GL_ARRAY_BUFFER, size, data, (static_data) ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
 }
 
 
@@ -343,4 +334,29 @@ void gpu_set_texture_data(GPU_Texture_ID texture, void *data, u32 w, u32 h,
         Assert(gl_error == 0);
     }
     glBindTexture(GL_TEXTURE_2D, old_bound);
+}
+
+
+inline
+void gpu_create_buffers(int num_buffers, GPU_Buffer_ID *_buffers)
+{
+    glGenBuffers(num_buffers, _buffers);
+}
+
+inline
+void gpu_create_vao(GPU_Vertex_Array_ID *_id)
+{
+    glGenVertexArrays(1, _id);
+}
+
+inline
+void gpu_bind_vao(GPU_Vertex_Array_ID id)
+{
+    glBindVertexArray(id);
+}
+
+inline
+void gpu_unbind_vao()
+{
+    glBindVertexArray(0);
 }

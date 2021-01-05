@@ -1,20 +1,16 @@
 
 
 //NOTE: n is number of vertices
-void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *textures, u64 n, Graphics *gfx)
+void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *textures, u64 n, GPU_Buffer_Set *set, bool do_dynamic_draw_now)
 {
-    auto &set = gfx->vertex_shader.buffer_sets[gfx->buffer_set_index];
+    bool static_draw = !do_dynamic_draw_now;
     
-    gpu_set_vertex_buffer_data(set.position_buffer, positions, sizeof(v3) * n);
-    gpu_set_vertex_buffer_data(set.uv_buffer,       uvs,       sizeof(v2) * n);
-    gpu_set_vertex_buffer_data(set.color_buffer,    colors,    sizeof(v4) * n);
-    gpu_set_vertex_buffer_data(set.texture_buffer,  textures,  sizeof(float) * n);
-    
-    gpu_draw(GPU_TRIANGLES, n);
+    gpu_set_vertex_buffer_data(set->position_buffer, positions, sizeof(v3) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->uv_buffer,       uvs,       sizeof(v2) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->color_buffer,    colors,    sizeof(v4) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->texture_buffer,  textures,  sizeof(float) * n, static_draw);
 
-    #if DEBUG
-    gfx->debug.num_draw_calls++;
-    #endif
+    if(do_dynamic_draw_now) gpu_draw(GPU_TRIANGLES, n);
 }
 
 inline
@@ -23,8 +19,6 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
     auto *buffer = current_vertex_buffer(gfx);
     Assert(buffer);
     add_vertices(p, uv, c, tex, n, buffer);
-    
-    //triangles_now(vertices, uvs, colors, n, gfx);
 }
 
 

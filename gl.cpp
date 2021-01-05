@@ -32,11 +32,17 @@ gl_active_texture glActiveTexture;
 
 typedef void (*gl_gen_buffers)(GLsizei n, GLuint *buffers);
 gl_gen_buffers glGenBuffers;
+
 #endif
 
 
 
 
+typedef void (*gl_gen_vertex_arrays)(GLsizei n, GLuint *buffers);
+gl_gen_vertex_arrays glGenVertexArrays;
+
+typedef void (*gl_bind_vertex_array)(GLuint vao);
+gl_bind_vertex_array glBindVertexArray;
 
 typedef GLuint (*gl_create_shader)(GLenum shaderType);
 gl_create_shader glCreateShader;
@@ -187,6 +193,8 @@ bool load_gl_extensions()
 #endif
 
     
+    TRY_LOAD_GL_EXT(gl_gen_vertex_arrays, glGenVertexArrays);
+    TRY_LOAD_GL_EXT(gl_bind_vertex_array, glBindVertexArray);
     TRY_LOAD_GL_EXT(gl_create_shader, glCreateShader);
     TRY_LOAD_GL_EXT(gl_shader_source, glShaderSource);
     TRY_LOAD_GL_EXT(gl_compile_shader, glCompileShader);

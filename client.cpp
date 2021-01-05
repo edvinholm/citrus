@@ -106,7 +106,7 @@ void user_window(UI_Context ctx, Client *client)
     for(int i = 0; i < ARRLEN(usernames); i++)
     {
         _CELL_();
-
+        
         String username = STRING(usernames[i]);
         bool is_current = equal(username, current_username);
         
@@ -192,9 +192,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 
 //    _SHRINK_(10);
 
-    
-#if 1
+    { _RIGHT_(400);
+        _BOTTOM_(400);
+        bar_window(P(ctx), input);
+    }
 
+    
     { _LEFT_CUT_(64);
         
     }
@@ -205,17 +208,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 
     room_window(P(ctx), client);
 
-    /*
-    { _RIGHT_HALF_();
-    }
-    { _LEFT_HALF_();
-        _BOTTOM_HALF_();
-        bar_window(P(ctx), input);
-    }
-    */
-#else
-    foo_window(false, P(ctx), client);
-#endif
 }
 
 
