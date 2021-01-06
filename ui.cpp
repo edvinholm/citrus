@@ -1433,6 +1433,9 @@ u64 world_view(UI_Context ctx)
 
     e->needs_redraw = true;
 
+    view->camera.projection = world_projection_matrix(view->a);
+    view->camera.projection_inverse = inverse_of(view->camera.projection);
+
     return view->clicked_tile_ix;
 }
 
@@ -1445,25 +1448,38 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->clicked_tile_ix = U64_MAX;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
+    u64 hovered_tile_ix = U64_MAX;
+    
     if(e == hovered_element)
     {
         Assert(point_inside_rect(mouse->p, view->a));
-        int hovered_tile_x = (mouse->p.x - view->a.x) / (view->a.w / room_size_x);
-        int hovered_tile_y = (mouse->p.y - view->a.y) / (view->a.h / room_size_y);
-        u64 hovered_tile_ix = hovered_tile_y * room_size_x + hovered_tile_x;
+
+        v3 ground_hit;
+        if(raycast_against_floor(view->mouse_ray, &ground_hit)) {
+            if(ground_hit.x >= 0 && ground_hit.x < room_size_x &&
+               ground_hit.y >= 0 && ground_hit.y < room_size_y) {
+            
+                hovered_tile_ix = floor(ground_hit.y) * room_size_x + floor(ground_hit.x);
         
-        if(view->click_state & PRESSED_NOW) {
-            view->pressed_tile_ix = hovered_tile_ix;
-        }
-        else if(view->click_state & CLICKED_ENABLED) {
-            if(view->pressed_tile_ix == hovered_tile_ix) {
-                view->clicked_tile_ix = view->pressed_tile_ix;
+                if(view->click_state & PRESSED_NOW) {
+                    view->pressed_tile_ix = hovered_tile_ix;
+                }
+
+                if(view->click_state & CLICKED_ENABLED) {
+                    if(view->pressed_tile_ix == hovered_tile_ix) {
+                        view->clicked_tile_ix = view->pressed_tile_ix;
+                    }
+                }
             }
         }
     }
 
+    view->hovered_tile_ix = hovered_tile_ix;
+
     if(!(view->click_state & PRESSED))
         view->pressed_tile_ix = U64_MAX;
+
+    view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
 }
 
 
@@ -1673,7 +1689,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
             }
         }
         else {
-            ui->active_element = 0;
+            ui->active_element = NO_UI_ELEMENT;
         }   
     }
 

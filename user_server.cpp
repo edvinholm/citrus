@@ -132,6 +132,8 @@ DWORD user_server_listening_loop(void *user_server_)
            }
            continue;
         }
+
+        platform_sleep_milliseconds(1);
     }
 
     US_LIST_Log("Exiting.");

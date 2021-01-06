@@ -60,6 +60,7 @@
 
 
 typedef u64 UI_ID;
+const UI_ID NO_UI_ELEMENT = 0;
 
 const u64 MAX_ID_PATH_LENGTH = 128; // 128 * 8B = 1024B
 
@@ -96,7 +97,6 @@ struct UI_ID_Manager
     };
 
     Path_Bucket path_buckets[256]; // Hash is 8 bits, and created from a Path.
-
     
 };
 
@@ -222,8 +222,12 @@ struct UI_World_View
 {
     Rect a;
 
-    UI_Click_State click_state;
+    Camera camera;
+    Ray mouse_ray;
     
+    UI_Click_State click_state;
+
+    u64 hovered_tile_ix;
     u64 pressed_tile_ix; // U64_MAX == no tile
     u64 clicked_tile_ix; // U64_MAX == no tile
 };

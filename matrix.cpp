@@ -363,7 +363,7 @@ m4x4 make_m4x4(float a, float b, float c, float d,
 
 
 inline
-void vecmatmuls(m4x4 m, v3 *in, v3 *_out, u32 n)
+void vecmatmuls(v3 *in, m4x4 m, v3 *_out, u32 n)
 {
     v3 *in_end = in + n;
     //printf("%d\n", n);
@@ -384,20 +384,20 @@ void vecmatmuls(m4x4 m, v3 *in, v3 *_out, u32 n)
 }
 
 inline
-v3 vecmatmul(m4x4 m, v3 v)
+v3 vecmatmul(v3 v, m4x4 m)
 {
     v3 result;
-    result.x = m4x4_get(m, 0, 0) * v.x + m4x4_get(m, 0, 1) * v.y + m4x4_get(m, 0, 2) * v.z + m4x4_get(m, 0, 3) * 1.0f;
-    result.y = m4x4_get(m, 1, 0) * v.x + m4x4_get(m, 1, 1) * v.y + m4x4_get(m, 1, 2) * v.z + m4x4_get(m, 1, 3) * 1.0f;
-    result.z = m4x4_get(m, 2, 0) * v.x + m4x4_get(m, 2, 1) * v.y + m4x4_get(m, 2, 2) * v.z + m4x4_get(m, 2, 3) * 1.0f;
+    result.x = m._00 * v.x + m._01 * v.y + m._02 * v.z + m._03 * 1.0f;
+    result.y = m._10 * v.x + m._11 * v.y + m._12 * v.z + m._13 * 1.0f;
+    result.z = m._20 * v.x + m._21 * v.y + m._22 * v.z + m._23 * 1.0f;
     return result;
 }
 
 
 inline
-float vecmatmul_z(m4x4 m, v3 v)
+float vecmatmul_z(v3 v, m4x4 m)
 {
-    return m4x4_get(m, 2, 0) * v.x + m4x4_get(m, 2, 1) * v.y + m4x4_get(m, 2, 2) * v.z + m4x4_get(m, 2, 3) * 1.0f;
+    return m._20 * v.x + m._21 * v.y + m._22 * v.z + m._23 * 1.0f;
 }
 
 
@@ -496,6 +496,14 @@ bool operator != (m4x4 &m, m4x4 &n)
 
 
 
+m4x4 translate(m4x4 m, v3 u)
+{
+    m._03 = u.x;
+    m._13 = u.y;
+    m._23 = u.z;
+
+    return m;
+}
 
 m4x4 translation_matrix(v3 dp)
 {
@@ -615,13 +623,13 @@ inline
 v3 rotate_vector(v3 v, Quat q)
 {
     m4x4 m = rotation_matrix(q);
-    return vecmatmul(m, v);
+    return vecmatmul(v, m);
 }
 
 inline
 void rotate_vectors(v3 *vectors, v3 *_output, Quat q, u32 n)
 {
     m4x4 matrix = rotation_matrix(q);
-    vecmatmuls(matrix, vectors, _output, n);
+    vecmatmuls(vectors, matrix, _output, n);
 }
 

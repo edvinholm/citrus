@@ -199,6 +199,8 @@ DWORD room_server_listening_loop(void *room_server_)
         }
         unlock_mutex(queue->mutex);
         // /// ///// // ///// //
+
+        platform_sleep_milliseconds(1);
     }
 
 

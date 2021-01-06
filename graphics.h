@@ -157,7 +157,6 @@ T current(Static_Stack<T, Max> &stack, T default_if_empty)
 
 struct World_Graphics
 {
-    bool static_opaque_vao_up_to_date;
     VAO  static_opaque_vao; // For things that doesn't change very often. Like floors and walls.
 };
 
@@ -198,6 +197,8 @@ struct Graphics
     u8 num_bound_textures;
     
     Sprite_Map glyph_maps[NUM_FONTS];
+
+    // TODO @Robustness no_checkin: Make a Font_Table struct, so we don't accidentially pass &fonts[font_id] instead of fonts.
     Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
 
     // World

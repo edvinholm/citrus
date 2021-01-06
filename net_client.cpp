@@ -190,6 +190,7 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
             lock_mutex(mutex);
             {
                 memcpy(room->shared.tiles, rec_tiles, rec_tiles_size);
+                room->static_geometry_up_to_date = false;
             }
             unlock_mutex(mutex);
             
@@ -198,7 +199,7 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
         case RCB_TILES_CHANGED: {
             u64 tile0, tile1;
             RCB_Header(sock, Tiles_Changed, &tile0, &tile1);
-
+            
             Fail_If_True(tile0 >= tile1);
             
             // @Temporary: Reuse some buffer. (WE CAN'T USE TEMPORARY MEMORY BECAUSE WE HAVE NOT LOCKED THE MUTEX AT THIS POINT)
@@ -226,6 +227,7 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
                 {
                     tiles[t] = rec_tiles[t-tile0];
                 }
+                room->static_geometry_up_to_date = false;
             }
             unlock_mutex(mutex);
         } break;
