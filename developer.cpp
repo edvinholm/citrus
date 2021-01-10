@@ -14,7 +14,7 @@ void init_developer(Developer *dev)
         return;
     }
 
-    u32 user_id_length;
+    strlength user_id_length;
     if(!read_entire_file(file, &dev->user_id.data, ALLOC_DEV, &user_id_length)) {
         Debug_Print("Unable to read %s.\n", filename);
         return;

@@ -264,7 +264,7 @@ bool load_tweaks(char *filename)
     }
 
     u8 *contents;
-    u32 length;
+    strlength length;
     if(!read_entire_file(file, &contents, ALLOC_TMP, &length)) {
         Debug_Print("Unable to read %s.\n", filename);
         return false;

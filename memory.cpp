@@ -227,24 +227,28 @@ void reset_allocator(Allocator_ID allocator)
 
 
 
+inline
+void reset_linear_allocator(Linear_Allocator *allocator)
+{
+    for(int i = 0; i < allocator->pages.n; i++)
+    {
+        if(i >= MAX_NUM_LINEAR_ALLOCATOR_PAGES_AFTER_RESET)
+        {
+            app_dealloc_ignore_temporary_memory_test(allocator->pages[i].start);
+            continue;
+        }
+        
+        allocator->pages[i].used = 0;
+    }
 
+    allocator->pages.n = min(allocator->pages.n, MAX_NUM_LINEAR_ALLOCATOR_PAGES_AFTER_RESET);
+}
 
 
 inline
 void reset_temporary_memory()
 {
-    for(int i = 0; i < temporary_memory.pages.n; i++)
-    {
-        if(i >= MAX_NUM_TEMPORARY_MEMORY_PAGES_AFTER_RESET)
-        {
-            app_dealloc_ignore_temporary_memory_test(temporary_memory.pages[i].start);
-            continue;
-        }
-        
-        temporary_memory.pages[i].used = 0;
-    }
-
-    temporary_memory.pages.n = min(temporary_memory.pages.n, MAX_NUM_TEMPORARY_MEMORY_PAGES_AFTER_RESET);
+    reset_linear_allocator(&temporary_memory);
 }
 
 #if DEBUG
@@ -262,12 +266,13 @@ u64 next_multiple(u64 x, u64 factor)
     return x;
 }
 
-u8 *tmp_alloc(size_t size)
-{   
-    Temporary_Memory_Page *page = NULL;
+u8 *linear_alloc(size_t size, Linear_Allocator *allocator)
+{
+
+    Linear_Allocator_Page *page = NULL;
     for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
     {
-        Temporary_Memory_Page &pg = temporary_memory.pages[p];
+        Linear_Allocator_Page &pg = temporary_memory.pages[p];
         
         if(pg.used + size <= pg.size)
         {
@@ -278,11 +283,11 @@ u8 *tmp_alloc(size_t size)
 
     if(page == NULL)
     {
-        size_t page_size = TMP_MEMORY_PAGE_SIZE;
-        if(size > TMP_MEMORY_PAGE_SIZE)
+        size_t page_size = LINEAR_ALLOCATOR_PAGE_SIZE;
+        if(size > LINEAR_ALLOCATOR_PAGE_SIZE)
             page_size = size;
         
-        Temporary_Memory_Page new_page = {0};
+        Linear_Allocator_Page new_page = {0};
         new_page.start = app_alloc(page_size);
         new_page.size = page_size;
         array_add(temporary_memory.pages, new_page);
@@ -299,12 +304,13 @@ u8 *tmp_alloc(size_t size)
     return result;
 }
 
-u8 *tmp_realloc(u8 *old, size_t old_size, size_t new_size)
+
+u8 *linear_realloc(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *allocator)
 {
-    Temporary_Memory_Page *page = NULL;
+    Linear_Allocator_Page *page = NULL;
     for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
     {
-        Temporary_Memory_Page &pg = temporary_memory.pages[p];
+        Linear_Allocator_Page &pg = temporary_memory.pages[p];
         if(old >= pg.start && old < pg.start + pg.size)
             page = &pg;
     }
@@ -320,7 +326,20 @@ u8 *tmp_realloc(u8 *old, size_t old_size, size_t new_size)
         return old;
     }
 
-    return tmp_alloc(new_size);
+    return linear_alloc(new_size, allocator);
+}
+
+
+
+inline
+u8 *tmp_alloc(size_t size)
+{
+    return linear_alloc(size, &temporary_memory);
+}
+
+u8 *tmp_realloc(u8 *old, size_t old_size, size_t new_size)
+{
+    return linear_realloc(old, old_size, new_size, &temporary_memory);
 }
 
 
@@ -376,8 +395,8 @@ void dealloc(void *ptr, Allocator_ID allocator
     {
         for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
         {
-            Temporary_Memory_Page &pg = temporary_memory.pages[p];
-            Assert(!(ptr >= pg.start && ptr < pg.start + TMP_MEMORY_PAGE_SIZE));
+            Linear_Allocator_Page &pg = temporary_memory.pages[p];
+            Assert(!(ptr >= pg.start && ptr < pg.start + LINEAR_ALLOCATOR_PAGE_SIZE));
         }
     }
 #endif

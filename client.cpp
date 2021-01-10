@@ -322,6 +322,23 @@ void init_game(Game *_game)
 
 int client_entry_point(int num_args, char **arguments)
 {
+
+#if 0
+    //no_checkin
+    String obj_contents = {0};
+    if(!read_entire_resource("meshes/bed.obj", &obj_contents.data, ALLOC_TMP, &obj_contents.length)){
+        Debug_Print("Unable to read mesh resource.\n");
+        return 987;
+    }
+    if(read_obj(obj_contents)) {
+        Debug_Print("Read obj successfully.\n");
+    } else {
+        Debug_Print("Failed to read obj.\n");
+    }
+    return 0;
+    //---
+#endif
+                             
     platform_init_socket_use();
     
     String_Builder sb = {0};

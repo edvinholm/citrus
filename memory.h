@@ -1,22 +1,22 @@
 
 
 
-const size_t TMP_MEMORY_PAGE_SIZE = 0xF000;
-const s64 MAX_NUM_TEMPORARY_MEMORY_PAGES_AFTER_RESET = 4;
+const size_t LINEAR_ALLOCATOR_PAGE_SIZE = 0xF000;
+const s64 MAX_NUM_LINEAR_ALLOCATOR_PAGES_AFTER_RESET = 4;
 
-struct Temporary_Memory_Page
+struct Linear_Allocator_Page
 {
     u8 *start;
     size_t used;
     size_t size;
 };
 
-struct Temporary_Memory
+struct Linear_Allocator
 {
-    Array<Temporary_Memory_Page, ALLOC_APP> pages;
+    Array<Linear_Allocator_Page, ALLOC_APP> pages;
 };
 
-Temporary_Memory temporary_memory = {0};
+Linear_Allocator temporary_memory = {0};
 
 
 

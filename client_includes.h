@@ -26,6 +26,8 @@
 
 // --
 
+#include "obj.cpp"
+
 #include "direction.h"
 
 #include "texture.h"

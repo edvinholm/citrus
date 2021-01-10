@@ -14,7 +14,7 @@ FILE *open_file(char *filename, bool for_writing)
 
 
 // @Cleanup @Robustness: Don't close the file in this proc. Makes more sense to both open and close the file outside of it.
-bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, u32 *_Length = NULL)
+bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, strlength *_Length = NULL)
 {
     Assert(File);
  
@@ -41,7 +41,7 @@ bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, u32 *_Leng
     return true;
 }
 
-bool read_entire_file(char *Filename, u8 **_Data, Allocator_ID allocator, u32 *_Length = 0)
+bool read_entire_file(char *Filename, u8 **_Data, Allocator_ID allocator, strlength *_Length = 0)
 {
     FILE *File = fopen(Filename, "rb");
     if(!File) return false;
@@ -52,7 +52,7 @@ bool read_entire_file(char *Filename, u8 **_Data, Allocator_ID allocator, u32 *_
 inline
 bool read_entire_file(char *filename, String *_output, Allocator_ID allocator)
 {
-    return read_entire_file(filename, (byte **)&_output->data, allocator, (u32 *)&_output->length);
+    return read_entire_file(filename, &_output->data, allocator, &_output->length);
 }
 
 // NOTE: We could just use FILE for referring to resources, but we have this to make sure we don't pass them to the wrong procs.
@@ -153,8 +153,8 @@ long resource_seek(Resource_Handle resource, long offset, int whence) {
 
 // @Startup: @Speed: Pass a builder here always so we don't allocate memory every time.
 inline
-bool read_entire_resource(char *filename, byte **_data, Allocator_ID allocator,
-                          u32 *_length = NULL, String_Builder *builder = NULL)
+bool read_entire_resource(char *filename, u8 **_data, Allocator_ID allocator,
+                          strlength *_length = NULL, String_Builder *builder = NULL)
 {   
     Resource_Handle resource = open_resource(filename, false, builder);
 

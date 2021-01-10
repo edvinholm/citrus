@@ -110,7 +110,7 @@ bool load_texture_catalog_from_image_files(Texture_Catalog *cat)
         {
             TIMED_BLOCK("Load and create texture");
             u8 *file_data;
-            u32 file_data_size;
+            strlength file_data_size;
             if(!read_entire_resource((char *)texture_filenames[t], &file_data, ALLOC_TMP, &file_data_size))
             {
                 Debug_Print("Unable to load texture resource '%s'\n", texture_filenames[t]);
