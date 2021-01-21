@@ -108,6 +108,7 @@ struct UI_String
 
 enum UI_Element_Type
 {
+    PANEL,
     WINDOW,
     BUTTON,
     TEXTFIELD,
@@ -133,6 +134,11 @@ enum UI_Click_State_
     //MOUSE_UP_ON_NOW     = 0b001000000000, // The mouse was released this frame, and the cursor was over the element.
 };
 typedef u16 UI_Click_State; //In @JAI, this can probably be just an enum.
+
+struct UI_Panel
+{
+    Rect a;
+};
 
 struct UI_Window
 {
@@ -242,6 +248,7 @@ struct UI_Element
     Rect last_dirty_rect; // The dirty rect that was used when we last drew this element.
 
     union {
+        UI_Panel     panel;
         UI_Window    window;
         UI_Text      text;
         UI_Button    button;

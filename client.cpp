@@ -184,6 +184,108 @@ void room_window(UI_Context ctx, Client *client)
     }
 }
 
+
+Client_Window_ID next_window_id(Client_UI *cui)
+{
+    Client_Window_ID id = 1;
+    // @Speed
+    bool keep_looping = true;
+    while(keep_looping) {
+
+        keep_looping = false;
+        
+        for(int i = 0; i < cui->windows.n; i++) {
+            if(cui->windows[i].id == id) {
+                id++;
+                keep_looping = true;
+            }
+        }
+    }
+
+    return id;
+}
+
+// NOTE: Returned pointer is only guaranteed to be valid until client->windows is modified.
+Client_Window *open_new_window(Client_Window_Type type, Client_UI *cui)
+{
+    Client_Window new_window = {0};
+    new_window.id = next_window_id(cui);
+    new_window.type = type;
+    new_window.open = true;
+
+    return array_add(cui->windows, new_window);
+}
+
+Client_Window *ensure_window_of_type_open(Client_Window_Type type, Client_UI *cui)
+{
+    for(int i = 0; i < cui->windows.n; i++)
+    {
+        auto &window = cui->windows[i];
+        if(window.type == type) {
+            window.open = true;
+            return &window;
+        }
+    }
+
+    return open_new_window(type, cui);
+}
+
+bool window_should_be_destroyed_on_close(Client_Window *window)
+{
+    if(window->type == ROOM_LIST_WINDOW ||
+       window->type == USER_WINDOW)
+    {
+        return false;
+    }
+    
+    return true;
+}
+
+void close_window_(Client_Window *window, int index, Client_UI *cui, bool *_did_remove = NULL)
+{
+    if(window_should_be_destroyed_on_close(window))
+    {
+        array_unordered_remove(cui->windows, index);
+        if(_did_remove)
+            *_did_remove = true;
+    }
+    else
+    {
+        window->open = true;
+        if(_did_remove)
+            *_did_remove = false;
+    }
+}
+
+void close_window(Client_Window_ID id, Client_UI *cui)
+{
+    for(int i = 0; i < cui->windows.n; i++)
+    {
+        auto &window = cui->windows[i];
+        if(window.id == id) {
+            Assert(window.open);
+            close_window_(&window, i, cui);
+            break;
+        }
+    }
+    Assert(false);
+};
+
+void close_windows_of_type(Client_Window_Type type, Client_UI *cui)
+{
+    for(int i = 0; i < cui->windows.n; i++)
+    {
+        auto &window = cui->windows[i];
+        if(window.type == type) {
+            bool did_remove;
+            close_window_(&window, i, cui, &did_remove);
+            if(did_remove) {
+                i--;
+            }
+        }
+    }
+}
+
 void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 {
     U(ctx);
@@ -197,16 +299,47 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         bar_window(P(ctx), input);
     }
 
+    const float menu_bar_button_s = 64;
     
-    { _LEFT_CUT_(64);
+    { _LEFT_CUT_(menu_bar_button_s);
+
+        { _AREA_COPY_();
+        
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button(P(ctx), STRING("ROOM"))) {
+                    
+                }
+            }
+            
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button(P(ctx), STRING("USER"))) {
+                    
+                }
+            }
+        }
+
+        panel(P(ctx));
+    }
+
+    { _RIGHT_CUT_(64);
         
     }
 
-    { _RIGHT_CUT_(320);
+    { _RIGHT_(320);
         user_window(P(ctx), client);
     }
 
-    room_window(P(ctx), client);
+
+    u64 clicked_tile = world_view(P(ctx));
+    if(clicked_tile != U64_MAX)
+    {
+        // @Cleanup: We don't know what kind of system is best to keep track of "requests" to the server yet.
+        //           We probably will want to know which operations succeeds and fails.
+        //           And for some things we want to get stuff back.
+        RSB_Packet(client, Click_Tile, clicked_tile);
+    }
+    
+    //room_window(P(ctx), client);
 
 }
 

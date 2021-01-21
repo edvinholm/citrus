@@ -211,20 +211,6 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
     Zero(*_e);
     _e->type  = type;
     _e->needs_redraw = true;
-
-    switch(_e->type) {
-        case WINDOW:
-        case BUTTON:
-        case TEXTFIELD:
-        case SLIDER:
-        case DROPDOWN:
-        case UI_TEXT:
-
-        case WORLD_VIEW:
-            break;
-            
-        default: Assert(false); break;
-    }
 }
 
 void clear_ui_element(UI_Element *e)
@@ -232,6 +218,10 @@ void clear_ui_element(UI_Element *e)
     switch(e->type) {
         case DROPDOWN: clear(&e->dropdown); break;
 
+            // Maybe IMPORTANT to keep default case here as an assert
+            // so we REMEMBER to add things here to new elements
+            // that need to be cleared.
+        case PANEL:
         case WINDOW:
         case BUTTON:
         case TEXTFIELD:
@@ -528,14 +518,22 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
 }
 
 
+void panel(UI_Context ctx)
+{
+    U(ctx);
+
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), PANEL, ctx.manager);
+
+    auto *panel = &e->panel;
+    ui_set(e, &panel->a, area(ctx.layout));
+}
+
 void ui_text(String text, UI_Context ctx)
 {
     U(ctx);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
 
-    Rect a = area(ctx.layout);
-    
     auto *txt = &e->text;
     ui_set(e, &txt->a, area(ctx.layout));
     ui_set(e, &txt->text, text, ctx.manager);
@@ -1487,6 +1485,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 Rect ui_element_rect(UI_Element *e)
 {
     switch(e->type) {
+        case PANEL:     return e->panel.a;
         case WINDOW:    return e->window.current_a;
         case BUTTON:    return e->button.a;
         case TEXTFIELD: return e->textfield.a;
@@ -1647,6 +1646,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
         bool mouse_over = false;
         
         switch(e->type) {
+            case PANEL:      mouse_over = point_inside_rect(mouse.p, e->panel.a);          break;
             case WINDOW:     mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
             case BUTTON:     mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
             case TEXTFIELD:  mouse_over = point_inside_rect(mouse.p, e->textfield.a);      break;
@@ -1714,6 +1714,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
             case WORLD_VIEW: update_world_view(e, input, hovered_element); break;
 
+            case PANEL:
             case UI_TEXT:
                 break;
                 

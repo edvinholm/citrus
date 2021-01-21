@@ -47,7 +47,7 @@ echo Done.
 
 REM Comment out 'goto' to build server.
 :server
-REM goto shaders
+goto shaders
 
 Taskkill /IM citrus_server.exe /F
 

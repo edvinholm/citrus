@@ -225,6 +225,16 @@ struct Render_Loop
 };
 
 
+void draw_panel(UI_Element *e, UI_Manager *ui, Graphics *gfx, double t)
+{
+    Assert(e->type == PANEL);
+
+    v4 color = { 0.53, 0.21, 0.12, 1.0f };
+
+    _OPAQUE_UI_();
+    draw_rect(e->panel.a, color, gfx);
+}
+
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == WINDOW);
@@ -925,12 +935,13 @@ DWORD render_loop(void *loop_)
                     Assert(e);
 
                     switch(e->type) {
-                        case WINDOW:   draw_window(e, ui, &gfx); break;
+                        case PANEL:    draw_panel(e, ui, &gfx, t);   break;
+                        case WINDOW:   draw_window(e, ui, &gfx);  break;
                         case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
-                        case BUTTON:   draw_button(e, ui, &gfx); break;
+                        case BUTTON:   draw_button(e, ui, &gfx);  break;
                         case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
-                        case SLIDER:   draw_slider(e, &gfx);     break;
-                        case DROPDOWN: draw_dropdown(e, &gfx); break;
+                        case SLIDER:   draw_slider(e, &gfx);      break;
+                        case DROPDOWN: draw_dropdown(e, &gfx);    break;
 
                         case WORLD_VIEW: {
                             draw_world_view_background(e, &gfx);
