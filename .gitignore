@@ -15,4 +15,4 @@ citrus.exe
 citrus_release.exe
 citrus_server.exe
 
-*.pdb
+**.pdb

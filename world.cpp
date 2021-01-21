@@ -63,17 +63,3 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
 
     return ray;
 }
-
-#if 0
-// no_checkin @Temporary
-v3 ground_point_from_ray(Ray ray)
-{
-    if(is_zero(ray.z))
-    {
-        Assert(false);
-        return V3_ZERO;
-    }
-    
-    return p0 + (-p0.z / ray.z) * ray;
-}
-#endif

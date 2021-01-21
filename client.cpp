@@ -450,7 +450,7 @@ void client_set_window_delegate(Window *window, Client *client)
 // NOTE: *_game should already have been zeroed.
 void init_game(Game *_game)
 {
-    
+
 }
 
 int client_entry_point(int num_args, char **arguments)

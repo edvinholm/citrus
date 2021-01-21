@@ -16,10 +16,10 @@ enum Room_Connect_Status
 
 enum RCB_Packet_Type
 {
-    RCB_GOODBYE = 1,
-    RCB_ROOM_INIT = 3,
+    RCB_GOODBYE   = 1,
+    RCB_ROOM_INIT = 2,
     
-    RCB_TILES_CHANGED = 2,
+    RCB_ROOM_CHANGED = 3,
 };
 
 // Room Client Bound Packet Header
@@ -49,7 +49,7 @@ struct RSB_Packet_Header
     Fail_If_True(!write_RCB_Packet_Header({Packet_Type}, Sock_Ptr))
 
 
-inline
+
 Room_Connect_Status read_room_connect_status_code(Socket *sock)
 {
     u64 i;
@@ -59,7 +59,7 @@ Room_Connect_Status read_room_connect_status_code(Socket *sock)
     return (Room_Connect_Status)i;
 }
 
-inline
+
 bool write_room_connect_status_code(Room_Connect_Status status, Socket *sock)
 {
     return write_u64(status, sock);
@@ -67,26 +67,87 @@ bool write_room_connect_status_code(Room_Connect_Status status, Socket *sock)
 
 
 
-
-inline
+// Tile //
 bool read_Tile(Tile *_tile, Socket *sock)
 {
-    u8 i;
-    if(!read_u8(&i, sock)) return false;
+    Read(u8, i, sock);
     *_tile = (Tile)i;
     return true;
 }
 
-inline
 bool write_Tile(Tile tile, Socket *sock)
 {
     return write_u8(tile, sock);
 }
 
+// Item //
+bool read_Item_Type_ID(Item_Type_ID *_type_id, Socket *sock)
+{
+    Read(u64, type_id, sock);
+    *_type_id = (Item_Type_ID)type_id;
+    return true;
+}
+
+bool write_Item_Type_ID(Item_Type_ID type_id, Socket *sock)
+{
+    Write(u64, type_id, sock);
+    return true;
+}
+
+
+// Entity //
+bool read_Entity_Type(Entity_Type *_type, Socket *sock)
+{
+    Read(u8, type, sock);
+    *_type = (Entity_Type)type;
+    return true;
+}
+
+bool write_Entity_Type(Entity_Type type, Socket *sock)
+{
+    Write(u8, type, sock);
+    return true;
+}
+
+bool read_Entity(Entity *_entity, Socket *sock)
+{
+    S__Entity *shared = &_entity->shared;
+
+    Read_To_Ptr(v3,          &shared->p,    sock);
+    Read_To_Ptr(Entity_Type, &shared->type, sock);
+
+    switch(shared->type) {
+        case ENTITY_ITEM: {
+            Read_To_Ptr(Item_Type_ID, &shared->item_type, sock);
+        } break;
+
+        default: Assert(false); return false;
+    }
+    
+    return true;
+}
+
+bool write_Entity(Entity *entity, Socket *sock)
+{
+    S__Entity *shared = &entity->shared;
+
+    Write(v3, shared->p,    sock);
+    Write(Entity_Type, shared->type, sock);
+
+    switch(shared->type) {
+        case ENTITY_ITEM: {
+            Write(Item_Type_ID, shared->item_type, sock);
+        } break;
+
+        default: Assert(false); return false;
+    }
+
+    return true;
+}
 
 
 
-inline
+
 bool read_RSB_Packet_Type(RSB_Packet_Type *_type, Socket *sock)
 {
     u64 i;
@@ -95,14 +156,14 @@ bool read_RSB_Packet_Type(RSB_Packet_Type *_type, Socket *sock)
     return true;
 }
 
-inline
+
 bool write_RSB_Packet_Type(RSB_Packet_Type type, Socket *sock)
 {
     return write_u64(type, sock);
 }
 
 
-inline
+
 bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Socket *sock)
 {
     Zero(*_header);
@@ -110,7 +171,7 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Socket *sock)
     return true;
 }
 
-inline
+
 bool write_RSB_Packet_Header(RSB_Packet_Header header, Socket *sock)
 {
     Write(RSB_Packet_Type, header.type, sock);
@@ -129,7 +190,7 @@ bool write_rsb_Goodbye_packet(Socket *sock)
 
 
 
-inline
+
 bool read_RCB_Packet_Type(RCB_Packet_Type *_type, Socket *sock)
 {
     u64 i;
@@ -138,14 +199,14 @@ bool read_RCB_Packet_Type(RCB_Packet_Type *_type, Socket *sock)
     return true;
 }
 
-inline
+
 bool write_RCB_Packet_Type(RCB_Packet_Type type, Socket *sock)
 {
     return write_u64(type, sock);
 }
 
 
-inline
+
 bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Socket *sock)
 {
     Zero(*_header);
@@ -153,7 +214,7 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Socket *sock)
     return true;
 }
 
-inline
+
 bool write_RCB_Packet_Header(RCB_Packet_Header header, Socket *sock)
 {
     Write(RCB_Packet_Type, header.type, sock);
@@ -170,14 +231,16 @@ bool write_rcb_Goodbye_packet(Socket *sock)
 
 
 // NOTE: tiles should point to all_tiles + tile0
-bool write_rcb_Tiles_Changed_packet(Socket *sock,
-                                    u64 tile0, u64 tile1, Tile *tiles)
+bool write_rcb_Room_Changed_packet(Socket *sock,
+                                   u64 tile0, u64 tile1, Tile *tiles,
+                                   u64 num_entities, Entity *entities)
 {
-    Write_RCB_Header(RCB_TILES_CHANGED, sock);
+    Write_RCB_Header(RCB_ROOM_CHANGED, sock);
 
     /* Header */
     Write(u64, tile0, sock);
     Write(u64, tile1, sock);
+    Write(u64, num_entities, sock);
     /* ------ */
 
 #if 0
@@ -192,26 +255,40 @@ bool write_rcb_Tiles_Changed_packet(Socket *sock,
     Write_Bytes(tiles, (tile1 - tile0), sock);
 #endif
 
+    Entity *at_entity  = entities;
+    Entity *end_entity = entities + num_entities;
+    while(at_entity < end_entity)
+    {
+        Write(Entity, at_entity++, sock);
+    }
+
     return true;
 }
 
 
-bool write_rcb_Room_Init_packet(Socket *sock, Tile *tiles)
+bool write_rcb_Room_Init_packet(Socket *sock, Tile *tiles, u64 num_entities, Entity *entities)
 {
     Write_RCB_Header(RCB_ROOM_INIT, sock);
 
+    Write(u64, num_entities, sock);
+    
     Assert(sizeof(Tile) == 1);
     Write_Bytes(tiles, room_size_x * room_size_y, sock);
+
+    for(u64 i = 0; i < num_entities; i++) {
+        Write(Entity, &entities[i], sock);
+    }
 
     return true;
 }
 
 
-bool read_rcb_Tiles_Changed_header(Socket *sock,
-                                  u64 *_tile0, u64 *_tile1)
+bool read_rcb_Room_Changed_header(Socket *sock,
+                                  u64 *_tile0, u64 *_tile1, u64 *_num_entities)
 {
-    Read_To_Ptr(u64, _tile0, sock);
-    Read_To_Ptr(u64, _tile1, sock);
+    Read_To_Ptr(u64, _tile0,        sock);
+    Read_To_Ptr(u64, _tile1,        sock);
+    Read_To_Ptr(u64, _num_entities, sock);
 
     return true;
 }

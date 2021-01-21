@@ -64,6 +64,23 @@ bool read_u64(u64 *_i, Socket *sock)
 }
 
 inline
+bool read_v3(v3 *_u, Socket *sock)
+{
+    Assert(sizeof(_u->x) == sizeof(u32));
+    Assert(sizeof(_u->x) == 4);
+    u32 x, y, z;    
+    if(!read_u32(&x, sock)) return false;
+    if(!read_u32(&y, sock)) return false;
+    if(!read_u32(&z, sock)) return false;
+
+    memcpy(&_u->x, &x, 4);
+    memcpy(&_u->y, &y, 4);
+    memcpy(&_u->z, &z, 4);
+
+    return true;
+}
+
+inline
 bool read_v4(v4 *_u, Socket *sock)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -164,6 +181,24 @@ bool write_float(float f, Socket *sock)
     memcpy(&i, &f, 4);
     return write_u32(i, sock);
 }
+
+inline
+bool write_v3(v3 u, Socket *sock)
+{
+    Assert(sizeof(u.x) == sizeof(u32));
+    Assert(sizeof(u.x) == 4);
+    u32 x, y, z, w;
+    memcpy(&x, &u.x, 4);
+    memcpy(&y, &u.y, 4);
+    memcpy(&z, &u.z, 4);
+
+    if(!write_u32(x, sock)) return false;
+    if(!write_u32(y, sock)) return false;
+    if(!write_u32(z, sock)) return false;
+
+    return true;
+}
+
 
 inline
 bool write_v4(v4 u, Socket *sock)

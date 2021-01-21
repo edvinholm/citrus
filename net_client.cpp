@@ -178,6 +178,9 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
         } break;
 
         case RCB_ROOM_INIT: {
+
+            Read(u64, num_entities, sock);
+            
             // @Temporary: Reuse some buffer. (WE CAN'T USE TEMPORARY MEMORY BECAUSE WE HAVE NOT LOCKED THE MUTEX AT THIS POINT)
             size_t rec_tiles_size = sizeof(Tile) * (room_size_x * room_size_y);
             Tile *rec_tiles;
@@ -187,18 +190,31 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
             Assert(sizeof(Tile) == 1);
             Read_Bytes(rec_tiles, rec_tiles_size, sock);
 
+            // NOTE: We only read the *shared* part of the entitites here, leaving the rest of the structs zeroed.
+            Entity entities[MAX_ENTITIES_PER_ROOM] = {0};
+            Fail_If_True(num_entities > ARRLEN(entities));
+            for(int i = 0; i < num_entities; i++)
+            {
+                Read_To_Ptr(Entity, entities + i, sock);
+            }
+
             lock_mutex(mutex);
             {
                 memcpy(room->shared.tiles, rec_tiles, rec_tiles_size);
+
+                static_assert(ARRLEN(room->entities) == ARRLEN(entities));
+                room->num_entities = num_entities;
+                memcpy(room->entities, entities, sizeof(Entity) * num_entities);
+                
                 room->static_geometry_up_to_date = false;
             }
             unlock_mutex(mutex);
             
         } break;
         
-        case RCB_TILES_CHANGED: {
-            u64 tile0, tile1;
-            RCB_Header(sock, Tiles_Changed, &tile0, &tile1);
+        case RCB_ROOM_CHANGED: {
+            u64 tile0, tile1, num_entities;
+            RCB_Header(sock, Room_Changed, &tile0, &tile1, &num_entities);
             
             Fail_If_True(tile0 >= tile1);
             
@@ -219,14 +235,25 @@ bool read_and_handle_rcb_packet(Socket *sock, Mutex &mutex, Room *room, bool *_s
                 Read_Bytes(rec_tiles, rec_tiles_size, sock);
 #endif
             }
+
+            // NOTE: We only read the *shared* part of the entitites here, leaving the rest of the structs zeroed.
+            Entity entities[MAX_ENTITIES_PER_ROOM] = {0};
+            Fail_If_True(num_entities > ARRLEN(entities));
+            for(int i = 0; i < num_entities; i++)
+                Read_To_Ptr(Entity, entities + i, sock);
             
             lock_mutex(mutex);
             {
                 Tile *tiles = room->shared.tiles;
-                for(int t = tile0; t < tile1; t++)
-                {
+                for(int t = tile0; t < tile1; t++) {
                     tiles[t] = rec_tiles[t-tile0];
                 }
+
+                // IMPORTANT: Don't overwrite the client's local stuff here.
+                for(int e = 0; e < num_entities; e++) {
+                    room->entities[e].shared = entities[e].shared;
+                }
+                
                 room->static_geometry_up_to_date = false;
             }
             unlock_mutex(mutex);

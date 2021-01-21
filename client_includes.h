@@ -86,4 +86,5 @@ using namespace Client_User;
 
 #include "body_text.cpp"
 
+#include "world_draw.cpp"
 #include "draw_client.cpp"

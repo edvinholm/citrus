@@ -19,6 +19,29 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
     Log(__VA_ARGS__)
 
 
+void create_dummy_entities(Room *room)
+{
+    v3 pp = { 0, 0 };
+    for(int i = 0; i < 4; i++)
+    {
+        Item_Type_ID item_type_id = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM - 1);
+        Item_Type *item_type = item_types + item_type_id;
+        
+        S__Entity e = {0};
+        e.type = ENTITY_ITEM;
+        e.p = pp;
+        e.p.x += item_type->volume.x * 0.5f;
+        e.p.y += item_type->volume.y * 0.5f + (i % 2);
+        
+        e.item_type = item_type_id;
+
+        Assert(room->num_entities < ARRLEN(room->entities));
+        room->entities[room->num_entities++] = { e };
+
+        pp.x += item_type->volume.x + 1;
+    }
+}
+
 void create_dummy_rooms(Room_Server *server)
 {
     double t = get_time();
@@ -29,6 +52,8 @@ void create_dummy_rooms(Room_Server *server)
         Room room = {0};
         room.t = t;
         room.randomize_cooldown = random_float() * 3.0;
+
+        create_dummy_entities(&room);
         
         array_add(server->room_ids, i + 1);
         array_add(server->rooms,    room);
@@ -84,6 +109,15 @@ void update_room(Room *room, int index) {
 
     room->randomize_cooldown -= dt;
     while(room->randomize_cooldown <= 0) {
+
+        if(room->num_entities > 0) {
+            auto *e = room->entities + random_int(0, room->num_entities-1);
+            e->shared.p.xy = { (float)random_int(0, room_size_x), (float)random_int(0, room_size_y) };
+            
+            room->did_change = true;
+        }
+        
+        
         Tile *tiles = room->shared.tiles;
         Tile *at  = tiles;
         Tile *end = tiles + room_size_x * room_size_y;
@@ -274,7 +308,7 @@ void disconnect_room_client(Room_Client *client)
 
 bool initialize_room_client(Room_Client *client, Room *room)
 {
-    RCB_Packet(client, Room_Init, room->shared.tiles);
+    RCB_Packet(client, Room_Init, room->shared.tiles, room->num_entities, room->entities);
     return true;
 }
 
@@ -476,10 +510,11 @@ DWORD room_server_main_loop(void *server_)
             
             // @Speed: Loop over just the sockets, not the whole Client structs.
             // @Speed: Prepare the data to send (all packets combined, endiannessed etc) and then just write that to all the clients.
-                
+
+            // TODO @Norelease: Only send tiles/entities that changed.
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
-                RCB_Packet(client, Tiles_Changed, 0, room_size, room->shared.tiles);
+                RCB_Packet(client, Room_Changed, 0, room_size, room->shared.tiles, room->num_entities, room->entities);
                 if(client == NULL) c--;
             }
         }
