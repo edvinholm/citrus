@@ -94,7 +94,29 @@ void user_window(UI_Context ctx, Client *client)
         for(int r = 0; r < rows; r++) {
             for(int c = 0; c < cols; c++) {
                 _CELL_();
-                button(PC(ctx, r * cols + c));
+
+                auto cell_ix = r * cols + c;
+                Item_Type_ID item_type = user->shared.inventory[cell_ix];
+
+                String label = EMPTY_STRING;
+                switch(item_type) {
+                    case ITEM_CHAIR: label = STRING("C"); break;
+                    case ITEM_BED:   label = STRING("B");   break;
+                    case ITEM_TABLE: label = STRING("T"); break;
+
+                    case ITEM_NONE_OR_NUM: break;
+
+                    default: label = STRING("?"); break;
+                }
+
+                bool selected = (cell_ix == user->selected_inventory_item_plus_one - 1);
+                if(button(PC(ctx, cell_ix), label, false, selected) & CLICKED_ENABLED) {
+                    // @Norelease @Robustness: Make this an item ID.
+                    //   So if the gets removed or moved on the server, the item will be
+                    //   deselected, and not replaced by another item that takes its slot
+                    //   in the inventory.
+                    user->selected_inventory_item_plus_one = cell_ix + 1;
+                }
             }
         }
     }
@@ -123,28 +145,6 @@ void room_window(UI_Context ctx, Client *client)
 
     float room_button_h = 64;
 
-#if 0
-    // DETERMINE WINDOW RECT //
-    Rect window_a;
-    {
-        Rect a = area(ctx.layout);
-        float map_s = min(a.w, a.h);
-        Rect map_a = { a.x, a.y, map_s, map_s };
-        float border_and_padding = window_border_width + window_default_padding;
-        v4 borders_and_stuff = { border_and_padding,
-                                 border_and_padding,
-                                 border_and_padding + window_title_height + room_button_h + window_default_padding,
-                                 border_and_padding };
-        map_a = shrunken(map_a, borders_and_stuff);
-        map_s = min(map_a.w, map_a.h);
-        map_a.w = map_s;
-        map_a.h = map_s;
-        window_a = grown(map_a, borders_and_stuff);
-    }
-    _AREA_(window_a);
-    //
-#endif
-
     // @Temporary
     String_Builder sb = {0};
     
@@ -156,7 +156,7 @@ void room_window(UI_Context ctx, Client *client)
     // TODO @Cleanup: :PushPop Window
     { _WINDOW_(P(ctx), STRING("ROOM"));
         { _TOP_CUT_(room_button_h);
-            _GRID_(num_rooms, 1, 4);
+            _GRID_(num_rooms, 1, window_default_padding);
             for(int r = 0; r < num_rooms; r++)
             {
                 _CELL_();
@@ -170,125 +170,15 @@ void room_window(UI_Context ctx, Client *client)
                 }
             }
         }
-
-        cut_top(window_default_padding, ctx.layout);
-
-        u64 clicked_tile = world_view(P(ctx));
-        if(clicked_tile != U64_MAX)
-        {
-            // @Cleanup: We don't know what kind of system is best to keep track of "requests" to the server yet.
-            //           We probably will want to know which operations succeeds and fails.
-            //           And for some things we want to get stuff back.
-            RSB_Packet(client, Click_Tile, clicked_tile);
-        }   
     }
 }
 
-
-Client_Window_ID next_window_id(Client_UI *cui)
-{
-    Client_Window_ID id = 1;
-    // @Speed
-    bool keep_looping = true;
-    while(keep_looping) {
-
-        keep_looping = false;
-        
-        for(int i = 0; i < cui->windows.n; i++) {
-            if(cui->windows[i].id == id) {
-                id++;
-                keep_looping = true;
-            }
-        }
-    }
-
-    return id;
-}
-
-// NOTE: Returned pointer is only guaranteed to be valid until client->windows is modified.
-Client_Window *open_new_window(Client_Window_Type type, Client_UI *cui)
-{
-    Client_Window new_window = {0};
-    new_window.id = next_window_id(cui);
-    new_window.type = type;
-    new_window.open = true;
-
-    return array_add(cui->windows, new_window);
-}
-
-Client_Window *ensure_window_of_type_open(Client_Window_Type type, Client_UI *cui)
-{
-    for(int i = 0; i < cui->windows.n; i++)
-    {
-        auto &window = cui->windows[i];
-        if(window.type == type) {
-            window.open = true;
-            return &window;
-        }
-    }
-
-    return open_new_window(type, cui);
-}
-
-bool window_should_be_destroyed_on_close(Client_Window *window)
-{
-    if(window->type == ROOM_LIST_WINDOW ||
-       window->type == USER_WINDOW)
-    {
-        return false;
-    }
-    
-    return true;
-}
-
-void close_window_(Client_Window *window, int index, Client_UI *cui, bool *_did_remove = NULL)
-{
-    if(window_should_be_destroyed_on_close(window))
-    {
-        array_unordered_remove(cui->windows, index);
-        if(_did_remove)
-            *_did_remove = true;
-    }
-    else
-    {
-        window->open = true;
-        if(_did_remove)
-            *_did_remove = false;
-    }
-}
-
-void close_window(Client_Window_ID id, Client_UI *cui)
-{
-    for(int i = 0; i < cui->windows.n; i++)
-    {
-        auto &window = cui->windows[i];
-        if(window.id == id) {
-            Assert(window.open);
-            close_window_(&window, i, cui);
-            break;
-        }
-    }
-    Assert(false);
-};
-
-void close_windows_of_type(Client_Window_Type type, Client_UI *cui)
-{
-    for(int i = 0; i < cui->windows.n; i++)
-    {
-        auto &window = cui->windows[i];
-        if(window.type == type) {
-            bool did_remove;
-            close_window_(&window, i, cui, &did_remove);
-            if(did_remove) {
-                i--;
-            }
-        }
-    }
-}
 
 void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 {
     U(ctx);
+
+    Client_UI *cui = &client->cui;
 
     Rect a = area(ctx.layout);
 
@@ -306,14 +196,14 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         { _AREA_COPY_();
         
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("ROOM"))) {
-                    
+                if(button(P(ctx), STRING("ROOM"), false, cui->room_window_open) & CLICKED_ENABLED) {
+                    cui->room_window_open = !cui->room_window_open;
                 }
             }
             
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("USER"))) {
-                    
+                if(button(P(ctx), STRING("USER"), false, cui->user_window_open) & CLICKED_ENABLED) {
+                    cui->user_window_open = !cui->user_window_open;
                 }
             }
         }
@@ -325,6 +215,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         
     }
 
+    if(cui->room_window_open)
+    { _TOP_(window_border_width + window_title_height + window_default_padding + 64 + window_default_padding + window_border_width);
+        room_window(P(ctx), client);
+    }
+
+    if(cui->user_window_open)
     { _RIGHT_(320);
         user_window(P(ctx), client);
     }

@@ -329,14 +329,24 @@ bool read_and_handle_ucb_packet(Socket *sock, Mutex &mutex, User *user, bool *_s
             *_server_said_goodbye = true;
         } break;
 
+            // NOTE: This reads directly to the active user struct. If anything fails here, we will end up with a partially up-to-date user.
         case UCB_USER_INIT: {
             String username;
             v4 color;
             UCB_Header(sock, User_Init, &username, &color);
 
-            clear(&user->shared.username, ALLOC_APP);
-            user->shared.username = copy_of(&username, ALLOC_APP); // @Speed
-            user->shared.color    = color;
+            lock_mutex(mutex);
+            {
+                clear(&user->shared.username, ALLOC_APP);
+                user->shared.username = copy_of(&username, ALLOC_APP); // @Speed
+                user->shared.color    = color;
+
+                for(int j = 0; j < ARRLEN(S__User::inventory); j++) {
+                    Read_To_Ptr(Item_Type_ID, &user->shared.inventory[j], sock);
+                }
+            }
+            unlock_mutex(mutex);
+            
         } break;
             
         default: {

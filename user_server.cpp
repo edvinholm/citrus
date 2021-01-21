@@ -40,6 +40,11 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
         User user = {0};
         user.shared.username = copy_cstring_to_string(usernames[i], allocator);
         user.shared.color = { random_float(),  random_float(),  random_float(), 1 };
+
+        for(int j = 0; j < ARRLEN(user.shared.inventory); j++)
+        {
+            user.shared.inventory[j] = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM);
+        }
         
         array_add(server->users,   user);
         array_add(server->clients, empty_client_array);
@@ -146,9 +151,7 @@ bool read_and_handle_usb_packet(User_Client *client, USB_Packet_Header header, U
 
     auto *sock = &client->sock;
     
-    switch(header.type) {
-
-        
+    switch(header.type) {    
         
         default: {
             US_Log("Client (socket = %lld) sent invalid USB packet type (%u).\n", client->sock.handle, header.type);
@@ -234,7 +237,7 @@ void disconnect_user_client(User_Client *client)
 
 bool initialize_user_client(User_Client *client, User *user)
 {
-    UCB_Packet(client, User_Init, user->shared.username, user->shared.color);
+    UCB_Packet(client, User_Init, user->shared.username, user->shared.color, user->shared.inventory);
     return true;
 }
 

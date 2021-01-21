@@ -1,27 +1,9 @@
 
-enum Client_Window_Type
-{
-    ROOM_LIST_WINDOW,
-    USER_WINDOW,
-
-    NUM_CLIENT_WINDOW_TYPES
-};
-
-typedef u64 Client_Window_ID;
-
-struct Client_Window
-{
-    Client_Window_ID id;
-    
-    Client_Window_Type type;
-    bool open;
-};
-
 struct Client_UI
 {
-    Array<Client_Window, ALLOC_APP> windows;
+    bool room_window_open;
+    bool user_window_open;
 };
-
 
 struct Client
 {
@@ -41,8 +23,8 @@ struct Client
     Server_Connections server_connections;
     // --
 
-    Client_UI client_ui;
-    
+    Client_UI cui;
+
     // --
     User user;
     Game game;

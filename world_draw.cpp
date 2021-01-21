@@ -50,18 +50,54 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
         }
     }
 
-    // Ground sides //
+    // GROUND SIDES //
     float shadow_factor = 0.90f;
     v4 side_color_base = sand;
-    
-    v4 side_color_1 = side_color_base;
-    side_color_1.xyz *= shadow_factor;
-    
-    v4 side_color_2 = side_color_base;
-    side_color_2.xyz *= 1.0f / shadow_factor;
-    
-    draw_quad({0, 0, 0}, {(float)room_size_x, 0, 0}, {0, 0, -1}, side_color_1, gfx);
-    draw_quad({0, 0, 0}, {0, (float)room_size_y, 0}, {0, 0, -1}, side_color_2, gfx);
+
+    // South //
+    for(int i = 0; i < 2; i++) {
+
+        int comp = (i == 0) ? 0 : 1;
+        int c1 = ((comp == 0) ? room_size_x : room_size_y);
+
+        v4 color = side_color_base;
+        if(comp == 1)
+            color.xyz *= shadow_factor;
+        else
+            color.xyz *= 1.0f/shadow_factor;
+        
+        int c0 = 0;
+        for(int c = 1; c <= c1; c++)
+        {
+            auto prev_tile_ix = (c-1) * ((comp == 0) ? 1 : room_size_x);
+            auto next_tile_ix = (c)   * ((comp == 0) ? 1 : room_size_x);
+            
+            bool prev_low = (tiles[prev_tile_ix] == TILE_WATER);
+
+            bool do_draw = (c == c1);
+            if(!do_draw) {
+                bool next_low = (tiles[next_tile_ix] == TILE_WATER);
+                do_draw = (next_low != prev_low);
+            }
+
+            if(do_draw)
+            {
+                float length = c - c0;
+
+                float height = (prev_low) ? 0.5 : 1;
+
+                v3 origin = { 0, 0, -1 };
+                origin.comp[comp] = c0;
+
+                v3 d1 = {0};
+                d1.comp[comp] = length;
+                
+                draw_quad(origin, d1, {0, 0, height}, color, gfx);
+            
+                c0  = c;
+            }
+        }
+    }
 }
 
 
@@ -88,6 +124,35 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
+void draw_entity(Entity *e, Graphics *gfx)
+{   
+    if(e->shared.type != ENTITY_ITEM) return;
+            
+    Item_Type *item_type = item_types + e->shared.item_type;
+    v3 origin = e->shared.p;
+    origin.xy -= item_type->volume.xy * 0.5f;
+
+    float shadow_factor = 0.90f;
+            
+    v4 side_color_1 = item_type->color;
+    side_color_1.xyz *= shadow_factor;
+    v4 side_color_2 = item_type->color;
+    side_color_2.xyz *= 1.0f / shadow_factor;
+
+#if 0 
+    // Bottom
+    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
+#endif
+
+    // Sides //
+    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_1, gfx);
+    draw_quad(origin, { 0, (float)item_type->volume.y, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_2, gfx);
+
+    // Top //
+    v3 top_origin = origin;
+    top_origin.z += item_type->volume.z;
+    draw_quad(top_origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
+}
 
 void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 {
@@ -111,36 +176,14 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
         // REMEMBER: Some things are in the static vao.
 
         for(int i = 0; i < room->num_entities; i++) {
-            auto *e = &room->entities[i].shared;
-            if(e->type != ENTITY_ITEM) continue;
-
-            Item_Type *item_type = item_types + e->item_type;
-            v3 origin = e->p;
-            origin.xy -= item_type->volume.xy * 0.5f;
-
-            float shadow_factor = 0.90f;
-            
-            v4 side_color_1 = item_type->color;
-            side_color_1.xyz *= shadow_factor;
-            v4 side_color_2 = item_type->color;
-            side_color_2.xyz *= 1.0f / shadow_factor;
-
-#if 0 
-            // Bottom
-            draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
-#endif
-
-            // Sides //
-            draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_1, gfx);
-            draw_quad(origin, { 0, (float)item_type->volume.y, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_2, gfx);
-
-            // Top //
-            v3 top_origin = origin;
-            top_origin.z += item_type->volume.z;
-            draw_quad(top_origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
+            auto *e = &room->entities[i];
+            draw_entity(e, gfx);
         }
+
+        
     }
 
+    // TODO: Static things here should be in a vao, just like the opaque static stuff.
     // TRANSLUCENT //
     {
         for(int y = 0; y < room_size_y; y++) {
@@ -149,41 +192,22 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
                 Rect tile_a = { tile_s * x, tile_s * y, tile_s, tile_s };
 
                 if(tiles[y * room_size_x + x] == TILE_WATER) {
-#if 1
-                    v3 origin = {tile_a.x, tile_a.y, -0.18f};
+
+                    float surface_yoffs = -0.18f;
+                    
+                    v3 origin = {tile_a.x, tile_a.y, surface_yoffs};
                     float screen_z = vecmatmul_z(origin + V3(0.5, 0.5, 0), projection);
+
                     _TRANSLUCENT_WORLD_VERTEX_OBJECT_(M_IDENTITY, screen_z);
+                    // TOP //
                     draw_quad(origin, {1, 0, 0},  {0, 1, 0}, water, gfx);
 
-#else
-                    // @Temporary
-                    // THIS IS A TEST OF TRANSLUCENT RENDERING OF AN OBJECT THAT OVERLAPS ITSELF...
-                    // So we break it up in multiple objects.......... Is this the way to do it?
-                    
-                    v3 origin = {tile_a.x, tile_a.y, 0.5f + (float)cos((x * y)/50.0 + t) / 2.0f};
-                    
-                    // Top
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0.5, 0));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {1, 0, 0},  {0, 1, 0}, {0, 0.5, 0.5, 0.65}, gfx);
-                    }
-                    
-                    // Side towards negative X
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0.5, 0, -0.5));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {0, 0, -1}, {1, 0, 0}, {0.75, 0.0, 0.0, 0.75}, gfx);
-                    }
-                    
-                    // Side towards negative Y
-                    {
-                        float screen_z = vecmatmul_z(combined_matrix, origin + V3(0, 0.5, -0.5));
-                        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(world_transform, screen_z);
-                        draw_quad(origin, {0, 0, -1}, {0, 1, 0}, {0.0, 0.75, 0.0, 0.75}, gfx);
-                    }
-#endif
-
+                    // WEST
+                    if(x == 0)
+                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -0.5f - surface_yoffs}, {0, 1, 0}, water, gfx);
+                    // SOUTH
+                    if(y == 0)
+                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -0.5f - surface_yoffs}, {1, 0, 0}, water, gfx);
                 }
             }
         }

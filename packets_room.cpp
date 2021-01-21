@@ -80,19 +80,6 @@ bool write_Tile(Tile tile, Socket *sock)
     return write_u8(tile, sock);
 }
 
-// Item //
-bool read_Item_Type_ID(Item_Type_ID *_type_id, Socket *sock)
-{
-    Read(u64, type_id, sock);
-    *_type_id = (Item_Type_ID)type_id;
-    return true;
-}
-
-bool write_Item_Type_ID(Item_Type_ID type_id, Socket *sock)
-{
-    Write(u64, type_id, sock);
-    return true;
-}
 
 
 // Entity //

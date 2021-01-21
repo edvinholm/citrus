@@ -163,12 +163,16 @@ bool read_ucb_User_Init_header(Socket *sock, String *_username, v4 *_color)
     return true;
 }
 
-bool write_ucb_User_Init_packet(Socket *sock, String username, v4 color)
+bool write_ucb_User_Init_packet(Socket *sock, String username, v4 color, Item_Type_ID *inventory)
 {
     Write_UCB_Header(UCB_USER_INIT, sock);
     
     Write(String, username, sock);
     Write(v4, color, sock);
 
+    for(int i = 0; i < ARRLEN(S__User::inventory); i++) {
+        Write(Item_Type_ID, inventory[i], sock);
+    }
+    
     return true;
 }

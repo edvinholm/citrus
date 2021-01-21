@@ -630,15 +630,35 @@ void draw_world_view_background(UI_Element *e, Graphics *gfx)
 }
 
 // NOTE: p is (min x, min y, z) of the tile
-void draw_tile_hover_indicator(v3 p, Graphics *gfx)
+void draw_tile_hover_indicator(v3 p, Item_Type_ID selected_item_type, Graphics *gfx)
 {
-	if(p.x >= 0 && p.x <= room_size_x - 1 && 
-	   p.y >= 0 && p.y <= room_size_y - 1)
+    if(p.x >= 0 && p.x <= room_size_x - 1 && 
+       p.y >= 0 && p.y <= room_size_y - 1)
     {
-		{ _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            draw_quad(p + V3_Z * 0.001f, V3_X, V3_Y, { 1, 0, 0, 1 }, gfx);
-		}
+        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        
+        if(selected_item_type != ITEM_NONE_OR_NUM) {
+            
+            Entity preview_entity = {0};
+            preview_entity.shared.type = ENTITY_ITEM;
+            preview_entity.shared.p = p;
+            preview_entity.shared.item_type = selected_item_type;
+
+            v3s volume = item_types[selected_item_type].volume;
+            if(volume.x % 2 != 0) preview_entity.shared.p.x -= 0.5f;
+            if(volume.y % 2 != 0) preview_entity.shared.p.y -= 0.5f;
+            
+            draw_entity(&preview_entity, gfx);
+        }
+         
+        draw_quad(p + V3_Z * 0.001f, V3_X, V3_Y, { 1, 0, 0, 1 }, gfx);
     }
+}
+
+Item_Type_ID selected_inventory_item_type(User *user)
+{
+    if(user->selected_inventory_item_plus_one == 0) return ITEM_NONE_OR_NUM;
+    return user->shared.inventory[user->selected_inventory_item_plus_one-1];
 }
 
 DWORD render_loop(void *loop_)
@@ -800,7 +820,7 @@ DWORD render_loop(void *loop_)
                             v3 hovered_tile_p = {0};
                             hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
                             hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
-                            draw_tile_hover_indicator(hovered_tile_p, &gfx);
+                            draw_tile_hover_indicator(hovered_tile_p, selected_inventory_item_type(&client->user), &gfx);
 
                             gfx.z_for_2d -= 0.2;
 

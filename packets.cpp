@@ -1,10 +1,27 @@
 
 
-
 // @NoRelease
 // TODO @Incomplete: On big-endian machines, transform to/from little-endian on send/receive.
 //                   (We DO NOT use the 'network byte order' which is big-endian).
 //                   This is for @Speed. Most machines we are targeting are little-endian.
+
+
+#define Read_Bytes(Dest, Length, Sock_Ptr)      \
+    Fail_If_True(!read_from_socket(Dest, Length, Sock_Ptr))
+
+#define Write_Bytes(Src, Length, Sock_Ptr)      \
+    Fail_If_True(!write_to_socket(Src, Length, Sock_Ptr))
+
+#define Read_To_Ptr(Type, Dest, ...) \
+    Fail_If_True(!read_##Type(Dest, __VA_ARGS__))
+
+#define Read(Type, Ident, ...) \
+    Type Ident;                                 \
+    Fail_If_True(!read_##Type(&Ident, __VA_ARGS__))
+
+#define Write(Type, Val, Sock_Ptr) \
+    Fail_If_True(!write_##Type(Val, Sock_Ptr))
+
 
 
 inline
@@ -230,22 +247,23 @@ bool write_String(String str, Socket *sock)
 }
 
 
-#define Read_Bytes(Dest, Length, Sock_Ptr)      \
-    Fail_If_True(!read_from_socket(Dest, Length, Sock_Ptr))
 
-#define Write_Bytes(Src, Length, Sock_Ptr)      \
-    Fail_If_True(!write_to_socket(Src, Length, Sock_Ptr))
 
-#define Read_To_Ptr(Type, Dest, ...) \
-    Fail_If_True(!read_##Type(Dest, __VA_ARGS__))
 
-#define Read(Type, Ident, ...) \
-    Type Ident;                                 \
-    Fail_If_True(!read_##Type(&Ident, __VA_ARGS__))
 
-#define Write(Type, Val, Sock_Ptr) \
-    Fail_If_True(!write_##Type(Val, Sock_Ptr))
+// Item //
+bool read_Item_Type_ID(Item_Type_ID *_type_id, Socket *sock)
+{
+    Read(u64, type_id, sock);
+    *_type_id = (Item_Type_ID)type_id;
+    return true;
+}
 
+bool write_Item_Type_ID(Item_Type_ID type_id, Socket *sock)
+{
+    Write(u64, type_id, sock);
+    return true;
+}
 
 
 
