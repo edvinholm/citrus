@@ -54,7 +54,6 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     float shadow_factor = 0.90f;
     v4 side_color_base = sand;
 
-    // South //
     for(int i = 0; i < 2; i++) {
 
         int comp = (i == 0) ? 0 : 1;
