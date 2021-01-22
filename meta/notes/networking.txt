@@ -1,0 +1,39 @@
+
+
+
+!!!
+We can read the whole packet in, and put it in a buffer where we always put the last
+received packet in.
+Then, we can interpret that data like Read(u64, id) etc.
+And if there are strings, we set str.length to first 4 bytes, and then data to the next byte after that.
+No need to allocate every string.
+(Why did I not think of this before? Because I'm stupid.)
+
+
+get_next_ucb_packet();
+
+
+// Do one of these for every implementation of a User Client
+room_server_user_client_loop()
+{
+	while(true)
+	{
+		UCB_Packet packet;
+		if(get_next_ucb_packet(&packet)) {
+			switch(packet.type) {
+
+			}
+		}
+	}
+}
+
+// And then we have:
+get_next_rcb_packet();
+
+// And other stuff like
+connect_to_user_server(User_ID user, Socket *_socket);
+disconnect_from_user_server(Socket *socket);
+
+perform_user_server_transaction(USB_Transaction transaction, Socket *socket);
+// etc.
+
