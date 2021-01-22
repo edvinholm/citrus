@@ -37,3 +37,58 @@ disconnect_from_user_server(Socket *socket);
 perform_user_server_transaction(USB_Transaction transaction, Socket *socket);
 // etc.
 
+
+
+
+enum RCB_Packet_Type
+{
+	ROOM_INIT
+}
+
+struct Packet_Header
+{
+	u64 payload_size;
+};
+
+// So reading a UCB_TRANSACTION_VOTE packet will be like:
+	read_packet_header:
+		u64 -> payload_size;
+	read_bytes:payload_size -> buffer.
+	read_ucb_packet_type:
+		buffer -> u16 -> type;
+	read_ucb_payload:
+		buffer -> u8  -> commit;
+		buffer -> s32 -> comment.length;
+		comment.data = buffer_at;
+		skip bytes: comment.length;
+	ensure_at_end of buffer.
+
+struct UCB_Transaction_Vote_Payload
+{
+	bool commit;
+	String comment;
+};
+
+struct UCB_Packet
+{
+	UCB_Packet_Type type;
+	union {
+		UCB_Transaction_Vote_Payload transaction_vote;
+	}
+}
+
+struct Packet
+{
+	Packet_Header header;
+	union {
+		RSB_Packet rsb;
+		RCB_Packet rcb;
+		USB_Packet usb;
+		UCB_Packet ucb;
+	};	
+}
+
+
+
+
+
