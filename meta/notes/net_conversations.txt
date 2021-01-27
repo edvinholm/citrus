@@ -1,0 +1,141 @@
+
+
+
+// IMPORTANT TODO: Make packet numbers 64 bits. If we send 10 packets per millisecond, we would have enough numbers for ~58 million years.
+//                 Or maybe slightly less.... but more than 32.
+
+enum USB_Conversation_Type
+{
+    USB_CONV_TRANSACTION
+};
+
+struct USB_Conversation
+{
+    USB_Conversation_Type type;
+    
+    u64 first_packet_id; // This could have been an outbound or an inbound packet.
+    u64 last_outbound_packet_id;
+    int step;
+
+    union {
+        struct {
+            USB_Transaction transaction;
+        } transaction;
+    };
+};
+
+
+network_node receive thing:
+{
+    Read(u64, packet_size, node);
+    Read(u64, packet_id,   node);
+    Read(u64, in_response_to, node);
+    Read(u64, packet_type, node);
+}
+
+// This is what happens when we "receive" the postponed packets as well. Sort of anyway
+when receiving ucb packet:
+{
+    network_node receive thing (..)
+
+    read_the_ucb_header(...);
+
+    bool done = false;
+    
+    
+    if(open_conversations.n > 0)
+    {
+        // Is this a response to our top priority conversation?
+        // NOTE: Since it's TCP we know that if we get a response to this conversation,
+        //       there won't come packets later that would start higher priority conversations.
+        if(in_response_to == open_conversations[0].last_outbound_packet_id)
+        {
+            update_conversation(open_conversations[0], &finished, &header);
+            done = true;
+        }
+        else if(packet_id > open_conversations[0].first_packet_id)
+        {
+            // We need to close our first priority conversation first.
+            // When it finishes, we will try to receive all our postponed packets.
+            postpone packet;
+            done = true;
+        }
+    }
+    
+    if(!done)
+    {
+        // Getting here means we have no open conversations,
+        // or the packet is allowed to create a conversation that will
+        // be handled before our current conversations, because it has a
+        // lower packet id than the smallest first_packet_id in our open_conversations
+            
+        // IMPORTANT: If this creates a conversation, place it at the beginning of open_conversations,
+        //            so it will be first priority and 
+        handle_ucb_packet(dmksmkcdsmsd);
+    }
+
+}
+
+start_conversation(Conversation conv)
+{
+    c = open_conversations[+] = conv;
+    update_conversation(c, &finished, NULL);
+}
+
+handle_usb_packet
+{
+    if(type == USB_TRANSACTION_PREPARE) {
+        USB_Conversation new_conv = {0};
+        new_conv.type = USB_CONV_TRANSACTION;
+        auto *x = &new_conv.transaction;
+        x->transaction = packet.transaction...;
+        start_conversation(new_conv);
+    }
+}
+
+/*
+  RETURN VALUE: True if the update was successful
+  If return value is false, or *_finished is true, the conversation should be closed.
+*/
+bool update_conversation(USB_Conversation conv,
+                         bool *_finished,
+                         USB_Packet_Header *response_header = NULL)
+{
+    *_finished = false;
+    
+    auto response_type = response_header.type;
+
+    if(conv.stage > 0) Assert(response_header != NULL);
+    else Assert(response_header == NULL);
+    
+    switch(conv.type) {
+        case USB_CONV_TRANSACTION: {
+
+            auto *x = &conv.transaction;
+            
+            switch(conv.stage) {
+                case 0: {
+                    conv.last_outbound_packet_id = Send(USB_TRANSACTION_PREPARE, node, x->transaction);
+                } break;
+
+                case 1: {
+                    if(response_type != UCB_TRANSACTION_VOTE_COMMIT &&
+                       response_type != UCB_TRANSACTION_VOTE_ABORT) {
+                        return false;
+                    }
+
+                    if(response_type == UCB_TRANSACTION_VOTE_COMMIT) {
+                        commit_transaction(x->transaction);
+                    } else {
+                        abort_transaction(...);
+                    }
+                    
+                    *_finished = true;
+                } break;
+            }
+        };
+    }
+
+    conv.stage++;
+    return true;    
+}
