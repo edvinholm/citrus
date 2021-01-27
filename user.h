@@ -1,10 +1,14 @@
 
+typedef u64 User_ID;
+const User_ID NO_USER = 0;
+
 struct S__User
 {
+    User_ID id;
     String username;
     v4 color;
 
-    Item_Type_ID inventory[8*14];
+    Item inventory[8*14];
 };
 
 
@@ -24,5 +28,6 @@ namespace Server_User
     struct User
     {
         S__User shared;
+        bool inventory_changed;
     };
 };

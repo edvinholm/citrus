@@ -3,6 +3,10 @@ struct Client_UI
 {
     bool room_window_open;
     bool user_window_open;
+
+#if DEVELOPER
+    bool dev_window_open;
+#endif
 };
 
 struct Client

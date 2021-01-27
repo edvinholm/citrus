@@ -123,11 +123,11 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
-void draw_entity(Entity *e, Graphics *gfx)
+void draw_entity(Entity *e, double world_t, Graphics *gfx)
 {   
     if(e->shared.type != ENTITY_ITEM) return;
             
-    Item_Type *item_type = item_types + e->shared.item_type;
+    Item_Type *item_type = item_types + e->shared.item.type;
     v3 origin = e->shared.p;
     origin.xy -= item_type->volume.xy * 0.5f;
 
@@ -138,23 +138,39 @@ void draw_entity(Entity *e, Graphics *gfx)
     v4 side_color_2 = item_type->color;
     side_color_2.xyz *= 1.0f / shadow_factor;
 
+    // PREVIEW ANIMATION //
+    if(e->is_preview) {
+        origin.z += 0.25f + sin(world_t) * 0.1f;
+    }
+    // ---
+
+    float height = item_type->volume.z;
+    Assert(e->shared.type == ENTITY_ITEM);
+    if(e->shared.item.type == ITEM_PLANT)
+    {
+        auto *plant = &e->shared.item.plant;
+        height *= (world_t - plant->plant_t) / 60.0f;
+    }
+
 #if 0 
     // Bottom
     draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
 #endif
 
     // Sides //
-    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_1, gfx);
-    draw_quad(origin, { 0, (float)item_type->volume.y, 0 }, { 0, 0, (float)item_type->volume.z }, side_color_2, gfx);
+    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, 0, (float)height }, side_color_1, gfx);
+    draw_quad(origin, { 0, (float)item_type->volume.y, 0 }, { 0, 0, (float)height }, side_color_2, gfx);
 
     // Top //
     v3 top_origin = origin;
-    top_origin.z += item_type->volume.z;
+    top_origin.z += height;
     draw_quad(top_origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
 }
 
-void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
+void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
 {
+    auto world_t  = system_t + room->time_offset;
+    
     maybe_update_static_room_vaos(room, gfx);
     
 #if 1
@@ -168,18 +184,15 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 
     const float tile_s = 1;
     
-    
     // OPAQUE //
     {
         _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
         // REMEMBER: Some things are in the static vao.
 
-        for(int i = 0; i < room->num_entities; i++) {
+        for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
-            draw_entity(e, gfx);
+            draw_entity(e, world_t, gfx);
         }
-
-        
     }
 
     // TODO: Static things here should be in a vao, just like the opaque static stuff.
@@ -219,7 +232,7 @@ void draw_world(Room *room, double t, m4x4 projection, Graphics *gfx)
 #if 1
     // @Temporary
     {
-        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);
+        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(world_t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);
         draw_string(STRING("Abc"), V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, gfx);
     }
 #endif

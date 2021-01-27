@@ -53,11 +53,11 @@ void request_connection_to_room(Room_ID id, Client *client)
     client->server_connections.room_connect_requested = true;
 }
 
-void request_connection_to_user(String username, Client *client)
+void request_connection_to_user(User_ID user_id, Client *client)
 {
     Assert(client->server_connections.user_connect_requested == false);
-    
-    array_set(client->server_connections.requested_username, username.data, username.length);
+
+    client->server_connections.requested_user = user_id;
     client->server_connections.user_connect_requested = true;
 }
 
@@ -76,6 +76,19 @@ void user_window(UI_Context ctx, Client *client)
         "generalW4ste",
         "Snordolf101"
     };
+
+    User_ID user_ids[] = {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+    };
+    static_assert(ARRLEN(usernames) == ARRLEN(user_ids));
 
     auto *user = &client->user;
     
@@ -96,13 +109,14 @@ void user_window(UI_Context ctx, Client *client)
                 _CELL_();
 
                 auto cell_ix = r * cols + c;
-                Item_Type_ID item_type = user->shared.inventory[cell_ix];
+                Item *item = &user->shared.inventory[cell_ix];
 
                 String label = EMPTY_STRING;
-                switch(item_type) {
+                switch(item->type) {
                     case ITEM_CHAIR: label = STRING("C"); break;
                     case ITEM_BED:   label = STRING("B");   break;
                     case ITEM_TABLE: label = STRING("T"); break;
+                    case ITEM_PLANT: label = STRING("P"); break;
 
                     case ITEM_NONE_OR_NUM: break;
 
@@ -122,19 +136,20 @@ void user_window(UI_Context ctx, Client *client)
     }
     
     auto *us_con = &client->server_connections.user;
-    String current_username = { us_con->current_username.e, us_con->current_username.n };
+    User_ID current_user = us_con->current_user;
 
     _GRID_(1, ARRLEN(usernames), 4);
     for(int i = 0; i < ARRLEN(usernames); i++)
     {
         _CELL_();
         
-        String username = STRING(usernames[i]);
-        bool is_current = equal(username, current_username);
+        String  username = STRING(usernames[i]);
+        User_ID id       = user_ids[i];
+        bool is_current  = (id == current_user);
         
         if(button(PC(ctx, i), username, connecting, is_current) & CLICKED_ENABLED)
         {
-            request_connection_to_user(username, client);
+            request_connection_to_user(id, client);
         }
     }
 }
@@ -174,6 +189,8 @@ void room_window(UI_Context ctx, Client *client)
 }
 
 
+
+
 void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
 {
     U(ctx);
@@ -206,14 +223,32 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
                     cui->user_window_open = !cui->user_window_open;
                 }
             }
+
+#if DEVELOPER
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button(P(ctx), STRING("DEV"), false, cui->dev_window_open) & CLICKED_ENABLED) {
+                    cui->dev_window_open = !cui->dev_window_open;
+                }
+            }
+#endif
         }
 
         panel(P(ctx));
     }
+    
 
     { _RIGHT_CUT_(64);
         
     }
+
+        
+#if DEVELOPER
+    if(cui->dev_window_open)
+    { _RIGHT_(640); _BOTTOM_(480);
+        client_developer_window(P(ctx), input, client);
+    }
+#endif
+
 
     if(cui->room_window_open)
     { _TOP_(window_border_width + window_title_height + window_default_padding + 64 + window_default_padding + window_border_width);
@@ -226,16 +261,41 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
     }
 
 
-    u64 clicked_tile = world_view(P(ctx));
-    if(clicked_tile != U64_MAX)
+
+    s32 clicked_tile = world_view(P(ctx));
+    if(clicked_tile >= 0)
     {
-        // @Cleanup: We don't know what kind of system is best to keep track of "requests" to the server yet.
-        //           We probably will want to know which operations succeeds and fails.
-        //           And for some things we want to get stuff back.
-        RSB_Packet(client, Click_Tile, clicked_tile);
+        Debug_Print("click tile.\n");
+        
+        C_RS_Action action = {0};
+        action.type = C_RS_ACT_CLICK_TILE;
+        auto &ct = action.click_tile;
+        ct.tile_ix = clicked_tile;
+
+        Item *selected_item = get_selected_inventory_item(&client->user);
+        if(selected_item) {
+            ct.item_to_place = *selected_item;
+        } else {
+            Item no_item = {0};
+            no_item.id = NO_ITEM;
+            ct.item_to_place = no_item;
+        }
+        
+        array_add(client->server_connections.room_action_queue, action);
+
+        if(selected_item) {
+            Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(clicked_tile));
+
+            // NOTE: We add a preview entity and remove the placed item locally, before
+            //       we know if the operation succeeds.
+            //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
+            //       transaction abort so we get our stuff back / know when to remove the
+            //       preview entity.
+            
+            add_entity(preview_entity, &client->game.room);
+            inventory_remove_item_locally(selected_item->id, &client->user);
+        }
     }
-    
-    //room_window(P(ctx), client);
 
 }
 

@@ -1,0 +1,636 @@
+
+#ifndef NETWORK_NODE_INCLUDED
+#define NETWORK_NODE_INCLUDED
+
+#define Enqueue(Packet_Type, Node_Ptr, ...) \
+    Fail_If_True(!enqueue_##Packet_Type##_packet(Node_Ptr, __VA_ARGS__));   \
+    
+#define Enqueue_NoArgs(Packet_Type, Node_Ptr)                        \
+    Fail_If_True(!enqueue_##Packet_Type##_packet(Node_Ptr));    \
+    
+#define Send_Now(Packet_Type, Node_Ptr, ...)                            \
+    Enqueue(Packet_Type, Node_Ptr, __VA_ARGS__);                        \
+    Assert((Node_Ptr)->packet_queue.n == 1);                            \
+    Fail_If_True(!send_outbound_packets(Node_Ptr))
+
+// @Jai @Cleanup this stupid poop.
+#define Send_Now_NoArgs(Packet_Type, Node_Ptr)                  \
+    Enqueue_NoArgs(Packet_Type, Node_Ptr);                        \
+    Assert((Node_Ptr)->packet_queue.n == 1);                      \
+    Fail_If_True(!send_outbound_packets(Node_Ptr))
+
+
+#define Data_Ptr(Ptr, Length, Node_Ptr)                                 \
+    Fail_If_True(!place_data_pointer((u8 **)&Ptr, Length, Node_Ptr))
+
+
+struct Network_Node_Buffer: public Memory_Buffer
+{
+    s64 caret; // Only used when reading.
+    s64 packet_size; // When sending, this is the size of all packets together.
+};
+
+struct Network_Node
+{
+    // TODO @Norelease: Don't have the buffers in the node struct.
+    //                  Have pointers to them here instead, or something...
+    //                  and share them between multiple nodes where possible.
+    Network_Node_Buffer receive_buffer; // NOTE: This holds at most one packet.
+    Network_Node_Buffer send_buffer;    // NOTE: This holds at most one packet.
+
+    struct Packet {
+        s64 start;
+        s64 size;
+    };
+    
+    s64 current_outbound_packet_start_plus_one;
+    Array<Packet, ALLOC_NETWORK> packet_queue;
+    
+    Socket socket;
+};
+
+
+void reset_network_node_buffer(Network_Node_Buffer *buf)
+{
+    buf->packet_size = 0;
+    buf->caret = 0;
+}
+
+void reset_network_node(Network_Node *node, Socket socket)
+{
+    reset_network_node_buffer(&node->receive_buffer);
+    reset_network_node_buffer(&node->send_buffer);
+
+    node->current_outbound_packet_start_plus_one = 0;
+    node->packet_queue.n = 0;
+
+    node->socket = socket;
+}
+
+
+bool receive_next_network_node_packet(Network_Node *node, bool *_error, bool block = false)
+{
+    if(!block) {
+        if(!platform_socket_has_bytes_to_read(&node->socket, _error)) {
+            return false;
+        }
+    }
+
+    *_error = true;
+
+    auto *buf = &node->receive_buffer;
+    buf->caret = 0;
+    
+    Read(u64, packet_size, &node->socket);
+    
+    ensure_size(packet_size, buf);
+    Read_Bytes(buf->data, packet_size, &node->socket);
+
+    buf->packet_size = packet_size;
+
+    *_error = false;
+    return true;
+}
+
+
+
+bool write_network_packet(u8 *payload, u64 size, Socket *sock)
+{
+    Write(u64, size, sock);
+    Write_Bytes(payload, size, sock);
+    return true;
+}
+
+void begin_outbound_packet(Network_Node *node)
+{
+    Assert(node->current_outbound_packet_start_plus_one == 0);
+    node->current_outbound_packet_start_plus_one = node->send_buffer.packet_size + 1;
+}
+
+bool end_outbound_packet(Network_Node *node)
+{
+    Assert(node->current_outbound_packet_start_plus_one > 0);
+
+    auto start = node->current_outbound_packet_start_plus_one-1;
+    auto size  = node->send_buffer.packet_size - start;
+
+    Assert(size > 0);
+
+    Network_Node::Packet packet = { start, size };
+    array_add(node->packet_queue, packet);
+
+    node->current_outbound_packet_start_plus_one = 0;
+    
+    return true;
+}
+
+bool send_outbound_packets(Network_Node *node)
+{
+    bool success = true;
+    
+    Assert(node->current_outbound_packet_start_plus_one == 0);
+    
+    auto *buf = &node->send_buffer;   
+    
+    for(int i = 0; i < node->packet_queue.n; i++)
+    {
+        auto &packet = node->packet_queue[i];
+        
+        Assert(packet.start >= 0);
+        Assert(packet.start < buf->packet_size);
+
+        Assert(packet.size > 0);
+        Assert(packet.start + packet.size <= buf->packet_size);
+        
+        if(!write_network_packet(buf->data + packet.start, packet.size, &node->socket)) {
+            success = false;
+            break;
+        }
+    }
+
+    node->packet_queue.n = 0;
+    reset_network_node_buffer(buf);
+    
+    return success;
+}
+
+
+
+
+
+
+
+
+bool can_read_bytes(s64 length, Network_Node *node)
+{
+    auto *buffer = &node->receive_buffer;
+    auto new_caret = buffer->caret + length;
+    return (new_caret <= buffer->packet_size);
+}
+                    
+bool read_bytes(void *_data, s64 length, Network_Node *node)
+{
+    Fail_If_True(!can_read_bytes(length, node));
+    
+    auto *buffer = &node->receive_buffer;
+    memcpy(_data, buffer->data + buffer->caret, length);
+    buffer->caret += length;
+    
+    return true;
+}
+
+bool place_data_pointer(u8 **_pointer, s64 data_length, Network_Node *node)
+{
+    Fail_If_True(!can_read_bytes(data_length, node));
+    
+    auto *buffer = &node->receive_buffer;
+    *_pointer = buffer->data + buffer->caret;
+    buffer->caret += data_length;
+    
+    return true;
+}
+
+
+
+inline
+bool read_s8(s8 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_s16(s16 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_s32(s32 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_s64(s64 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+
+inline
+bool read_u8(u8 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_u16(u16 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_u32(u32 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_u64(u64 *_i, Network_Node *node)
+{
+    return read_bytes(_i, sizeof(*_i), node);
+}
+
+inline
+bool read_v3(v3 *_u, Network_Node *node)
+{
+    Assert(sizeof(_u->x) == sizeof(u32));
+    Assert(sizeof(_u->x) == 4);
+    u32 x, y, z;    
+    if(!read_u32(&x, node)) return false;
+    if(!read_u32(&y, node)) return false;
+    if(!read_u32(&z, node)) return false;
+
+    memcpy(&_u->x, &x, 4);
+    memcpy(&_u->y, &y, 4);
+    memcpy(&_u->z, &z, 4);
+
+    return true;
+}
+
+inline
+bool read_v4(v4 *_u, Network_Node *node)
+{
+    Assert(sizeof(_u->x) == sizeof(u32));
+    Assert(sizeof(_u->x) == 4);
+    u32 x, y, z, w;    
+    if(!read_u32(&x, node)) return false;
+    if(!read_u32(&y, node)) return false;
+    if(!read_u32(&z, node)) return false;
+    if(!read_u32(&w, node)) return false;
+
+    memcpy(&_u->x, &x, 4);
+    memcpy(&_u->y, &y, 4);
+    memcpy(&_u->z, &z, 4);
+    memcpy(&_u->w, &w, 4);
+
+    return true;
+}
+
+// NOTE: _str->data will point to a place in node->receive_buffer.data on success.
+inline
+bool read_String(String *_str, Network_Node *node)
+{
+    u64 length;
+    if(!read_u64(&length, node)) return false;
+    _str->length = length;
+    return place_data_pointer(&_str->data, _str->length, node);
+}
+
+
+
+
+inline
+bool write_bytes(void *data, u64 length, Network_Node *node)
+{
+    auto *buf = &node->send_buffer;
+    if(!ensure_size(buf->packet_size + length, buf)) return false;
+    memcpy(buf->data + buf->packet_size, data, length);
+    buf->packet_size += length;
+
+    return true;
+}
+
+
+inline
+bool write_s8(s8 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_s16(s16 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_s32(s32 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_s64(s64 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+
+
+inline
+bool write_u8(u8 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_u16(u16 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_u32(u32 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_u64(u64 i, Network_Node *node)
+{
+    return write_bytes(&i, sizeof(i), node);
+}
+
+inline
+bool write_float(float f, Network_Node *node)
+{
+    Assert(sizeof(f) == sizeof(u32));
+    Assert(sizeof(f) == 4);
+    u32 i;
+    memcpy(&i, &f, 4);
+    return write_u32(i, node);
+}
+
+inline
+bool write_v3(v3 u, Network_Node *node)
+{
+    Assert(sizeof(u.x) == sizeof(u32));
+    Assert(sizeof(u.x) == 4);
+    u32 x, y, z, w;
+    memcpy(&x, &u.x, 4);
+    memcpy(&y, &u.y, 4);
+    memcpy(&z, &u.z, 4);
+
+    if(!write_u32(x, node)) return false;
+    if(!write_u32(y, node)) return false;
+    if(!write_u32(z, node)) return false;
+
+    return true;
+}
+
+
+inline
+bool write_v4(v4 u, Network_Node *node)
+{
+    Assert(sizeof(u.x) == sizeof(u32));
+    Assert(sizeof(u.x) == 4);
+    u32 x, y, z, w;
+    memcpy(&x, &u.x, 4);
+    memcpy(&y, &u.y, 4);
+    memcpy(&z, &u.z, 4);
+    memcpy(&w, &u.w, 4);
+
+    if(!write_u32(x, node)) return false;
+    if(!write_u32(y, node)) return false;
+    if(!write_u32(z, node)) return false;
+    if(!write_u32(w, node)) return false;
+
+    return true;
+}
+
+inline
+bool write_String(String str, Network_Node *node)
+{
+    // @Norelease: TODO @Security: Assert str.length < max length for strings... See note in read_String.
+    if(!write_u64(str.length, node)) return false;
+    if(!write_bytes(str.data, str.length, node)) return false;
+
+    return true;
+}
+
+
+
+
+
+
+
+// User //
+bool read_User_ID(User_ID *_user_id, Network_Node *node)
+{
+    Read(u64, id, node);
+    *_user_id = (User_ID)id;
+    return true;
+}
+
+bool write_User_ID(User_ID user_id, Network_Node *node)
+{
+    Write(u64, user_id, node);
+    return true;
+}
+
+
+
+// World_Time //
+
+static_assert(sizeof(World_Time) == sizeof(double));
+                  
+bool read_World_Time(World_Time *_time, Network_Node *node)
+{
+    Read(u64, time, node);
+    *_time = (World_Time)time / 1000000.0;
+    return true;
+}
+
+bool write_World_Time(World_Time time, Network_Node *node)
+{
+    Write(u64, time * 1000000.0, node);
+    return true;
+}
+
+
+// Item //
+// @Norelease TODO: Check that it is a valid type.
+bool read_Item_Type_ID(Item_Type_ID *_type_id, Network_Node *node)
+{
+    Read(u32, type_id, node);
+    *_type_id = (Item_Type_ID)type_id;
+    return true;
+}
+
+bool write_Item_Type_ID(Item_Type_ID type_id, Network_Node *node)
+{
+    Write(u32, type_id, node);
+    return true;
+}
+
+bool read_Item_ID(Item_ID *_id, Network_Node *node)
+{
+    Read(u64, id, node);
+    *_id = (Item_Type_ID)id;
+    return true;
+}
+
+bool write_Item_ID(Item_ID id, Network_Node *node)
+{
+    Write(u64, id, node);
+    return true;
+}
+
+bool read_Item(Item *_item, Network_Node *node)
+{
+    Read_To_Ptr(Item_ID,      &_item->id,   node);
+    Read_To_Ptr(Item_Type_ID, &_item->type, node);
+
+    switch(_item->type) {
+        case ITEM_PLANT: {
+            auto *x = &_item->plant;
+            Read_To_Ptr(World_Time, &x->plant_t, node);
+        } break;
+    }
+    
+    return true;
+}
+
+bool write_Item(Item item, Network_Node *node)
+{
+    Write(Item_ID,      item.id,   node);
+    Write(Item_Type_ID, item.type, node);
+
+    switch(item.type) {
+        case ITEM_PLANT: {
+            auto *x = &item.plant;
+            Write(World_Time, x->plant_t, node);
+        } break;
+    }
+    
+    return true;
+}
+
+
+
+
+
+// Room //
+bool read_Room_ID(Room_ID *_room_id, Network_Node *node)
+{
+    Read(u64, id, node);
+    *_room_id = (Room_ID)id;
+    return true;
+}
+
+bool write_Room_ID(Room_ID room_id, Network_Node *node)
+{
+    Write(u64, room_id, node);
+    return true;
+}
+
+
+
+// Entity //
+// @Norelease TODO: Check that it is a valid type.
+bool read_Entity_Type(Entity_Type *_type, Network_Node *node)
+{
+    Read(u8, type, node);
+    *_type = (Entity_Type)type;
+    return true;
+}
+
+bool write_Entity_Type(Entity_Type type, Network_Node *node)
+{
+    Write(u8, type, node);
+    return true;
+}
+
+bool read_Entity_ID(Entity_ID *_id, Network_Node *node)
+{
+    Read(u64, id, node);
+    *_id = (Entity_ID)id;
+    return true;
+}
+
+bool write_Entity_ID(Entity_ID id, Network_Node *node)
+{
+    Write(u64, id, node);
+    return true;
+}
+
+bool read_Entity(S__Entity *_entity, Network_Node *node)
+{
+    Read_To_Ptr(Entity_ID,   &_entity->id,   node);
+    Read_To_Ptr(v3,          &_entity->p,    node);
+    Read_To_Ptr(Entity_Type, &_entity->type, node);
+
+    switch(_entity->type) {
+        case ENTITY_ITEM: {
+            Read_To_Ptr(Item, &_entity->item, node);
+        } break;
+
+        default: Assert(false); return false;
+    }
+    
+    return true;
+}
+
+bool write_Entity(S__Entity *entity, Network_Node *node)
+{
+    Write(Entity_ID,   entity->id,   node);
+    Write(v3,          entity->p,    node);
+    Write(Entity_Type, entity->type, node);
+
+    switch(entity->type) {
+        case ENTITY_ITEM: {
+            Write(Item, entity->item, node);
+        } break;
+
+        default: Assert(false); return false;
+    }
+
+    return true;
+}
+
+// Tile //
+bool read_Tile(Tile *_tile, Network_Node *node)
+{
+    Read(u8, i, node);
+    *_tile = (Tile)i;
+    return true;
+}
+
+bool write_Tile(Tile tile, Network_Node *node)
+{
+    return write_u8(tile, node);
+}
+
+
+
+
+
+
+// Transaction //
+// @Norelease TODO: Check that it is a valid type.
+bool read_Transaction_Message(Transaction_Message *_message, Network_Node *node)
+{
+    Read(u8, msg, node);
+    *_message = (Transaction_Message)msg;
+    return true;
+}
+
+
+bool write_Transaction_Message(Transaction_Message message, Network_Node *node)
+{
+    Write(u8, message, node);
+    return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+#endif // NETWORK_NODE_INCLUDED

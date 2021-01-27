@@ -20,6 +20,12 @@ Linear_Allocator temporary_memory = {0};
 
 
 
+struct Memory_Buffer
+{
+    u8 *data;
+    s64 size;
+};
+
 
 
 

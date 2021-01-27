@@ -6,11 +6,11 @@
 //                   This is for @Speed. Most machines we are targeting are little-endian.
 
 
-#define Read_Bytes(Dest, Length, Sock_Ptr)      \
-    Fail_If_True(!read_from_socket(Dest, Length, Sock_Ptr))
+#define Read_Bytes(Dest, Length, Socket_Or_Node_Ptr)      \
+    Fail_If_True(!read_bytes(Dest, Length, Socket_Or_Node_Ptr))
 
-#define Write_Bytes(Src, Length, Sock_Ptr)      \
-    Fail_If_True(!write_to_socket(Src, Length, Sock_Ptr))
+#define Write_Bytes(Src, Length, Socket_Or_Node_Ptr)      \
+    Fail_If_True(!write_bytes(Src, Length, Socket_Or_Node_Ptr))
 
 #define Read_To_Ptr(Type, Dest, ...) \
     Fail_If_True(!read_##Type(Dest, __VA_ARGS__))
@@ -19,65 +19,66 @@
     Type Ident;                                 \
     Fail_If_True(!read_##Type(&Ident, __VA_ARGS__))
 
-#define Write(Type, Val, Sock_Ptr) \
-    Fail_If_True(!write_##Type(Val, Sock_Ptr))
+#define Write(Type, Val, Socket_Or_Node_Ptr) \
+    Fail_If_True(!write_##Type(Val, Socket_Or_Node_Ptr))
 
 
 
 inline
-bool read_from_socket(void *_data, u64 length, Socket *sock)
+bool read_bytes(void *_data, u64 length, Socket *sock)
 {
-    return platform_read_from_socket((u8 *)_data, length, sock);
+    bool result = platform_read_from_socket((u8 *)_data, length, sock);
+    return result;
 }
 
 
 inline
 bool read_s8(s8 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_s16(s16 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_s32(s32 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_s64(s64 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 
 inline
 bool read_u8(u8 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_u16(u16 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_u32(u32 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
 bool read_u64(u64 *_i, Socket *sock)
 {
-    return read_from_socket(_i, sizeof(*_i), sock);
+    return read_bytes(_i, sizeof(*_i), sock);
 }
 
 inline
@@ -123,7 +124,7 @@ bool read_String(String *_str, Socket *sock, Allocator_ID allocator)
     if(!read_u64(&length, sock)) return false;
     _str->length = length;
     _str->data = alloc(length, allocator); // @Norelease: TODO @Security: Should have a max length for strings. If the client sends a huge number here, we would try to alloc it and fail and crash and..........
-    if(!read_from_socket(_str->data, _str->length, sock)) {
+    if(!read_bytes(_str->data, _str->length, sock)) {
         dealloc_if_legal(_str->data, allocator);
         return false;
     }
@@ -133,7 +134,7 @@ bool read_String(String *_str, Socket *sock, Allocator_ID allocator)
 
 
 inline
-bool write_to_socket(void *data, u64 length, Socket *sock)
+bool write_bytes(void *data, u64 length, Socket *sock)
 {
     return platform_write_to_socket((u8 *)data, length, sock);
 }
@@ -142,25 +143,25 @@ bool write_to_socket(void *data, u64 length, Socket *sock)
 inline
 bool write_s8(s8 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_s16(s16 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_s32(s32 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_s64(s64 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 
@@ -168,25 +169,25 @@ bool write_s64(s64 i, Socket *sock)
 inline
 bool write_u8(u8 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_u16(u16 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_u32(u32 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
 bool write_u64(u64 i, Socket *sock)
 {
-    return write_to_socket(&i, sizeof(i), sock);
+    return write_bytes(&i, sizeof(i), sock);
 }
 
 inline
@@ -241,31 +242,8 @@ bool write_String(String str, Socket *sock)
 {
     // @Norelease: TODO @Security: Assert str.length < max length for strings... See note in read_String.
     if(!write_u64(str.length, sock)) return false;
-    if(!write_to_socket(str.data, str.length, sock)) return false;
+    if(!write_bytes(str.data, str.length, sock)) return false;
 
     return true;
 }
 
-
-
-
-
-
-// Item //
-bool read_Item_Type_ID(Item_Type_ID *_type_id, Socket *sock)
-{
-    Read(u64, type_id, sock);
-    *_type_id = (Item_Type_ID)type_id;
-    return true;
-}
-
-bool write_Item_Type_ID(Item_Type_ID type_id, Socket *sock)
-{
-    Write(u64, type_id, sock);
-    return true;
-}
-
-
-
-#include "packets_room.cpp"
-#include "packets_user.cpp"

@@ -233,9 +233,9 @@ struct UI_World_View
     
     UI_Click_State click_state;
 
-    u64 hovered_tile_ix;
-    u64 pressed_tile_ix; // U64_MAX == no tile
-    u64 clicked_tile_ix; // U64_MAX == no tile
+    s32 hovered_tile_ix;
+    s32 pressed_tile_ix; // U64_MAX == no tile
+    s32 clicked_tile_ix; // U64_MAX == no tile
 };
 
 

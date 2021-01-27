@@ -170,6 +170,7 @@ void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size, b
     Assert(data != NULL);
     Assert(size >= 0);
     
+	{ auto err = glGetError(); Assert(err == 0); }
     glBindBuffer(GL_ARRAY_BUFFER, buffer);                      { auto err = glGetError(); Assert(err == 0); }
     glBufferData(GL_ARRAY_BUFFER, size, data, (static_data) ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
 }

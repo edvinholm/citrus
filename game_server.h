@@ -11,8 +11,7 @@ namespace Server_Game
     };
     
     struct Room {
-        double t;
-
+        Entity_ID next_entity_id;
         int num_entities;
         Entity entities[MAX_ENTITIES_PER_ROOM];
         

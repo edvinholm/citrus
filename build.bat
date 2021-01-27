@@ -27,14 +27,22 @@ Taskkill /IM citrus_release.exe /F
 
 echo ############# COMPILING CLIENT #############
 
-REM RELEASE BUILD (NOTE: This outputs to another .exe file name than test builds do)
-REM cl -D OS_WINDOWS=1 -D DEBUG=0 /O2  /EHsc main.cpp /Fecitrus_release.exe /Z7 /std:c++17 /link Shcore.lib ws2_32.lib kernel32.lib user32.lib gdi32.lib opengl32.lib Shell32.lib Comdlg32.lib -incremental:no /opt:ref /opt:icf /nologo
+set CLIENT_COMPILER_ARGUMENTS_BASE= -D OS_WINDOWS=1 /EHsc main.cpp /std:c++17
+set CLIENT_LINKER_ARGUMENTS_BASE= Shcore.lib ws2_32.lib kernel32.lib user32.lib gdi32.lib opengl32.lib Shell32.lib Comdlg32.lib -incremental:no /opt:ref /opt:icf /nologo
 
-REM TEST BUILDS ------------
-REM "Release":
-REM cl -D OS_WINDOWS=1 -D DEBUG=0 /O2 /EHsc main.cpp /Fecitrus.exe /Z7 /std:c++17 /link Shcore.lib ws2_32.lib kernel32.lib user32.lib gdi32.lib opengl32.lib Shell32.lib Comdlg32.lib -incremental:no /opt:ref /opt:icf /nologo
+set CLIENT_COMPILER_ARGUMENTS_RELEASE= %CLIENT_COMPILER_ARGUMENTS_BASE% /O2
+
+set CLIENT_COMPILER_EXTRA_ARGUMENTS_DEVELOPER= -D DEVELOPER=1
+
+REM RELEASE BUILD (NOTE: This outputs to another .exe file name than test builds do)
+REM cl %CLIENT_COMPILER_ARGUMENTS_RELEASE% /Fecitrus_release.exe /link %CLIENT_LINKER_ARGUMENTS_BASE%
+
+REM DEVELOPER BUILDS ------------
+REM Release+Dev:
+REM cl %CLIENT_COMPILER_ARGUMENTS_RELEASE% %CLIENT_COMPILER_EXTRA_ARGUMENTS_DEVELOPER% /Fecitrus.exe  /link %CLIENT_LINKER_ARGUMENTS_BASE%
+
 REM Debug:
-cl -D OS_WINDOWS=1 -D DEBUG=1 /Od  /EHsc main.cpp /Fecitrus.exe /Z7 /std:c++17 /link Shcore.lib ws2_32.lib kernel32.lib user32.lib gdi32.lib opengl32.lib Shell32.lib Comdlg32.lib -incremental:no /opt:ref /opt:icf /nologo
+cl %CLIENT_COMPILER_ARGUMENTS_BASE%  %CLIENT_COMPILER_EXTRA_ARGUMENTS_DEVELOPER% -D DEBUG=1 /Od /Fecitrus.exe /Z7  /link %CLIENT_LINKER_ARGUMENTS_BASE%
 
 
 

@@ -25,7 +25,8 @@ int server_entry_point(int num_args, char **arguments)
         
     if(!platform_init_socket_use()) { Debug_Print("platform_init_socket_use() failed.\n"); return 1; }
     defer(platform_deinit_socket_use(););
-    
+
+    // INIT ROOM SERVER //
     init_room_server(room_server);
     Thread room_server_thread;
     if(!platform_create_thread(&room_server_main_loop, room_server, &room_server_thread)) {
@@ -34,6 +35,7 @@ int server_entry_point(int num_args, char **arguments)
     }
     defer(stop_room_server(room_server, &room_server_thread, 10*1000););
 
+    // INIT USER SERVER //
     init_user_server(user_server);
     Thread user_server_thread;
     if(!platform_create_thread(&user_server_main_loop, user_server, &user_server_thread)) {

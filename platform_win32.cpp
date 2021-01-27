@@ -645,7 +645,10 @@ void platform_create_mutex(Mutex *_mutex)
 void platform_lock_mutex(Mutex *mutex)
 {
     auto result = WaitForSingleObject(mutex->handle, INFINITE);
-    Assert(result == WAIT_OBJECT_0);
+    if (result != WAIT_OBJECT_0) {
+        auto err = GetLastError();
+        Assert(false);
+    }
 }
 
 void platform_unlock_mutex(Mutex *mutex)
@@ -916,5 +919,7 @@ bool platform_read_from_socket(u8 *_data, u64 length, Socket *sock)
 
 bool platform_set_socket_read_timeout(Socket *sock, DWORD milliseconds)
 {
+//    milliseconds = 99999999;
+    
     return (setsockopt(sock->handle, SOL_SOCKET, SO_RCVTIMEO, (const char *)&milliseconds, sizeof(milliseconds)) == 0);
 }

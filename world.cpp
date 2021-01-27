@@ -1,4 +1,50 @@
 
+// INVENTORY //
+
+Item *get_selected_inventory_item(User *user)
+{
+    if(user->selected_inventory_item_plus_one == 0) return NULL;
+    return &user->shared.inventory[user->selected_inventory_item_plus_one-1];
+}
+
+void inventory_deselect(User *user)
+{
+    user->selected_inventory_item_plus_one = 0;
+}
+
+void empty_inventory_slot_locally(int slot_ix, User *user)
+{
+    Assert(slot_ix > 0);
+    Assert(slot_ix < ARRLEN(user->shared.inventory));
+
+    auto *slot = &user->shared.inventory[slot_ix];
+
+    // @Boilerplate: User Server: commit_transaction().
+    Zero(*slot);
+    slot->id = NO_ITEM;
+    slot->type = ITEM_NONE_OR_NUM;
+}
+
+void inventory_remove_item_locally(Item_ID id, User *user)
+{
+    for(int i = 0; i < ARRLEN(user->shared.inventory); i++)
+    {
+        auto *item = &user->shared.inventory[i];
+        if(item->id == id) {
+            empty_inventory_slot_locally(i, user);
+            return;
+        }
+    }
+
+    Assert(false);
+}
+
+// //////// //
+
+
+
+// WORLD //
+
 bool raycast_against_floor(Ray ray, v3 *_hit)
 {
     if(is_zero(ray.dir.z)) return false;
@@ -63,3 +109,62 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
 
     return ray;
 }
+
+
+v3 tp_from_index(s32 tile_index)
+{
+    int y = tile_index / room_size_x;
+    int x = tile_index % room_size_x;
+    return { (float)x, (float)y, 0 };
+}
+
+
+// NOTE: tp is tile position.
+Entity create_preview_item_entity(Item *item, v3 tp)
+{
+    Entity e = {0};
+    e.shared.type = ENTITY_ITEM;
+    e.shared.p = tp;
+    e.shared.item = *item;
+
+    e.is_preview = true;
+    
+    v3s volume = item_types[item->type].volume;
+    if(volume.x % 2 != 0) e.shared.p.x += 0.5f;
+    if(volume.y % 2 != 0) e.shared.p.y += 0.5f;
+
+    return e;
+}
+
+void remove_preview_entities(Room *room)
+{
+    for(int i = 0; i < room->entities.n; i++)
+    {
+        auto *e = &room->entities[i];
+        
+        if(e->is_preview) {
+            array_unordered_remove(room->entities, i);
+            i--;
+            continue;
+        }
+    }
+}
+
+Entity *add_entity(Entity e, Room *room)
+{
+    return array_add(room->entities, e);
+}
+
+Entity *find_or_add_entity(Entity_ID id, Room *room)
+{
+    for(int i = 0; i < room->entities.n; i++) {
+        auto *e = &room->entities[i];
+        if(e->shared.id == id) return e;
+    }
+
+    Entity new_entity = {0};
+    new_entity.shared.id = id;
+    return add_entity(new_entity, room);
+}
+
+// ///////////////////// //

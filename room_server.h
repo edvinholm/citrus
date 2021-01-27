@@ -2,39 +2,46 @@
 
 struct Room_Server;
 
-struct Room_Client {
-    Socket sock;
+struct RS_Client {
+    Network_Node node;
 
     Room_Server *server;
     Room_ID room;
+    User_ID user; // Can be NO_USER if the client is another server.
 };
 
-void clear(Room_Client *client) {
+void clear(RS_Client *client) {
 
 }
 
-struct Room_Client_Queue
+struct RS_Client_Queue
 {
     Mutex mutex;
     
-    int num_clients;
-    Room_Client clients[32];
-    Room_ID     rooms[32];
+    int count;
+    RS_Client clients[32];
 };
 
 // NOTE: Assumes we've already zeroed queue.
-void init_room_client_queue(Room_Client_Queue *queue)
+void init_room_client_queue(RS_Client_Queue *queue)
 {
     create_mutex(queue->mutex);
 }
 
-void deinit_room_client_queue(Room_Client_Queue *queue)
+void deinit_room_client_queue(RS_Client_Queue *queue)
 {
     delete_mutex(queue->mutex);
 }
 
 
-struct Room_Server {
+struct RS_User_Server_Connection
+{
+    User_ID      user_id;
+    Network_Node node;
+};
+
+struct Room_Server
+{    
     Atomic<bool> should_exit; // @Speed: Semaphore?
 
     Listening_Loop listening_loop;
@@ -42,8 +49,10 @@ struct Room_Server {
     Array<Room_ID, ALLOC_GAME> room_ids;
     Array<Room, ALLOC_GAME> rooms;
     
-    Array<Array<Room_Client, ALLOC_APP>, ALLOC_APP> clients;
-    Room_Client_Queue client_queue;
+    Array<Array<RS_Client, ALLOC_APP>, ALLOC_APP> clients;
+    RS_Client_Queue client_queue;
+
+    Array<RS_User_Server_Connection, ALLOC_APP> user_server_connections;
 };
 
 void init_room_server(Room_Server *server)

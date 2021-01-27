@@ -1,0 +1,7 @@
+
+enum Transaction_Message
+{
+    TRANSACTION_PREPARE,
+    TRANSACTION_VOTE_COMMIT,
+    TRANSACTION_VOTE_ABORT
+};

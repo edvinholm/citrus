@@ -15,16 +15,19 @@ using namespace Server_User;
 
 #include "log.cpp"
 
+#include "transaction.h"
+
 #include "net_server.h"
-#include "net_server.cpp"
+
+#include "network.cpp"
+#include "user_client.cpp"
 
 #include "room_server.h"
 #include "user_server.h"
 
 #include "server.h"
 
-
-#include "packets.cpp"
+#include "net_server.cpp"
 
 #include "room_server.cpp"
 #include "user_server.cpp"

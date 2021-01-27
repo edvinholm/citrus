@@ -1,0 +1,15 @@
+
+
+A sends T1S
+B sends T2S
+
+B receives T1S (W T2R)
+B sends T1R    (W T2R)
+    
+A postpones T2S (W T1R)
+
+A receives T1R
+
+A sends T2R
+
+B receives T2R

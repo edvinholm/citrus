@@ -1,4 +1,12 @@
 
+#include "room_server_bound.cpp"
+
+#define RCB_OUTBOUND
+#include "room_client_bound.cpp"
+
+
+const int MAX_INBOUND_RS_CLIENT_PACKETS_PER_LOOP = 16;
+
 const char *LOG_TAG_RS      = ":RS:"; // Room Server
 const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 
@@ -18,7 +26,6 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 #define RS_LIST_No_T(...)                     \
     Log(__VA_ARGS__)
 
-
 void create_dummy_entities(Room *room)
 {
     v3 pp = { 0, 0 };
@@ -28,12 +35,15 @@ void create_dummy_entities(Room *room)
         Item_Type *item_type = item_types + item_type_id;
         
         S__Entity e = {0};
+        e.id = room->next_entity_id++;
         e.type = ENTITY_ITEM;
         e.p = pp;
         e.p.x += item_type->volume.x * 0.5f;
         e.p.y += item_type->volume.y * 0.5f + (i % 2);
-        
-        e.item_type = item_type_id;
+
+        Item item = {0};
+        item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
+        e.item = item;
 
         Assert(room->num_entities < ARRLEN(room->entities));
         room->entities[room->num_entities++] = { e };
@@ -46,14 +56,19 @@ void create_dummy_rooms(Room_Server *server)
 {
     double t = get_time();
 
-    Array<Room_Client, ALLOC_APP> empty_client_array = {0};
+    Array<RS_Client, ALLOC_APP> empty_client_array = {0};
     
     for(int i = 0; i < 8; i++) {
         Room room = {0};
-        room.t = t;
+        room.shared.t = get_time();
         room.randomize_cooldown = random_float() * 3.0;
 
         create_dummy_entities(&room);
+
+        for(int t = 0; t < room_size_x * room_size_y; t++)
+        {
+            room.shared.tiles[t] = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
+        }
         
         array_add(server->room_ids, i + 1);
         array_add(server->rooms,    room);
@@ -101,22 +116,16 @@ void randomize_tiles(Tile *tiles, u64 num_tiles, int x) {
 
 void update_room(Room *room, int index) {
 
-    Assert(room->t > 0); // Should be initialized when created
+    Assert(room->shared.t > 0); // Should be initialized when created
+
+    auto t = get_time();
     
-    double last_t = room->t;
-    room->t = get_time();
-    double dt = room->t - last_t;
+    double last_t = room->shared.t;
+    room->shared.t = t;
+    double dt = t - last_t;
 
     room->randomize_cooldown -= dt;
     while(room->randomize_cooldown <= 0) {
-
-        if(room->num_entities > 0) {
-            auto *e = room->entities + random_int(0, room->num_entities-1);
-            e->shared.p.xy = { (float)random_int(0, room_size_x), (float)random_int(0, room_size_y) };
-            
-            room->did_change = true;
-        }
-        
         
         Tile *tiles = room->shared.tiles;
         Tile *at  = tiles;
@@ -156,6 +165,28 @@ void update_room(Room *room, int index) {
 }
 
 
+
+bool receive_next_rsb_packet(Network_Node *node, RSB_Packet_Header *_packet_header, bool *_error, bool block = false)
+{
+    if(!receive_next_network_node_packet(node, _error, block)) return false;
+    
+    *_error = true;
+    Read_To_Ptr(RSB_Packet_Header, _packet_header, node);
+    *_error = false;
+    
+    return true;
+}
+
+bool expect_type_of_next_rsb_packet(RSB_Packet_Type expected_type, Network_Node *node, RSB_Packet_Header *_packet_header)
+{
+    bool error;
+    if(!receive_next_rsb_packet(node, _packet_header, &error, true)) return false;
+    if(_packet_header->type != expected_type) return false;
+    return true;
+}
+
+
+
 // TODO @Norelease @Robustness @Speed: This thing should have enough information to dismiss clients with invalid room IDs or login credentials.
 DWORD room_server_listening_loop(void *room_server_)
 {    
@@ -174,62 +205,64 @@ DWORD room_server_listening_loop(void *room_server_)
         
         RS_LIST_Log("Client accepted.\n");
 
-        // @Cleanup close socket boilerplate...
-        // @Cleanup close socket boilerplate...
-        // @Cleanup close socket boilerplate...
-
-        if(!platform_set_socket_read_timeout(&client_socket, 1000)) {
+        bool success = true;
+        
+        if(success && !platform_set_socket_read_timeout(&client_socket, 1000)) {
             RS_LIST_Log("Unable to set read timeout for new client's socket (Last WSA Error: %d).\n", WSAGetLastError());
-            
-            if(!platform_close_socket(&client_socket)) {
-                RS_LIST_Log("Unable to close new client's socket.\n");
-                continue;
-            }
-            RS_LIST_Log("New client's socket closed successfully.\n");
-            continue;
+            success = false;
         }
 
-        u64 requested_room_id;
-        if(!read_u64(&requested_room_id, &client_socket)) {
-            RS_LIST_Log("Unable to read requested room ID from new client.\n");
+        Network_Node new_node = {0};
+        reset_network_node(&new_node, client_socket);
 
-            if(!platform_close_socket(&client_socket)) {
-                RS_LIST_Log("Unable to close new client's socket.\n");
-                continue;
-            }
-            RS_LIST_Log("New client's socket closed successfully.\n");
-            continue;
+        RSB_Packet_Header header;
+        if(success && !expect_type_of_next_rsb_packet(RSB_HELLO, &new_node, &header)) {
+            RS_LIST_Log("First packet did not have the expected type RSB_HELLO.\n");
+            success = false;
         }
 
         // TODO @Cleanup? Is this necessary?
-        if(!write_room_connect_status_code(ROOM_CONNECT__REQUEST_RECEIVED, &client_socket)) {
-            RS_LIST_Log("Unable to write status.\n");
+        if(success && !send_RCB_HELLO_packet_now(&new_node, ROOM_CONNECT__REQUEST_RECEIVED)) {
+            RS_LIST_Log("Unable to write HELLO packet with REQUEST_RECEIVED.\n");
+            success = false;
+        }
+        
+        if(!success) {
+            RS_LIST_Log("Client accept failed. Disconnecting socket.\n");
+            if(!platform_close_socket(&client_socket)) {
+                RS_LIST_Log("Unable to close new client's socket.\n");
+                continue;
+            }
+            RS_LIST_Log("New client's socket closed successfully.\n");
+            continue;
         }
 
+        auto *hello = &header.hello;
+
         // ADD CLIENT TO QUEUE //
-        Room_Client client = {0};
-        client.sock = client_socket;
-        client.room = requested_room_id;
+        RS_Client client = {0};
+        client.node = new_node;
+        client.room = hello->room;
+        client.user = hello->as_user;
         client.server = server;
 
         lock_mutex(queue->mutex);
         {
-            Assert(queue->num_clients <= ARRLEN(queue->clients));
-            Assert(ARRLEN(queue->clients) <= ARRLEN(queue->rooms));
-
+            Assert(queue->count <= ARRLEN(queue->clients));
+            
             // If the queue is full, wait..
-            while(queue->num_clients == ARRLEN(queue->clients)) {
+            while(queue->count == ARRLEN(queue->clients))
+            {
                 unlock_mutex(queue->mutex);
-                platform_sleep_milliseconds(1);
+                {
+                    platform_sleep_milliseconds(1);
+                }
                 lock_mutex(queue->mutex);
             }
             
-            Assert(queue->num_clients <= ARRLEN(queue->clients));
-            Assert(ARRLEN(queue->clients) <= ARRLEN(queue->rooms));
+            Assert(queue->count <= ARRLEN(queue->clients));
                 
-            int ix = queue->num_clients++;
-            queue->clients[ix] = client;
-            queue->rooms[ix] = requested_room_id;
+            queue->clients[queue->count++] = client;
         }
         unlock_mutex(queue->mutex);
         // /// ///// // ///// //
@@ -242,7 +275,7 @@ DWORD room_server_listening_loop(void *room_server_)
     return 0;
 }
 
-void disconnect_room_client(Room_Client *client)
+void disconnect_room_client(RS_Client *client)
 {
     auto client_copy = *client;
     
@@ -267,11 +300,11 @@ void disconnect_room_client(Room_Client *client)
     Assert(found_room);
     
     // REMEMBER: This is special, so don't do anything fancy here that can put us in an infinite disconnection loop.
-    if(!write_rcb_Goodbye_packet(&client->sock)) {
-        RS_Log("Failed to write RCB Goodbye.\n");
+    if(!send_RCB_GOODBYE_packet_now(&client->node)) {
+        RS_Log("Failed to send RCB_GOODBYE.\n");
     }
     
-    if(!platform_close_socket(&client->sock)) {
+    if(!platform_close_socket(&client->node.socket)) {
         RS_Log("Failed to close room client socket.\n");
     }
 
@@ -280,35 +313,39 @@ void disconnect_room_client(Room_Client *client)
 }
 
 
-// Sends an RCB packet if Room_Client_Ptr != NULL.
+// Sends an RCB packet if RS_Client_Ptr != NULL.
 // If the operation fails, the client is disconnected and
-// Room_Client_Ptr is set to NULL.
-#define RCB_Packet(Room_Client_Ptr, Packet_Ident, ...)                  \
-    if(Room_Client_Ptr &&                                               \
-       !write_rcb_##Packet_Ident##_packet(&Room_Client_Ptr->sock, __VA_ARGS__)) \
-    {                                                                   \
-        RS_Log("Client disconnected from room %d due to RCB packet failure (socket = %lld, WSA Error: %d).\n", Room_Client_Ptr->room, Room_Client_Ptr->sock.handle, WSAGetLastError()); \
-        disconnect_room_client(Room_Client_Ptr);                      \
-        Room_Client_Ptr = NULL;                                         \
+// RS_Client_Ptr is set to NULL.
+#define RCB_Packet(RS_Client_Ptr, Packet_Ident, ...)                    \
+    if(RS_Client_Ptr) {                                                 \
+        bool success = true;                                            \
+        if(success && !enqueue_RCB_##Packet_Ident##_packet(&RS_Client_Ptr->node, __VA_ARGS__)) success = false; \
+        Assert(RS_Client_Ptr->node.packet_queue.n == 1);                \
+        if(success && !send_outbound_packets(&RS_Client_Ptr->node)) success = false; \
+        if(!success) {                                                  \
+            RS_Log("Client disconnected from room %d due to RCB packet failure (socket = %lld, WSA Error: %d).\n", RS_Client_Ptr->room, RS_Client_Ptr->node.socket.handle, WSAGetLastError()); \
+            disconnect_room_client(RS_Client_Ptr);                      \
+            RS_Client_Ptr = NULL;                                       \
+        }                                                               \
     }
 
 
-// Receives an RSB packet if Room_Client_Ptr != NULL.
+
+// Receives an RSB packet if RS_Client_Ptr != NULL.
 // If the operation fails, the client is disconnected and
-// Room_Client_Ptr is set to NULL.
-#define RSB_Header(Room_Client_Ptr, Header_Ptr)                       \
-    if((Room_Client_Ptr) &&                                             \
-       !read_RSB_Packet_Header(Header_Ptr, &Room_Client_Ptr->sock)) {    \
-        RS_Log("Client disconnected from room %d due to RSB header failure (socket = %lld, WSA Error: %d).\n", Room_Client_Ptr->room, Room_Client_Ptr->sock.handle, WSAGetLastError()); \
-        disconnect_room_client(Room_Client_Ptr);                        \
-        Room_Client_Ptr = NULL;                                         \
-    }                                                               \
+// RS_Client_Ptr is set to NULL.
+#define RSB_Header(RS_Client_Ptr, Header_Ptr)                       \
+    if((RS_Client_Ptr) &&                                             \
+       !read_RSB_Packet_Header(Header_Ptr, &RS_Client_Ptr->node)) {    \
+        RS_Log("Client disconnected from room %d due to RSB header failure (socket = %lld, WSA Error: %d).\n", RS_Client_Ptr->room, RS_Client_Ptr->node.socket.handle, WSAGetLastError()); \
+        disconnect_room_client(RS_Client_Ptr);                        \
+        RS_Client_Ptr = NULL;                                         \
+    }
 
 
-
-bool initialize_room_client(Room_Client *client, Room *room)
+bool initialize_room_client(RS_Client *client, Room *room)
 {
-    RCB_Packet(client, Room_Init, room->shared.tiles, room->num_entities, room->entities);
+    RCB_Packet(client, ROOM_INIT, room->shared.t, room->num_entities, room->entities, room->shared.tiles);
     return true;
 }
 
@@ -317,83 +354,200 @@ void add_new_room_clients(Room_Server *server)
     auto *queue = &server->client_queue;
     lock_mutex(queue->mutex);
     {
-        Assert(queue->num_clients <= ARRLEN(queue->clients));
-        Assert(ARRLEN(queue->clients) == ARRLEN(queue->rooms));
-        for(int c = 0; c < queue->num_clients; c++) {
+        Assert(queue->count <= ARRLEN(queue->clients));
 
-            Room_ID room_id = queue->rooms[c];
+        for(int c = 0; c < queue->count; c++) {
 
+            RS_Client *client = queue->clients + c;
+                
             Room *room = NULL;
             
             int room_index = -1;
             for(int r = 0; r < server->room_ids.n; r++) {
-                if(server->room_ids[r] == room_id) {
+                if(server->room_ids[r] == client->room) {
                     room_index = r;
                     room = server->rooms.e + r;
                     break;
                 }
             }
 
-            Room_Client *client = queue->clients + c;
-                
-            if(room_index == -1) {
-                write_room_connect_status_code(ROOM_CONNECT__INVALID_ROOM_ID, &client->sock);
+            bool success = true;
 
+            if(success && room_index == -1) {
+                send_RCB_HELLO_packet_now(&client->node, ROOM_CONNECT__INVALID_ROOM_ID);
+                success = false;
+            }
+
+            if(success && !send_RCB_HELLO_packet_now(&client->node, ROOM_CONNECT__CONNECTED))
+            {
+                RS_Log("Failed to write ROOM_CONNECT__CONNECTED to client (socket = %lld).\n", client->node.socket.handle);
+                success = false;
+            }
+            
+            if(success) {
+                Assert(room != NULL);
+                success = initialize_room_client(client, room);
+            }
+
+            if(!success) {
                 // @Cleanup @Boilerplate                
                 // IMPORTANT: Do not use disconnect_room_client here, because it won't work before we've added the client to the room client list.
-                platform_close_socket(&client->sock);
+                platform_close_socket(&client->node.socket);
                 clear(client);
                 
                 continue;
             }
 
-            if(!write_room_connect_status_code(ROOM_CONNECT__CONNECTED, &client->sock))
-            {
-                RS_Log("Failed to write ROOM_CONNECT__CONNECTED to client (socket = %lld).\n", client->sock.handle);
-
-                // @Cleanup @Boilerplate
-                platform_close_socket(&client->sock);
-                clear(client);
-                continue;
-            }
-                 
+            Assert(room       != NULL);
+            Assert(room_index != -1);
             auto *clients = &server->clients[room_index];
             client = array_add(*clients, *client);
-            RS_Log("Added client (socket = %lld) to room %d.\n", client->sock.handle, client->room);       
-
-            Assert(room != NULL);
-            if(!initialize_room_client(client, room)) {
-                // @Cleanup @Boilerplate
-                platform_close_socket(&client->sock);
-                clear(client);
-                continue;
-            }
+            RS_Log("Added client (socket = %lld) to room %d.\n", client->node.socket.handle, client->room);
         }
 
-        queue->num_clients = 0;
+        queue->count = 0;
     }
     unlock_mutex(queue->mutex);
 }
 
-bool read_and_handle_rsb_packet(Room_Client *client, RSB_Packet_Header header, Room *room)
+RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id, Room_Server *server)
 {
-    // NOTE: RSB_GOODBYE is handled somewhere else.
+    const Allocator_ID allocator = ALLOC_NETWORK;
+    
+    for(int i = 0; i < server->user_server_connections.n; i++)
+    {
+        auto *connection = &server->user_server_connections[i];
+        if(connection->user_id == user_id) return connection;
+    }
 
-    auto *sock = &client->sock;
+    Network_Node node = { 0 };
+    if(!connect_to_user_server(user_id, &node, US_CLIENT_RS)) return NULL;
+
+    RS_User_Server_Connection new_connection = {0};
+    new_connection.user_id = user_id;
+    new_connection.node = node;
+    return array_add(server->user_server_connections, new_connection);
+}
+
+
+// TODO @Norelease: Make this real.
+// NOTE: Return value is true if the transaction was successfully committed.
+//       If the return value is false, either the transaction was aborted because of an abort vote,
+//          or there was a communication error. If there was a communication error, *_com_error
+//          is set to true.
+bool fake_item_transaction(Item item, User_ID from_user, Room_Server *server, bool *_com_error)
+{
+    //@Norelease: If we fail, disconnect from user server and try to reconnect.
+    //           Keep trying until we can connect.
+    //           We should not keep trying to connect to the same actual server,
+    //           but do the user-id to server lookup every time.
+
+    *_com_error = true;
+    
+    RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(from_user, server);
+    if(us_con == NULL) return false;
+    
+    *_com_error = false;
+
+    USB_Transaction transaction = {0};
+    transaction.type = USB_T_ITEM;
+    transaction.item_details.item = item;
+
+    *_com_error = true;
+    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, TRANSACTION_PREPARE, transaction);
+    *_com_error = false;
+    
+    UCB_Packet_Header response_header;
+    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, &response_header)) *_com_error = true;
+
+    if(!*_com_error)
+    {
+        Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
+        auto &p = response_header.transaction_message;
+        
+        if(p.message == TRANSACTION_VOTE_COMMIT)     return true;
+        else if(p.message == TRANSACTION_VOTE_ABORT) return false;
+
+        *_com_error = true;
+    }
+
+    Assert(*_com_error);
+    return false;
+}
+
+
+bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Room *room, Room_Server *server)
+{
+    // NOTE: RSB_HELLO and RSB_GOODBYE is handled somewhere else.
+
+    auto *node = &client->node;
     
     switch(header.type) {
         case RSB_CLICK_TILE: {
-            Read(u64, tile_ix, sock);
+            
+            auto &p = header.click_tile;
 
-            Fail_If_True(tile_ix >= room_size_x * room_size_y);
-            room->shared.tiles[tile_ix]++;
-            room->shared.tiles[tile_ix] %= TILE_NONE_OR_NUM;
-            room->did_change = true;
+            Fail_If_True(p.tile_ix >= room_size_x * room_size_y);
+            Fail_If_True(p.tile_ix < 0);
+
+            auto tile_x = p.tile_ix % room_size_x;
+            auto tile_y = p.tile_ix / room_size_x;
+
+            if(p.item_to_place.id != NO_ITEM) {
+                
+                if(room->num_entities < MAX_ENTITIES_PER_ROOM) {
+
+                    v3 new_entity_p = { (float)tile_x, (float)tile_y, 0 };
+                    
+                    v3s volume = item_types[p.item_to_place.type].volume;
+                    if(volume.x % 2 != 0) new_entity_p.x += 0.5f;
+                    if(volume.y % 2 != 0) new_entity_p.y += 0.5f;
+
+                    bool transaction_com_error;
+                    if(!fake_item_transaction(p.item_to_place, client->user, server, &transaction_com_error))
+                    {
+                        const char *reason = "Abort";
+                        if(transaction_com_error) {
+                            reason = "Com Error";
+                        }                        
+                        RS_Log("Item transaction failed (Reason: %s) when trying to place item ID = %llu by user ID = %llu at (%f, %f, %f) in room.\n", reason, p.item_to_place.id, client->user, new_entity_p.x, new_entity_p.y, new_entity_p.z);
+
+                        // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
+                        //            This is so the game client can know when to for example remove preview entities.
+                        // (@Hack)
+                        room->did_change = true;
+                    }
+                    else {
+                        Entity e = {0};
+                        e.shared.id   = room->next_entity_id++;
+                        e.shared.p    = new_entity_p;
+                        e.shared.type = ENTITY_ITEM;
+                        e.shared.item = p.item_to_place;
+
+                        switch(e.shared.item.type) {
+                            case ITEM_PLANT: {
+                                auto *x = &e.shared.item.plant;
+                                x->plant_t = room->shared.t;
+                            } break;
+                        }
+                        
+                        room->entities[room->num_entities++] = e;
+                    
+                        room->did_change = true;
+                    }
+                }
+            }
+            else {
+                room->shared.tiles[p.tile_ix]++;
+                room->shared.tiles[p.tile_ix] %= TILE_NONE_OR_NUM;
+                
+                room->did_change = true;
+            }
             
         } break;
             
         default: {
-            RS_Log("Client (socket = %lld) sent invalid RSB packet type (%u).\n", client->sock.handle, header.type);
+            RS_Log("Client (socket = %lld) sent invalid RSB packet type (%u).\n", client->node.socket.handle, header.type);
             return false;
         } break;
     }
@@ -409,6 +563,9 @@ bool start_room_server_listening_loop(Room_Server *server, Thread *thread)
                                 &room_server_listening_loop, server, thread,
                                 LOG_TAG_RS);
 }
+
+
+
 
 // REMEMBER to init_room_server before starting this.
 //          IMPORTANT: Do NOT deinit_room_server after
@@ -465,18 +622,22 @@ DWORD room_server_main_loop(void *server_)
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
 
-                while(true) {
+                int num_received_packets = 0;
+                
+                // TODO @Norelease: @Security: There has to be some limit to how much data a client can send, so that we can't be stuck in this loop forever!
+                while(num_received_packets < MAX_INBOUND_RS_CLIENT_PACKETS_PER_LOOP) {
+
                     bool error;
-                    if(!platform_socket_has_bytes_to_read(&client->sock, &error)) { // TODO @Norelease: @Security: There has to be some limit to how much data a client can send, so that we can't be stuck in this loop forever!
+                    if(!receive_next_network_node_packet(&client->node, &error)) {
                         if(error) {
+                            RS_Log("Failed to receive_next_network_node_packet from client. Disconnecting client.\n");
                             disconnect_room_client(client); // @Cleanup @Boilerplate
                             c--;
                         }
                         break;
                     }
-
-                    // @Cleanup
-
+                    num_received_packets++;
+                    
                     RSB_Packet_Header header;
                     RSB_Header(client, &header);
                     if(client == NULL) { c--; break; }
@@ -485,10 +646,10 @@ DWORD room_server_main_loop(void *server_)
 
                     if(header.type == RSB_GOODBYE) {
                         // TODO @Norelease: Better logging, with more client info etc.
-                        RS_Log("Client (socket = %lld) sent goodbye message.\n", client->sock.handle);
+                        RS_Log("Client (socket = %lld) sent goodbye message.\n", client->node.socket.handle);
                         do_disconnect = true;
                     }
-                    else if(!read_and_handle_rsb_packet(client, header, room)) {
+                    else if(!read_and_handle_rsb_packet(client, header, room, server)) {
                         do_disconnect = true;
                     }
                     
@@ -514,7 +675,7 @@ DWORD room_server_main_loop(void *server_)
             // TODO @Norelease: Only send tiles/entities that changed.
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
-                RCB_Packet(client, Room_Changed, 0, room_size, room->shared.tiles, room->num_entities, room->entities);
+                RCB_Packet(client, ROOM_CHANGED, 0, room_size, room->shared.tiles, room->num_entities, room->entities);
                 if(client == NULL) c--;
             }
         }

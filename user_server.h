@@ -1,51 +1,54 @@
 
 struct User_Server;
 
-struct User_Client
+struct US_Client
 {
-    Socket sock;
+    US_Client_Type type;
+    
+    Network_Node node;
 
-    String username; // @Temporary: Should be an ID if anything
+    User_ID user_id;
     User_Server *server;
 };
 
-void clear(User_Client *client)
+void clear(US_Client *client)
 {
-    clear(&client->username, ALLOC_US);
 }
 
 
-struct User_Client_Queue
+struct US_Client_Queue
 {
     Mutex mutex;
     
     int num_clients;
-    User_Client clients[32];
+    US_Client clients[32];
 };
 
 // NOTE: Assumes we've already zeroed queue.
-void init_user_client_queue(User_Client_Queue *queue)
+void init_user_client_queue(US_Client_Queue *queue)
 {
     create_mutex(queue->mutex);
 }
 
-void deinit_user_client_queue(User_Client_Queue *queue)
+void deinit_user_client_queue(US_Client_Queue *queue)
 {
     delete_mutex(queue->mutex);
 }
 
 
 struct User_Server
-{
+{    
     Atomic<bool> should_exit; // @Speed: Semaphore?
 
     Array<User, ALLOC_US> users;
 
     Listening_Loop listening_loop;
     
-    Array<Array<User_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
-    User_Client_Queue client_queue;
+    Array<Array<US_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
+    US_Client_Queue client_queue;
 };
+
+
 
 void init_user_server(User_Server *server)
 {

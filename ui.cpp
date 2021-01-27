@@ -1419,8 +1419,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
 }
 
-// NOTE: (@Temporary): Returns index of clicked tile. U64_MAX if none.
-u64 world_view(UI_Context ctx)
+// NOTE: (@Temporary): Returns index of clicked tile. -1 if none.
+s32 world_view(UI_Context ctx)
 {
     U(ctx);
     
@@ -1446,7 +1446,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->clicked_tile_ix = U64_MAX;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
-    u64 hovered_tile_ix = U64_MAX;
+    s32 hovered_tile_ix = -1;
     
     if(e == hovered_element)
     {
@@ -1475,7 +1475,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->hovered_tile_ix = hovered_tile_ix;
 
     if(!(view->click_state & PRESSED))
-        view->pressed_tile_ix = U64_MAX;
+        view->pressed_tile_ix = -1;
 
     view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
 }

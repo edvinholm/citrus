@@ -13,6 +13,34 @@ struct String;
 
 
 
+bool ensure_size(s64 required_size, Memory_Buffer *buffer)
+{
+    s64 new_size = max(128, buffer->size);
+    
+    while(new_size < required_size)
+        new_size *= 2;
+
+    if(new_size == buffer->size) return true;
+    
+    u8 *new_data = (u8 *)malloc(new_size);
+    if(new_data == NULL) return false;
+        
+    if(buffer->size > 0) {
+        Assert(buffer->data);
+        memcpy(new_data, buffer->data, buffer->size);
+        free(buffer->data);
+    }
+    else { Assert(buffer->data == NULL); }
+
+    buffer->data = new_data;
+    buffer->size = new_size;
+
+    return true;
+}
+
+
+
+
 
 inline
 Memory_Block_Header first_memory_block(size_t page_size)

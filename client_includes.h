@@ -55,29 +55,38 @@
 
 //--
 
-// IMPORTANT: There is one definition for this for the client, and another for the server.
-#define Fail_If_True(Condition) \
-    if(Condition) { Debug_Print("[FAILURE] Condition met: "); Debug_Print(#Condition); Debug_Print("\n"); return false; }
-
 #include "game_shared.h"
+#include "user.h"
+
+#include "transaction.h"
+
+#include "network.cpp"
+#include "room_client.cpp"
+#include "user_client.cpp"
+
+#include "net_client.h"
+
+
+
 #include "game_client.h"
 using namespace Client_Game;
 
-#include "user.h"
 using namespace Client_User;
 
-#include "packets.cpp"
-#include "net_client.h"
 #include "client.h"
-#include "net_client.cpp"
 
-//--
 
 #include "world.cpp"
+
+#include "net_client.cpp"
 
 #include "body_text.h"
 
 #include "ui.cpp"
+
+#if DEVELOPER
+#include "ui_dev_client.cpp"
+#endif
 
 #include "draw.cpp"
 

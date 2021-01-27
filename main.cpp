@@ -1,5 +1,13 @@
 
+#define Fail_If_True(Condition) \
+    if(Condition) { Debug_Print("[FAILURE] Condition met: %s at %s:%d\n", #Condition, __FILE__, __LINE__); return false; }
+
+
 #define GFX_GL 1
+
+#ifndef DEVELOPER
+#define DEVELOPER 0
+#endif
 
 
 #include <string.h>
