@@ -411,7 +411,7 @@ private:
 
 
 
-UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Manager *input, bool disabled = false)
+UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Manager *input, bool enabled = true)
 {
     auto &mouse = input->mouse;
     
@@ -429,11 +429,11 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
         }
 
         if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
-            if(disabled) {
-                state |= CLICKED_DISABLED;
+            if(enabled) {
+                state |= CLICKED_ENABLED;
                 state |= CLICKED_AT_ALL;
             } else {
-                state |= CLICKED_ENABLED;
+                state |= CLICKED_DISABLED;
                 state |= CLICKED_AT_ALL;
             }
         }
@@ -540,7 +540,7 @@ void ui_text(String text, UI_Context ctx)
 }
 
 
-UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled = false, bool selected = false)
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false)
 {    
     U(ctx);
     
@@ -551,7 +551,7 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool disabled
     auto *btn = &e->button;
     ui_set(e, &btn->a, a);
     ui_set(e, &btn->label,    label,     ctx.manager);
-    ui_set(e, &btn->disabled, disabled);
+    ui_set(e, &btn->enabled,  enabled);
     ui_set(e, &btn->selected, selected);
     
     return btn->state;
@@ -562,7 +562,7 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     Assert(e->type == BUTTON);
     auto &btn   = e->button;
     
-    ui_set(e, &btn.state, evaluate_click_state(btn.state, e == hovered_element, input, btn.disabled));
+    ui_set(e, &btn.state, evaluate_click_state(btn.state, e == hovered_element, input, btn.enabled));
 }
 
 
@@ -991,13 +991,13 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     }
 
     
-    ui_set(e, &tf->click_state, evaluate_click_state(tf->click_state, area_hovered, input, tf->disabled));
+    ui_set(e, &tf->click_state, evaluate_click_state(tf->click_state, area_hovered, input, tf->enabled));
 
     
     *_use_i_beam_cursor = (area_hovered && !(tf->scroll.handle_click_state & PRESSED));
 
         
-    if(tf->disabled) return;
+    if(!tf->enabled) return;
     
     if(ui->active_element != id) return;
 
@@ -1087,7 +1087,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
 }
 
 
-float slider(float value, UI_Context ctx, bool disabled = false)
+float slider(float value, UI_Context ctx, bool enabled = true)
 {    
     U(ctx);
 
@@ -1096,7 +1096,7 @@ float slider(float value, UI_Context ctx, bool disabled = false)
     
     auto *slider = &e->slider;
     ui_set(e, &slider->a, area(ctx.layout));
-    ui_set(e, &slider->disabled, disabled);
+    ui_set(e, &slider->enabled, enabled);
     
     if(!slider->pressed) ui_set(e, &slider->value, value);
 
@@ -1114,10 +1114,10 @@ void update_slider(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     Rect handle_a = slider_handle_rect(slider->a, slider->value);
 
         
-    if(slider->disabled || !(mouse.buttons & MB_PRIMARY))
+    if(!slider->enabled || !(mouse.buttons & MB_PRIMARY))
         slider->pressed = false;
 
-    if(!slider->disabled)
+    if(!slider->enabled)
     {
         if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
             if(point_inside_rect(mouse.p, handle_a)) {

@@ -23,18 +23,20 @@ struct Item_Type
 {
     v3s volume;
     v4 color;
+
+    String name;
 };
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0} }, // Chair
-    { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0} }, // Bed
-    { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0} }, // Table
-    { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0} }, // Plant
+    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") }, // Chair
+    { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") },   // Bed
+    { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0}, STRING("Table") }, // Table
+    { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0}, STRING("Plant") }, // Plant
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
 typedef u64 Item_ID;
-const Item_ID NO_ITEM = U64_MAX;
+const Item_ID NO_ITEM = 0;
 
 struct Item {
     Item_ID id;
@@ -42,7 +44,7 @@ struct Item {
 
     union {
         struct {
-            World_Time plant_t;
+            float grow_progress;
         } plant;
     };
 };
@@ -53,6 +55,7 @@ bool equal(Item *a, Item *b)
     if(a->type != b->type) return false;
     return true;
 }
+
 
 
 enum Entity_Type
@@ -73,10 +76,55 @@ struct S__Entity
     union {
         struct { // item
             Item item;
-        };
+
+            union {
+                struct {
+                    World_Time t_on_plant;
+                    float grow_progress_on_plant;
+                } plant;
+            };
+        } item_e;
     };
 };
   
+
+// TODO @Cleanup: Move from header.
+//                This should be available to both server and client though.
+void update_entity_item(S__Entity *e, double world_t)
+{
+    Assert(e->type == ENTITY_ITEM);
+
+    auto *item = &e->item_e.item;
+    switch(item->type) {
+        case ITEM_PLANT: {
+            auto *plant = &item->plant;
+            auto *state = &e->item_e.plant;
+
+            plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * (1.0f / 60.0f);
+        } break;
+    }
+}
+
+
+// TODO @Cleanup: Move from header.
+//                This should be available to both server and client though.
+S__Entity create_item_entity(Item *item, double world_t)
+{
+    S__Entity e = {0};
+    e.type = ENTITY_ITEM;
+    e.item_e.item = *item;
+
+    switch(e.item_e.item.type) {
+        case ITEM_PLANT: {
+            auto *plant_e = &e.item_e.plant;
+            plant_e->t_on_plant = world_t;
+            plant_e->grow_progress_on_plant = item->plant.grow_progress;
+        } break;
+    }
+
+    return e;
+}
+
 
 
 // Must fit in a s8.

@@ -4,7 +4,10 @@
 Item *get_selected_inventory_item(User *user)
 {
     if(user->selected_inventory_item_plus_one == 0) return NULL;
-    return &user->shared.inventory[user->selected_inventory_item_plus_one-1];
+    Item *item = &user->shared.inventory[user->selected_inventory_item_plus_one-1];
+    if(item->id == NO_ITEM) return NULL;
+    Assert(item->type != ITEM_NONE_OR_NUM);
+    return item;
 }
 
 void inventory_deselect(User *user)
@@ -14,7 +17,7 @@ void inventory_deselect(User *user)
 
 void empty_inventory_slot_locally(int slot_ix, User *user)
 {
-    Assert(slot_ix > 0);
+    Assert(slot_ix >= 0);
     Assert(slot_ix < ARRLEN(user->shared.inventory));
 
     auto *slot = &user->shared.inventory[slot_ix];
@@ -39,11 +42,38 @@ void inventory_remove_item_locally(Item_ID id, User *user)
     Assert(false);
 }
 
+bool select_next_inventory_item_of_type(Item_Type_ID type, User *user)
+{
+    auto selected_slot = user->selected_inventory_item_plus_one-1;
+    auto slot_at = selected_slot + 1;
+    auto *inventory = user->shared.inventory;
+    
+    while(true)
+    {
+        if(slot_at == selected_slot) break;
+        if(slot_at >= ARRLEN(user->shared.inventory)) slot_at = 0;
+
+        if(inventory[slot_at].type == type) {
+            user->selected_inventory_item_plus_one = slot_at+1;
+            return true;
+        }
+
+        slot_at++;
+    }
+
+    return false;
+}
+
 // //////// //
 
 
 
 // WORLD //
+
+double world_time_for_room(Room *room, double system_time)
+{
+    return system_time + room->time_offset;
+}
 
 bool raycast_against_floor(Ray ray, v3 *_hit)
 {
@@ -119,13 +149,13 @@ v3 tp_from_index(s32 tile_index)
 }
 
 
+
 // NOTE: tp is tile position.
-Entity create_preview_item_entity(Item *item, v3 tp)
+Entity create_preview_item_entity(Item *item, v3 tp, double world_t)
 {
     Entity e = {0};
-    e.shared.type = ENTITY_ITEM;
+    e.shared = create_item_entity(item, world_t);
     e.shared.p = tp;
-    e.shared.item = *item;
 
     e.is_preview = true;
     

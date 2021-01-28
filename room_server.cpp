@@ -34,16 +34,14 @@ void create_dummy_entities(Room *room)
         Item_Type_ID item_type_id = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM - 1);
         Item_Type *item_type = item_types + item_type_id;
         
-        S__Entity e = {0};
+        Item item = {0};
+        item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
+
+        S__Entity e = create_item_entity(&item, room->shared.t);
         e.id = room->next_entity_id++;
-        e.type = ENTITY_ITEM;
         e.p = pp;
         e.p.x += item_type->volume.x * 0.5f;
         e.p.y += item_type->volume.y * 0.5f + (i % 2);
-
-        Item item = {0};
-        item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
-        e.item = item;
 
         Assert(room->num_entities < ARRLEN(room->entities));
         room->entities[room->num_entities++] = { e };
@@ -522,17 +520,9 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     }
                     else {
                         Entity e = {0};
+                        e.shared = create_item_entity(&p.item_to_place, room->shared.t);
                         e.shared.id   = room->next_entity_id++;
                         e.shared.p    = new_entity_p;
-                        e.shared.type = ENTITY_ITEM;
-                        e.shared.item = p.item_to_place;
-
-                        switch(e.shared.item.type) {
-                            case ITEM_PLANT: {
-                                auto *x = &e.shared.item.plant;
-                                x->plant_t = room->shared.t;
-                            } break;
-                        }
                         
                         room->entities[room->num_entities++] = e;
                     

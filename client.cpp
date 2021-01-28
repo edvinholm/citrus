@@ -112,19 +112,20 @@ void user_window(UI_Context ctx, Client *client)
                 Item *item = &user->shared.inventory[cell_ix];
 
                 String label = EMPTY_STRING;
-                switch(item->type) {
-                    case ITEM_CHAIR: label = STRING("C"); break;
-                    case ITEM_BED:   label = STRING("B");   break;
-                    case ITEM_TABLE: label = STRING("T"); break;
-                    case ITEM_PLANT: label = STRING("P"); break;
-
-                    case ITEM_NONE_OR_NUM: break;
-
-                    default: label = STRING("?"); break;
+                
+                if(item->id != NO_ITEM) {
+                    Assert(item->type != ITEM_NONE_OR_NUM);
+                    Item_Type *type = &item_types[item->type];
+                    
+                    Assert(type->name.length > 0);
+                    label = type->name;
+                    label.length = 1;
                 }
 
+                bool enabled = item->id != NO_ITEM;
+
                 bool selected = (cell_ix == user->selected_inventory_item_plus_one - 1);
-                if(button(PC(ctx, cell_ix), label, false, selected) & CLICKED_ENABLED) {
+                if(button(PC(ctx, cell_ix), label, enabled, selected) & CLICKED_ENABLED) {
                     // @Norelease @Robustness: Make this an item ID.
                     //   So if the gets removed or moved on the server, the item will be
                     //   deselected, and not replaced by another item that takes its slot
@@ -147,10 +148,50 @@ void user_window(UI_Context ctx, Client *client)
         User_ID id       = user_ids[i];
         bool is_current  = (id == current_user);
         
-        if(button(PC(ctx, i), username, connecting, is_current) & CLICKED_ENABLED)
+        if(button(PC(ctx, i), username, !connecting, is_current) & CLICKED_ENABLED)
         {
             request_connection_to_user(id, client);
         }
+    }
+}
+
+// NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
+void item_window(UI_Context ctx, Item *item)
+{
+    U(ctx);
+    
+    Assert(item != NULL);
+    Assert(item->type != ITEM_NONE_OR_NUM);
+
+    auto *type = &item_types[item->type];
+    _WINDOW_(P(ctx), type->name);
+
+    auto image_s = area(ctx.layout).w * (1 - 0.61803);
+    { _TOP_CUT_(image_s);
+        
+        { _LEFT_CUT_(image_s);
+            button(P(ctx));
+        }
+
+        _SHRINK_(window_default_padding);
+
+        { _TOP_CUT_(20);
+            v3s vol = type->volume;
+            String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
+            ui_text(volume_str, P(ctx));
+        }
+    }
+
+    switch(item->type) {
+        case ITEM_PLANT: {
+            auto *plant = &item->plant;
+                    
+            { _TOP_CUT_(20);   
+                float grow_progress = plant->grow_progress;
+                String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
+                ui_text(grow_str, P(ctx));
+            }
+        };
     }
 }
 
@@ -179,7 +220,7 @@ void room_window(UI_Context ctx, Client *client)
                 if(requested_room != -1) selected = (requested_room == r);
                 else                     selected = (current_room   == r);
 
-                if(button(PC(ctx, r), concat_tmp("", r, sb), (requested_room != -1), selected) & CLICKED_ENABLED)
+                if(button(PC(ctx, r), concat_tmp("", r, sb), (requested_room == -1), selected) & CLICKED_ENABLED)
                 {
                     request_connection_to_room((Room_ID)r, client);
                 }
@@ -191,7 +232,7 @@ void room_window(UI_Context ctx, Client *client)
 
 
 
-void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
+void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 {
     U(ctx);
 
@@ -213,20 +254,20 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         { _AREA_COPY_();
         
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("ROOM"), false, cui->room_window_open) & CLICKED_ENABLED) {
+                if(button(P(ctx), STRING("ROOM"), true, cui->room_window_open) & CLICKED_ENABLED) {
                     cui->room_window_open = !cui->room_window_open;
                 }
             }
             
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("USER"), false, cui->user_window_open) & CLICKED_ENABLED) {
+                if(button(P(ctx), STRING("USER"), true, cui->user_window_open) & CLICKED_ENABLED) {
                     cui->user_window_open = !cui->user_window_open;
                 }
             }
 
 #if DEVELOPER
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("DEV"), false, cui->dev_window_open) & CLICKED_ENABLED) {
+                if(button(P(ctx), STRING("DEV"), true, cui->dev_window_open) & CLICKED_ENABLED) {
                     cui->dev_window_open = !cui->dev_window_open;
                 }
             }
@@ -261,12 +302,32 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
     }
 
 
+    
+    
+    { _SHRINK_(16); _LEFT_(240); _BOTTOM_(360);
+        
+        Item *selected_item = get_selected_inventory_item(&client->user);
+        if(selected_item) {
+            item_window(P(ctx), selected_item);
+        }
+
+        
+        auto *room = &client->game.room;
+        auto world_t = world_time_for_room(room, t);
+        if(client->game.room.entities.n)
+        {
+            auto *s_e = &last_element_pointer(room->entities)->shared;
+            
+            update_entity_item(s_e, world_t);
+            item_window(P(ctx), &s_e->item_e.item);
+        }
+    }
+
+
 
     s32 clicked_tile = world_view(P(ctx));
     if(clicked_tile >= 0)
     {
-        Debug_Print("click tile.\n");
-        
         C_RS_Action action = {0};
         action.type = C_RS_ACT_CLICK_TILE;
         auto &ct = action.click_tile;
@@ -284,16 +345,24 @@ void client_ui(UI_Context ctx, Input_Manager *input, Client *client)
         array_add(client->server_connections.room_action_queue, action);
 
         if(selected_item) {
-            Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(clicked_tile));
+            Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(clicked_tile), world_time_for_room(&client->game.room, t));
 
             // NOTE: We add a preview entity and remove the placed item locally, before
             //       we know if the operation succeeds.
             //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
             //       transaction abort so we get our stuff back / know when to remove the
             //       preview entity.
+
+            auto type = selected_item->type;
             
             add_entity(preview_entity, &client->game.room);
             inventory_remove_item_locally(selected_item->id, &client->user);
+
+            if(!in_array(input->keys, VKEY_SHIFT) ||
+               !select_next_inventory_item_of_type(type, &client->user))
+            {
+                inventory_deselect(&client->user);
+            }
         }
     }
 
@@ -529,7 +598,7 @@ int client_entry_point(int num_args, char **arguments)
             {
                 push_area_layout(window_a, layout);
             
-                client_ui(P(ui_ctx), input, &client);
+                client_ui(P(ui_ctx), input, t, &client);
             
 #if DEBUG || true
                 if(second != last_second) {

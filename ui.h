@@ -175,7 +175,7 @@ struct UI_Button
 
     UI_String label;
     
-    bool disabled;
+    bool enabled;
     bool selected;
 };
 
@@ -193,7 +193,7 @@ struct UI_Textfield
     UI_String text;
 
     UI_Click_State click_state;
-    bool disabled;
+    bool enabled;
 
     bool scrollbar_visible;
     UI_Scrollbar scroll;
@@ -206,7 +206,7 @@ struct UI_Slider
     
     float value;
 
-    bool disabled;
+    bool enabled;
 };
 
 struct UI_Dropdown
@@ -305,6 +305,8 @@ struct UI_Manager
     union {
         UI_Textfield_State active_textfield_state;
     };
+
+    String_Builder string_builder;
 };
 
 

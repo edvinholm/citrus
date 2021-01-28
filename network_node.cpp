@@ -242,6 +242,12 @@ bool read_u64(u64 *_i, Network_Node *node)
 }
 
 inline
+bool read_float(float *_f, Network_Node *node)
+{
+    return read_bytes(_f, sizeof(*_f), node);
+}
+
+inline
 bool read_v3(v3 *_u, Network_Node *node)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -485,7 +491,7 @@ bool read_Item(Item *_item, Network_Node *node)
     switch(_item->type) {
         case ITEM_PLANT: {
             auto *x = &_item->plant;
-            Read_To_Ptr(World_Time, &x->plant_t, node);
+            Read_To_Ptr(float, &x->grow_progress, node);
         } break;
     }
     
@@ -500,7 +506,7 @@ bool write_Item(Item item, Network_Node *node)
     switch(item.type) {
         case ITEM_PLANT: {
             auto *x = &item.plant;
-            Write(World_Time, x->plant_t, node);
+            Write(float, x->grow_progress, node);
         } break;
     }
     
@@ -557,13 +563,24 @@ bool write_Entity_ID(Entity_ID id, Network_Node *node)
 
 bool read_Entity(S__Entity *_entity, Network_Node *node)
 {
+    Zero(*_entity);
+    
     Read_To_Ptr(Entity_ID,   &_entity->id,   node);
     Read_To_Ptr(v3,          &_entity->p,    node);
     Read_To_Ptr(Entity_Type, &_entity->type, node);
 
     switch(_entity->type) {
         case ENTITY_ITEM: {
-            Read_To_Ptr(Item, &_entity->item, node);
+            auto *x = &_entity->item_e;
+            Read_To_Ptr(Item, &x->item, node);
+            
+            switch(x->item.type) {
+                case ITEM_PLANT: {
+                    auto *plant = &x->plant;
+                    Read_To_Ptr(World_Time, &plant->t_on_plant,             node);
+                    Read_To_Ptr(float,      &plant->grow_progress_on_plant, node);
+                } break;
+            }
         } break;
 
         default: Assert(false); return false;
@@ -580,7 +597,17 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
 
     switch(entity->type) {
         case ENTITY_ITEM: {
-            Write(Item, entity->item, node);
+            auto *x = &entity->item_e;
+            Write(Item, x->item, node);
+            
+            switch(x->item.type) {
+                case ITEM_PLANT: {
+                    auto *plant = &x->plant;
+                    Write(World_Time, plant->t_on_plant,             node);
+                    Write(float,      plant->grow_progress_on_plant, node);
+                } break;
+            }
+            
         } break;
 
         default: Assert(false); return false;

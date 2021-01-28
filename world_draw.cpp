@@ -126,8 +126,11 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 void draw_entity(Entity *e, double world_t, Graphics *gfx)
 {   
     if(e->shared.type != ENTITY_ITEM) return;
-            
-    Item_Type *item_type = item_types + e->shared.item.type;
+
+    update_entity_item(&e->shared, world_t);
+    
+    auto *item = &e->shared.item_e.item;
+    Item_Type *item_type = item_types + item->type;
     v3 origin = e->shared.p;
     origin.xy -= item_type->volume.xy * 0.5f;
 
@@ -146,10 +149,10 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
 
     float height = item_type->volume.z;
     Assert(e->shared.type == ENTITY_ITEM);
-    if(e->shared.item.type == ITEM_PLANT)
+    if(item->type == ITEM_PLANT)
     {
-        auto *plant = &e->shared.item.plant;
-        height *= (world_t - plant->plant_t) / 60.0f;
+        auto *plant = &e->shared.item_e.item.plant;
+        height *= min(1.0f, plant->grow_progress);
     }
 
 #if 0 
@@ -229,7 +232,7 @@ void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
     
 #endif
 
-#if 1
+#if 0
     // @Temporary
     {
         _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(world_t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);

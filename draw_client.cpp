@@ -380,7 +380,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     };
 
     v4 *color = c;
-    if(btn.disabled)             color = d;
+    if(!btn.enabled)             color = d;
     else if(btn.selected)        color = s;
     else if(btn.state & PRESSED) color = p;
     else if(btn.state & HOVERED) color = h;
@@ -601,7 +601,7 @@ void draw_slider(UI_Element *e, Graphics *gfx)
     };
 
     v4 *color = c;
-    if(slider->disabled)  color = d;
+    if(!slider->enabled)  color = d;
 
     triangles(v, uv, color, tex, 6, gfx);
 
@@ -631,7 +631,7 @@ void draw_world_view_background(UI_Element *e, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *selected_item, double t, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
@@ -640,13 +640,13 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double t, Graphics *g
         
         if(selected_item)
         {
-            Entity preview_entity = create_preview_item_entity(selected_item, tp);
-            draw_entity(&preview_entity, t, gfx);
+            Entity preview_entity = create_preview_item_entity(selected_item, tp, world_t);
+            draw_entity(&preview_entity, world_t, gfx);
 
             Assert(preview_entity.shared.type == ENTITY_ITEM);
             
             v3 p0 = preview_entity.shared.p;
-            auto vol = item_types[preview_entity.shared.item.type].volume;
+            auto vol = item_types[selected_item->type].volume;
             p0.xy -= vol.xy * 0.5f;
             draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, { 0.12, 0.12, 0.12, 1 }, gfx);
         }
@@ -709,7 +709,7 @@ DWORD render_loop(void *loop_)
         lock_mutex(client->mutex);
         {
             triangles_this_frame = 0;
-            double t = platform_get_time();
+            double t       = platform_get_time();
             
             if(loop->state == Render_Loop::SHOULD_EXIT) {
                 unlock_mutex(client->mutex);
@@ -800,6 +800,10 @@ DWORD render_loop(void *loop_)
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
 
                         case WORLD_VIEW: {
+                            auto *room = &client->game.room;
+                            
+                            double world_t = world_time_for_room(room, t);
+                            
                             draw_world_view_background(e, &gfx);
 
                             if(world_view != NULL) {
@@ -807,17 +811,16 @@ DWORD render_loop(void *loop_)
                                 break;
                             }
                        
-                            m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx.z_for_2d);
-                        
+                            m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx.z_for_2d);                        
 
-                            draw_world(&client->game.room, t, projection, &gfx);
+                            draw_world(room, t, projection, &gfx);
 
                             v3 hovered_tile_p = {0};
                             hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
                             hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
                             
                             Item *selected_item = get_selected_inventory_item(&client->user);
-                            draw_tile_hover_indicator(hovered_tile_p, selected_item, t, &gfx);
+                            draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, &gfx);
 
                             gfx.z_for_2d -= 0.2;
 

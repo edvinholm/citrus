@@ -55,7 +55,7 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
         {
             Item item = {0};
             item.id   = next_item_id++;
-            item.type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM);
+            item.type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM-1);
             user.shared.inventory[j] = item;
         }
         
