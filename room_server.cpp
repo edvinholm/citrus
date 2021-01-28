@@ -624,7 +624,6 @@ DWORD room_server_main_loop(void *server_)
 
                 int num_received_packets = 0;
                 
-                // TODO @Norelease: @Security: There has to be some limit to how much data a client can send, so that we can't be stuck in this loop forever!
                 while(num_received_packets < MAX_INBOUND_RS_CLIENT_PACKETS_PER_LOOP) {
 
                     bool error;
