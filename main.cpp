@@ -27,7 +27,9 @@ const u16 USER_SERVER_PORT = 50999;
 #if DEBUG
 #include <stdio.h>
 #endif
+
 #include "debug.h"
+
 
 // --
 

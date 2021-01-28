@@ -61,7 +61,7 @@ void stop_listening_loop(Listening_Loop *loop, Thread *thread, s32 timeout_ms = 
 }
 
 
-bool listening_loop_running(Listening_Loop *loop, bool *_client_accepted, Socket *_client_socket, const char *log_tag)
+bool listening_loop_running(Listening_Loop *loop, bool client_socket_block_mode, bool *_client_accepted, Socket *_client_socket, const char *log_tag)
 {
     *_client_accepted = false;
     
@@ -70,7 +70,7 @@ bool listening_loop_running(Listening_Loop *loop, bool *_client_accepted, Socket
     }
 
     bool error;
-    if(platform_accept_next_incoming_socket_connection(&loop->socket, _client_socket, &error)) {
+    if(platform_accept_next_incoming_socket_connection(&loop->socket, client_socket_block_mode, _client_socket, &error)) {
         // @Norelease: TODO: Get IP address.
         *_client_accepted = true;
     }

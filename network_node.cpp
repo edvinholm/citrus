@@ -69,7 +69,7 @@ void reset_network_node(Network_Node *node, Socket socket)
 
 
 bool receive_next_network_node_packet(Network_Node *node, bool *_error, bool block = false)
-{
+{   
     if(!block) {
         if(!platform_socket_has_bytes_to_read(&node->socket, _error)) {
             return false;
@@ -141,7 +141,7 @@ bool send_outbound_packets(Network_Node *node)
 
         Assert(packet.size > 0);
         Assert(packet.start + packet.size <= buf->packet_size);
-        
+                
         if(!write_network_packet(buf->data + packet.start, packet.size, &node->socket)) {
             success = false;
             break;

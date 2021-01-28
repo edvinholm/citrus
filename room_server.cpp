@@ -199,7 +199,7 @@ DWORD room_server_listening_loop(void *room_server_)
 
     bool   client_accepted;
     Socket client_socket;
-    while(listening_loop_running(loop, &client_accepted, &client_socket, LOG_TAG_RS_LIST))
+    while(listening_loop_running(loop, true, &client_accepted, &client_socket, LOG_TAG_RS_LIST))
     {
         if(!client_accepted) continue;
         
@@ -437,6 +437,7 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
 //          is set to true.
 bool fake_item_transaction(Item item, User_ID from_user, Room_Server *server, bool *_com_error)
 {
+    
     //@Norelease: If we fail, disconnect from user server and try to reconnect.
     //           Keep trying until we can connect.
     //           We should not keep trying to connect to the same actual server,
@@ -459,7 +460,7 @@ bool fake_item_transaction(Item item, User_ID from_user, Room_Server *server, bo
     
     UCB_Packet_Header response_header;
     if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, &response_header)) *_com_error = true;
-
+    
     if(!*_com_error)
     {
         Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
@@ -484,6 +485,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
     
     switch(header.type) {
         case RSB_CLICK_TILE: {
+            TIMED_BLOCK("RSB_CLICK_TILE");
             
             auto &p = header.click_tile;
 
@@ -504,6 +506,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     if(volume.y % 2 != 0) new_entity_p.y += 0.5f;
 
                     bool transaction_com_error;
+                    
                     if(!fake_item_transaction(p.item_to_place, client->user, server, &transaction_com_error))
                     {
                         const char *reason = "Abort";
@@ -681,7 +684,7 @@ DWORD room_server_main_loop(void *server_)
 
         add_new_room_clients(server);
             
-//        platform_sleep_milliseconds(1);
+        platform_sleep_milliseconds(1);
     }
 
     RS_Log("Stopping listening loop...");
