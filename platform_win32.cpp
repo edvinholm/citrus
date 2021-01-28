@@ -779,6 +779,23 @@ bool platform_deinit_socket_use() {
     return (WSACleanup() == 0);
 }
 
+bool platform_set_socket_blocking_mode(Socket *sock, bool blocking)
+{
+   u_long blocking_mode = (!blocking) ? 1 : 0;
+
+    if(ioctlsocket(sock->handle, FIONBIO, &blocking_mode) != 0) {
+        Debug_Print("Unable to set blocking to %s for tcp socket. WSA error: %d\n", (blocking) ? "true" : "false", WSAGetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+bool platform_close_socket(Socket *socket)
+{
+    return (closesocket(socket->handle) == 0);
+}
+
 // REMEMBER to do platform_init_socket_use() first.
 bool platform_create_tcp_socket(Socket *_sock, bool blocking = true)
 {
@@ -787,10 +804,10 @@ bool platform_create_tcp_socket(Socket *_sock, bool blocking = true)
     sock.handle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(sock.handle == INVALID_SOCKET) return false;
 
-    u_long blocking_mode = (!blocking) ? 1 : 0;
-
-    if(ioctlsocket(sock.handle, FIONBIO, &blocking_mode) != 0) {
-        Debug_Print("Unable to set blocking to %s for tcp socket. WSA error: %d\n", (blocking) ? "true" : "false", WSAGetLastError());
+    if(!platform_set_socket_blocking_mode(&sock, blocking)) {
+        if(!platform_close_socket(&sock)) {
+            Debug_Print("Unable to close socket at %s:%d.\n", __FILE__, __LINE__);
+        }
         return false;
     }
         
@@ -798,10 +815,6 @@ bool platform_create_tcp_socket(Socket *_sock, bool blocking = true)
     return true;
 }
 
-bool platform_close_socket(Socket *socket)
-{
-    return (closesocket(socket->handle) == 0);
-}
 
 bool platform_connect_socket(Socket *sock, char *address, u16 port)
 {
@@ -842,8 +855,9 @@ bool platform_start_listening_to_socket(Socket *sock, int max_backlog_length)
     return (listen(sock->handle, max_backlog_length) == 0);
 }
 
+
 // REMEMBER to do platform_init_socket_use() first.
-bool platform_accept_next_incoming_socket_connection(Socket *listening_socket, Socket *_client_socket, bool *_error)
+bool platform_accept_next_incoming_socket_connection(Socket *listening_socket, bool client_socket_block_mode, Socket *_client_socket, bool *_error)
 {
     *_error = false;
     
@@ -853,6 +867,14 @@ bool platform_accept_next_incoming_socket_connection(Socket *listening_socket, S
     if(_client_socket->handle == INVALID_SOCKET) {
         if(WSAGetLastError() != WSAEWOULDBLOCK) {
             *_error = true;
+        }
+        return false;
+    }
+
+    if(!platform_set_socket_blocking_mode(_client_socket, client_socket_block_mode))
+    {   
+        if(!platform_close_socket(_client_socket)) {
+            Debug_Print("Unable to close socket at %s:%d.\n", __FILE__, __LINE__);
         }
         return false;
     }

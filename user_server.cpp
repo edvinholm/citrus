@@ -131,7 +131,7 @@ DWORD user_server_listening_loop(void *user_server_)
     
     bool   client_accepted;
     Socket client_socket;
-    while(listening_loop_running(loop, &client_accepted, &client_socket, LOG_TAG_US_LIST))
+    while(listening_loop_running(loop, true, &client_accepted, &client_socket, LOG_TAG_US_LIST))
     {
         if(!client_accepted) continue;
 
@@ -506,7 +506,7 @@ DWORD user_server_main_loop(void *server_) {
         
 
         add_new_user_clients(server);
-        platform_sleep_milliseconds(100);
+        platform_sleep_milliseconds(1);
     }
 
     US_Log("Stopping listening loop...");

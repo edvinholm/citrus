@@ -6,7 +6,7 @@
 bool receive_next_ucb_packet(Network_Node *node, UCB_Packet_Header *_packet_header, bool *_error, bool block = false)
 {
     if(!receive_next_network_node_packet(node, _error, block)) return false;
-    
+
     *_error = true;
     Read_To_Ptr(UCB_Packet_Header, _packet_header, node);
     *_error = false;

@@ -138,7 +138,7 @@ bool write_US_Client_Type(US_Client_Type type, Network_Node *node)
 
 
 bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
-{
+{    
     Zero(*_header);
     Read_To_Ptr(USB_Packet_Type, &_header->type, node);
 
