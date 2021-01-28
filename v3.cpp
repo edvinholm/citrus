@@ -96,7 +96,6 @@ float dot(v3 a, v3 b)
 }
 
 
-
 inline
 v3 operator - (v3 u, v3 v)
 {
@@ -190,3 +189,6 @@ v3s floor_vector(v3 v)
 {
     return V3S(floor(v.x), floor(v.y), floor(v.z));
 }
+
+
+

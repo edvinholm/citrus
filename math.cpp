@@ -110,6 +110,20 @@ const Quat Q_IDENTITY = {0, 0, 0, 1};
 #include "matrix.cpp"
 
 
+struct Ray
+{
+    v3 p0;
+    v3 dir;
+};
+
+
+struct AABB
+{
+    v3 p;
+    v3 s;
+};
+
+
 
 inline
 bool operator == (Quat q, Quat r)
@@ -327,3 +341,201 @@ bool doubles_equal(double f, double g)
 }
 
 
+
+
+
+float point_ray_distance(v3 point, Ray ray)
+{
+    float t = dot(point-ray.p0, ray.dir);
+    v3    p = ray.p0 + t * ray.dir;
+    return magnitude(p - point);
+}
+
+bool ray_intersects_plane(Ray ray, v4 plane, v3 *_p, float *_t = NULL)
+{
+    if(is_zero(dot(ray.dir, plane.xyz))) return false;
+
+    float a = plane.x;
+    float b = plane.y;
+    float c = plane.z;
+    float d = plane.w;
+
+    float x0 = ray.p0.x;
+    float y0 = ray.p0.y;
+    float z0 = ray.p0.z;
+
+    float dx = ray.dir.x;
+    float dy = ray.dir.y;
+    float dz = ray.dir.z;
+    
+    float t = (-d - a*x0 - b*y0 - c*z0) / (a*dx + b*dy + c*dz);
+    *_p = ray.p0 + ray.dir * t;
+
+    if(_t) *_t = t;
+      
+    return true;
+}
+
+
+v4 triangle_plane(v3 a, v3 b, v3 c)
+{
+    v4 plane;
+    plane.xyz = normalize(cross((b - a), (c - a)));
+    plane.w   = -dot(a, plane.xyz);
+    return plane;
+}
+
+
+
+v3 barycentric(v3 p, v3 a, v3 b, v3 c)
+{
+    v3 result;
+    
+    v3 v0 = b - a;
+    v3 v1 = c - a;
+    v3 v2 = p - a;
+        
+    float d00 = dot(v0, v0);
+    float d01 = dot(v0, v1);
+    float d11 = dot(v1, v1);
+    float d20 = dot(v2, v0);
+    float d21 = dot(v2, v1);
+    
+    float denom = d00 * d11 - d01 * d01;
+    
+    result.y = (d11 * d20 - d01 * d21) / denom;
+    result.z = (d00 * d21 - d01 * d20) / denom;
+    result.x = 1.0f - result.y - result.z;
+
+    return result;
+}
+
+
+/*
+  NOTE: This function could be dramatically faster!
+        Especially if we know that the ray won't come from "behind".
+ */
+
+bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_ray_t = NULL)
+{
+    v3    center = bbox.p + bbox.s * (1 / 2.0f);
+    float radius = max(max(bbox.s.x, bbox.s.y), bbox.s.z) / 2.0f;
+
+    // Sphere
+    if(point_ray_distance(center, ray) > radius) return false;
+
+    v3 bbox_p1 = bbox.p + bbox.s;
+
+    float x0 = bbox.p.x;
+    float y0 = bbox.p.y;
+    float z0 = bbox.p.z;
+    
+    float x1 = bbox_p1.x;
+    float y1 = bbox_p1.y;
+    float z1 = bbox_p1.z;
+
+    bool any_hit = false;
+    float closest_hit_t = FLT_MAX;
+    v3 closest_hit;
+
+    v3 quad_a = bbox.p;
+    
+    // Sides
+    for(int i = 0; i < 6; i++)
+    {
+        if(i == 3) {
+            quad_a = bbox_p1;
+
+            float dx = (x1 - x0); 
+            float dy = (y1 - y0); 
+            float dz = (z1 - z0);
+
+            x0 = x1;
+            y0 = y1;
+            z0 = z1;
+            
+            x1 = x0 - dx;
+            y1 = y0 - dy;
+            z1 = z0 - dz;
+        }
+        
+        v3 quad_b, quad_c, quad_d;
+
+        switch(i % 3) {
+            case 0:
+                quad_b.x = x1;
+                quad_b.y = y0;
+                quad_b.z = z0;
+
+                quad_c.x = x0;
+                quad_c.y = y0;
+                quad_c.z = z1;
+                
+                quad_d.x = x1;
+                quad_d.y = y0;
+                quad_d.z = z1;
+                break;
+
+            case 1:
+                quad_b.x = x0;
+                quad_b.y = y1;
+                quad_b.z = z0;
+
+                quad_c.x = x0;
+                quad_c.y = y0;
+                quad_c.z = z1;
+                
+                quad_d.x = x0;
+                quad_d.y = y1;
+                quad_d.z = z1;
+                break;
+
+            case 2:
+                quad_b.x = x1;
+                quad_b.y = y0;
+                quad_b.z = z0;
+
+                quad_c.x = x0;
+                quad_c.y = y1;
+                quad_c.z = z0;
+                
+                quad_d.x = x1;
+                quad_d.y = y1;
+                quad_d.z = z0;
+                break;
+        }
+        
+        v4 plane = triangle_plane(quad_a, quad_b, quad_c);
+
+        // Plane
+        v3 intersection;
+        float ray_t;
+        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) return false;
+        if(any_hit && ray_t >= closest_hit_t) continue;
+
+        
+        bool hit = false;
+        
+        // Triangles
+        v3 b;
+
+        b = barycentric(intersection, quad_a, quad_b, quad_c);
+        if(b.x >= 0 && b.y >= 0 && b.z >= 0) hit = true;
+        
+        b = barycentric(intersection, quad_b, quad_c, quad_d);
+        if(b.x >= 0 && b.y >= 0 && b.z >= 0) hit = true;
+
+        if(!hit) continue;
+        
+
+        any_hit = true;
+        closest_hit   = intersection;
+        closest_hit_t = ray_t;
+    }
+
+    if(!any_hit) return false;
+
+    if(_intersection) *_intersection = closest_hit;
+    if(_ray_t)        *_ray_t        = closest_hit_t;
+    return true;
+}

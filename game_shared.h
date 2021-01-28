@@ -64,7 +64,7 @@ enum Entity_Type
 };
 
 typedef u64 Entity_ID;
-const Entity_ID NO_ENTITY = U64_MAX;
+const Entity_ID NO_ENTITY = 0;
 
 struct S__Entity
 {
@@ -139,8 +139,8 @@ enum Tile_Type {
 
 typedef s8 Tile;
 
-const u64 room_size_x = 16;
-const u64 room_size_y = 16;
+const u64 room_size_x = 32;
+const u64 room_size_y = 32;
 const u64 room_size   = room_size_x * room_size_y;
 
 typedef s32 Room_ID; // Only positive numbers are allowed room IDs.

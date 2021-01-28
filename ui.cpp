@@ -1419,8 +1419,7 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     
 }
 
-// NOTE: (@Temporary): Returns index of clicked tile. -1 if none.
-s32 world_view(UI_Context ctx)
+UI_World_View *world_view(UI_Context ctx)
 {
     U(ctx);
     
@@ -1434,24 +1433,43 @@ s32 world_view(UI_Context ctx)
     view->camera.projection = world_projection_matrix(view->a);
     view->camera.projection_inverse = inverse_of(view->camera.projection);
 
-    return view->clicked_tile_ix;
+    return view;
 }
 
-void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, Room *room)
 {    
     Assert(e->type == WORLD_VIEW);
     auto *view = &e->world_view;
     auto *mouse = &input->mouse;
 
     view->clicked_tile_ix = U64_MAX;
+    view->clicked_entity  = NO_ENTITY;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
-    s32 hovered_tile_ix = -1;
+    s32       hovered_tile_ix = -1;
+    Entity_ID hovered_entity  = NO_ENTITY;
     
     if(e == hovered_element)
     {
         Assert(point_inside_rect(mouse->p, view->a));
 
+        v3 entity_hit_p;
+        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, &entity_hit_p);
+        if (entity_hit) {
+
+            hovered_entity = entity_hit->shared.id;
+
+            if (view->click_state & PRESSED_NOW) {
+                view->pressed_entity = hovered_entity;
+            }
+
+            if (view->click_state & CLICKED_ENABLED) {
+                if (view->pressed_entity == hovered_entity) {
+                    view->clicked_entity = view->pressed_entity;
+                }
+            }
+        }
+        
         v3 ground_hit;
         if(raycast_against_floor(view->mouse_ray, &ground_hit)) {
             if(ground_hit.x >= 0 && ground_hit.x < room_size_x &&
@@ -1470,9 +1488,11 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
                 }
             }
         }
+        
     }
 
     view->hovered_tile_ix = hovered_tile_ix;
+    view->hovered_entity  = hovered_entity;
 
     if(!(view->click_state & PRESSED))
         view->pressed_tile_ix = -1;
@@ -1531,11 +1551,9 @@ void begin_ui_build(UI_Manager *ui)
 #endif
 }
 
-void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, Cursor_Icon *_cursor)
+void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, Room *room, Cursor_Icon *_cursor)
 {
     Array<u8, ALLOC_TMP> temp = {0};
-
-
     
     Assert(ui->current_path_length == 0);
     
@@ -1712,7 +1730,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, C
             } break;
             case SLIDER:     update_slider(e, input, hovered_element);     break;
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
-            case WORLD_VIEW: update_world_view(e, input, hovered_element); break;
+            case WORLD_VIEW: update_world_view(e, input, hovered_element, room); break;
 
             case PANEL:
             case UI_TEXT:

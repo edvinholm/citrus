@@ -38,7 +38,7 @@ void create_dummy_entities(Room *room)
         item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
 
         S__Entity e = create_item_entity(&item, room->shared.t);
-        e.id = room->next_entity_id++;
+        e.id = 1 + room->next_entity_id_minus_one++;
         e.p = pp;
         e.p.x += item_type->volume.x * 0.5f;
         e.p.y += item_type->volume.y * 0.5f + (i % 2);
@@ -63,10 +63,31 @@ void create_dummy_rooms(Room_Server *server)
 
         create_dummy_entities(&room);
 
-        for(int t = 0; t < room_size_x * room_size_y; t++)
-        {
+#if 0
+        for(int t = 0; t < room_size_x * room_size_y; t++) {
             room.shared.tiles[t] = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
         }
+#else
+        for(int y = 0; y < room_size_y; y++) {
+            for(int x = 0; x < room_size_x; x++) {
+
+                v2 tp = { (float)x, (float)y };
+                v2 c  = { room_size_x / 2.0f, room_size_y / 2.0f };
+                
+                Tile t = TILE_GRASS;
+                if(magnitude(tp - c) > room_size_x * 0.5f * 0.9f)
+                {
+                    t = TILE_WATER;
+                }
+                else if (magnitude(tp - c) > room_size_x * 0.5f * 0.8f)
+                {
+                    t = TILE_SAND;
+                }
+
+                room.shared.tiles[y * room_size_x + x] = t;
+            }
+        }
+#endif
         
         array_add(server->room_ids, i + 1);
         array_add(server->rooms,    room);
@@ -521,7 +542,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     else {
                         Entity e = {0};
                         e.shared = create_item_entity(&p.item_to_place, room->shared.t);
-                        e.shared.id   = room->next_entity_id++;
+                        e.shared.id   = 1 + room->next_entity_id_minus_one++;
                         e.shared.p    = new_entity_p;
                         
                         room->entities[room->num_entities++] = e;

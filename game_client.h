@@ -15,12 +15,12 @@ namespace Client_Game
     struct Room
     {
         S__Room shared; // @Jai: Using
-
         double time_offset; // To get the current World_Time, do <system time> + time_offset.
 
-        bool static_geometry_up_to_date;
-
         Array<Entity, ALLOC_GAME> entities;
+        Entity_ID selected_entity;
+        
+        bool static_geometry_up_to_date;
     };
     void reset(Room *room) {
         reset(&room->shared);

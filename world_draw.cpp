@@ -24,7 +24,7 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 case TILE_SAND:  color = &sand; break;
                 case TILE_GRASS: color = &grass; break;
                 case TILE_STONE: color = &stone; break;
-                case TILE_WATER: color = &stone; z = -0.5; break;
+                case TILE_WATER: color = &stone; z = -1; break;
                 default: Assert(false); break;
             }
 
@@ -83,9 +83,9 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
             {
                 float length = c - c0;
 
-                float height = (prev_low) ? 0.5 : 1;
+                float height = (prev_low) ? 1 : 2;
 
-                v3 origin = { 0, 0, -1 };
+                v3 origin = { 0, 0, -2 };
                 origin.comp[comp] = c0;
 
                 v3 d1 = {0};
@@ -208,7 +208,7 @@ void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
 
                 if(tiles[y * room_size_x + x] == TILE_WATER) {
 
-                    float surface_yoffs = -0.18f;
+                    float surface_yoffs = -0.4f;
                     
                     v3 origin = {tile_a.x, tile_a.y, surface_yoffs};
                     float screen_z = vecmatmul_z(origin + V3(0.5, 0.5, 0), projection);
@@ -219,10 +219,10 @@ void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
 
                     // WEST
                     if(x == 0)
-                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -0.5f - surface_yoffs}, {0, 1, 0}, water, gfx);
+                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -1.0f - surface_yoffs}, {0, 1, 0}, water, gfx);
                     // SOUTH
                     if(y == 0)
-                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -0.5f - surface_yoffs}, {1, 0, 0}, water, gfx);
+                        draw_quad({tile_a.x, tile_a.y, surface_yoffs}, {0, 0, -1.0f - surface_yoffs}, {1, 0, 0}, water, gfx);
                 }
             }
         }

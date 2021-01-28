@@ -81,6 +81,135 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
     triangles(v, uvs, colors, tex, 6, gfx);
 }
 
+void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+{
+    v3 p1 = p0 + s;
+
+    v3 a = { p0.x, p0.y, p0.z };
+    v3 b = { p0.x, p0.y, p1.z };
+    v3 c = { p1.x, p0.y, p0.z };
+
+    v3 d = { p1.x, p1.y, p1.z };
+    v3 e = { p1.x, p1.y, p0.z };
+    v3 f = { p1.x, p0.y, p1.z };
+
+    v3 g = { p0.x, p1.y, p1.z };
+    v3 h = { p0.x, p1.y, p0.z };
+    
+    v3 v[6*6] = {
+        a, f, b,
+        a, f, c,
+
+        h, d, e,
+        h, d, g,
+
+        a, e, h,
+        a, e, c,
+
+        f, b, d,
+        g, b, d,
+
+        a, g, b,
+        a, g, h,
+
+        e, c, d,
+        f, c, d
+    };
+    
+    
+    const float default_uvs[6*6*2] = {
+        0, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 1,
+        1, 0,
+
+        0, 0,
+        1, 1,
+        1, 0,
+        0, 0,
+        1, 1,
+        0, 1,
+
+        0, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 1,
+        1, 0,
+
+        
+        1, 0,
+        0, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 1,
+
+        0, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 1,
+        1, 0,
+
+        1, 0,
+        0, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 1
+    };
+
+    v4 colors[6*6] = {
+        color, color, color,
+        color, color, color,
+        
+        color, color, color,
+        color, color, color,
+        
+        color, color, color,
+        color, color, color,
+        
+        color, color, color,
+        color, color, color,
+        
+        color, color, color,
+        color, color, color,
+        
+        color, color, color,
+        color, color, color
+    };
+
+    float t = bound_slot_for_texture(texture, gfx);
+
+    float tex[6*6] = {
+        t, t, t,
+        t, t, t,
+        
+        t, t, t,
+        t, t, t,
+        
+        t, t, t,
+        t, t, t,
+        
+        t, t, t,
+        t, t, t,
+        
+        t, t, t,
+        t, t, t,
+        
+        t, t, t,
+        t, t, t
+    };
+
+    if(uvs == NULL)
+        uvs = (v2 *)default_uvs;
+
+    triangles(v, uvs, colors, tex, 6*6, gfx);
+}
+
 #if 0
 // See @Incomplete notes in func.
 void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)

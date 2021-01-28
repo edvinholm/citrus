@@ -75,6 +75,43 @@ double world_time_for_room(Room *room, double system_time)
     return system_time + room->time_offset;
 }
 
+Entity *raycast_against_entities(Ray ray, Room *room, v3 *_hit_p = NULL)
+{
+    Entity *closest_hit   = NULL;
+    float   closest_ray_t = FLT_MAX;
+    
+    for(int i = 0; i < room->entities.n; i++)
+    {
+        auto *e = &room->entities[i];
+        if(e->shared.type != ENTITY_ITEM) continue;
+
+        // @Speed!
+        
+        Assert(e->shared.item_e.item.type != ITEM_NONE_OR_NUM);
+        Item_Type *item_type = &item_types[e->shared.item_e.item.type];
+        
+        v3s item_type_volume = item_type->volume;
+        
+        AABB bbox;
+        bbox.s = { (float)item_type_volume.x, (float)item_type_volume.y, (float)item_type_volume.z };
+        bbox.p.xy = e->shared.p.xy - bbox.s.xy / 2.0f;
+        bbox.p.z  = e->shared.p.z;
+           
+        float ray_t;
+        v3 intersection;
+        if(ray_intersects_aabb(ray, bbox, &intersection, &ray_t)) {
+            if(ray_t < closest_ray_t) {
+                closest_hit = e;
+                closest_ray_t = ray_t;
+                    
+                if(_hit_p) *_hit_p = intersection;
+            }
+        }
+    }
+
+    return closest_hit;
+}
+
 bool raycast_against_floor(Ray ray, v3 *_hit)
 {
     if(is_zero(ray.dir.z)) return false;
@@ -185,13 +222,21 @@ Entity *add_entity(Entity e, Room *room)
     return array_add(room->entities, e);
 }
 
-Entity *find_or_add_entity(Entity_ID id, Room *room)
+Entity *find_entity(Entity_ID id, Room *room)
 {
     for(int i = 0; i < room->entities.n; i++) {
         auto *e = &room->entities[i];
         if(e->shared.id == id) return e;
     }
 
+    return NULL;
+}
+
+Entity *find_or_add_entity(Entity_ID id, Room *room)
+{
+    Entity *found_entity = find_entity(id, room);
+    if(found_entity) return found_entity;
+    
     Entity new_entity = {0};
     new_entity.shared.id = id;
     return add_entity(new_entity, room);

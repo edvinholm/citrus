@@ -136,6 +136,7 @@ void user_window(UI_Context ctx, Client *client)
         }
     }
     
+    
     auto *us_con = &client->server_connections.user;
     User_ID current_user = us_con->current_user;
 
@@ -156,7 +157,7 @@ void user_window(UI_Context ctx, Client *client)
 }
 
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
-void item_window(UI_Context ctx, Item *item)
+void item_window(UI_Context ctx, Item *item, UI_Click_State *_close_button_state = NULL)
 {
     U(ctx);
     
@@ -164,35 +165,41 @@ void item_window(UI_Context ctx, Item *item)
     Assert(item->type != ITEM_NONE_OR_NUM);
 
     auto *type = &item_types[item->type];
-    _WINDOW_(P(ctx), type->name);
 
-    auto image_s = area(ctx.layout).w * (1 - 0.61803);
-    { _TOP_CUT_(image_s);
+    UI_ID window_id;
+    Rect window_a = begin_window(&window_id, P(ctx), type->name);
+    {
+        _AREA_(window_a);
+
+        auto image_s = area(ctx.layout).w * (1 - 0.61803);
+        { _TOP_CUT_(image_s);
         
-        { _LEFT_CUT_(image_s);
-            button(P(ctx));
-        }
-
-        _SHRINK_(window_default_padding);
-
-        { _TOP_CUT_(20);
-            v3s vol = type->volume;
-            String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
-            ui_text(volume_str, P(ctx));
-        }
-    }
-
-    switch(item->type) {
-        case ITEM_PLANT: {
-            auto *plant = &item->plant;
-                    
-            { _TOP_CUT_(20);   
-                float grow_progress = plant->grow_progress;
-                String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
-                ui_text(grow_str, P(ctx));
+            { _LEFT_CUT_(image_s);
+                button(P(ctx));
             }
-        };
+
+            _SHRINK_(window_default_padding);
+
+            { _TOP_CUT_(20);
+                v3s vol = type->volume;
+                String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
+                ui_text(volume_str, P(ctx));
+            }
+        }
+
+        switch(item->type) {
+            case ITEM_PLANT: {
+                auto *plant = &item->plant;
+                    
+                { _TOP_CUT_(20);   
+                    float grow_progress = plant->grow_progress;
+                    String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
+                    ui_text(grow_str, P(ctx));
+                }
+            };
+        }
     }
+    end_window(window_id, ctx.manager, _close_button_state);
 }
 
 void room_window(UI_Context ctx, Client *client)
@@ -301,8 +308,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         user_window(P(ctx), client);
     }
 
-
-    
     
     { _SHRINK_(16); _LEFT_(240); _BOTTOM_(360);
         
@@ -314,58 +319,80 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         
         auto *room = &client->game.room;
         auto world_t = world_time_for_room(room, t);
-        if(client->game.room.entities.n)
+        if(room->selected_entity != NO_ENTITY)
         {
-            auto *s_e = &last_element_pointer(room->entities)->shared;
-            
-            update_entity_item(s_e, world_t);
-            item_window(P(ctx), &s_e->item_e.item);
-        }
-    }
+            Entity *e = find_entity(room->selected_entity, room);
+            if(e) {
+                auto *s_e = &e->shared;
+                update_entity_item(s_e, world_t);
 
-
-
-    s32 clicked_tile = world_view(P(ctx));
-    if(clicked_tile >= 0)
-    {
-        C_RS_Action action = {0};
-        action.type = C_RS_ACT_CLICK_TILE;
-        auto &ct = action.click_tile;
-        ct.tile_ix = clicked_tile;
-
-        Item *selected_item = get_selected_inventory_item(&client->user);
-        if(selected_item) {
-            ct.item_to_place = *selected_item;
-        } else {
-            Item no_item = {0};
-            no_item.id = NO_ITEM;
-            ct.item_to_place = no_item;
-        }
-        
-        array_add(client->server_connections.room_action_queue, action);
-
-        if(selected_item) {
-            Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(clicked_tile), world_time_for_room(&client->game.room, t));
-
-            // NOTE: We add a preview entity and remove the placed item locally, before
-            //       we know if the operation succeeds.
-            //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
-            //       transaction abort so we get our stuff back / know when to remove the
-            //       preview entity.
-
-            auto type = selected_item->type;
-            
-            add_entity(preview_entity, &client->game.room);
-            inventory_remove_item_locally(selected_item->id, &client->user);
-
-            if(!in_array(input->keys, VKEY_SHIFT) ||
-               !select_next_inventory_item_of_type(type, &client->user))
-            {
-                inventory_deselect(&client->user);
+                UI_Click_State close_button_state;
+                item_window(P(ctx), &s_e->item_e.item, &close_button_state);
+                if(close_button_state & CLICKED_ENABLED) {
+                    room->selected_entity = NO_ENTITY;
+                }
             }
         }
     }
 
+    
+    auto *wv = world_view(P(ctx));
+
+    bool ok_to_select_entity = true;
+    
+    // CLICK TILE //
+    if(wv->clicked_tile_ix >= 0)
+    {
+        Item *selected_item = get_selected_inventory_item(&client->user);
+        
+        if(wv->hovered_entity == NO_ENTITY || selected_item != NULL)
+        {   
+            C_RS_Action action = {0};
+            action.type = C_RS_ACT_CLICK_TILE;
+            auto &ct = action.click_tile;
+            ct.tile_ix = wv->clicked_tile_ix;
+
+            if(selected_item) {
+                ct.item_to_place = *selected_item;
+            } else {
+                Item no_item = {0};
+                no_item.id = NO_ITEM;
+                ct.item_to_place = no_item;
+            }
+        
+            array_add(client->server_connections.room_action_queue, action);
+
+            if(selected_item) {
+                Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(wv->clicked_tile_ix), world_time_for_room(&client->game.room, t));
+
+                // NOTE: We add a preview entity and remove the placed item locally, before
+                //       we know if the operation succeeds.
+                //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
+                //       transaction abort so we get our stuff back / know when to remove the
+                //       preview entity.
+
+                auto type = selected_item->type;
+            
+                add_entity(preview_entity, &client->game.room);
+                inventory_remove_item_locally(selected_item->id, &client->user);
+
+                if(!in_array(input->keys, VKEY_SHIFT) ||
+                   !select_next_inventory_item_of_type(type, &client->user))
+                {
+                    inventory_deselect(&client->user);
+                }
+            }
+            
+            ok_to_select_entity = false;
+        }
+    }
+
+    if(ok_to_select_entity &&
+       wv->clicked_entity != NO_ENTITY)
+    {
+        // SELECT ENTITY //
+        client->game.room.selected_entity = wv->clicked_entity;
+    }
 }
 
 
@@ -476,6 +503,17 @@ void client_set_window_delegate(Window *window, Client *client)
 void init_game(Game *_game)
 {
 
+}
+
+void update_client(Client *client, Input_Manager *input)
+{
+    // ESCAPE KEY //
+    if(in_array(input->keys_down, VKEY_ESCAPE)) {
+        
+        if(client->user.selected_inventory_item_plus_one > 0) {
+            inventory_deselect(&client->user);
+        }
+    }
 }
 
 int client_entry_point(int num_args, char **arguments)
@@ -591,7 +629,8 @@ int client_entry_point(int num_args, char **arguments)
 #endif
             
             client.main_window_a = window_a;
-            
+
+            update_client(&client, input);
             
             // BUILD UI //
             begin_ui_build(ui);
@@ -616,7 +655,7 @@ int client_entry_point(int num_args, char **arguments)
 
             }
             double t = platform_get_time(); // @Robustness: This is safe to do, right?
-            end_ui_build(ui, &client.input, client.fonts, t, &cursor);
+            end_ui_build(ui, &client.input, client.fonts, t, &client.game.room, &cursor);
             // //////// //
 
             reset_temporary_memory();

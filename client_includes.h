@@ -51,8 +51,6 @@
 
 #include "world.h"
 
-#include "ui.h"
-
 //--
 
 #include "game_shared.h"
@@ -66,6 +64,8 @@
 
 #include "net_client.h"
 
+
+#include "ui.h"
 
 
 #include "game_client.h"
