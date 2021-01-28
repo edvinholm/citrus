@@ -245,7 +245,7 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
                         //            This is so the game client knows when to for example start showing the inventory item
                         //            again that the player was trying to place.
                         // (@Hack)
-// nocheckin                        user->inventory_changed = true;
+                        user->inventory_changed = true;
                     }
                 } break;
 

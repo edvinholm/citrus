@@ -131,9 +131,6 @@ bool send_outbound_packets(Network_Node *node)
     Assert(node->current_outbound_packet_start_plus_one == 0);
     
     auto *buf = &node->send_buffer;   
-
-    if(node->packet_queue.n > 0)
-        Debug_Print("Sending %d packets.\n", node->packet_queue.n); // nocheckin
     
     for(int i = 0; i < node->packet_queue.n; i++)
     {
