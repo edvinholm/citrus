@@ -124,22 +124,44 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 
 
 void draw_entity(Entity *e, double world_t, Graphics *gfx)
-{   
-    if(e->shared.type != ENTITY_ITEM) return;
-
-    update_entity_item(&e->shared, world_t);
-    
-    auto *item = &e->shared.item_e.item;
-    Item_Type *item_type = item_types + item->type;
-    v3 origin = e->shared.p;
-    origin.xy -= item_type->volume.xy * 0.5f;
-
+{
     float shadow_factor = 0.90f;
-            
-    v4 side_color_1 = item_type->color;
-    side_color_1.xyz *= shadow_factor;
-    v4 side_color_2 = item_type->color;
-    side_color_2.xyz *= 1.0f / shadow_factor;
+    
+    v3 origin = entity_position(&e->shared, world_t);
+    v3 volume = V3_ONE;
+
+    v4 base_color = V4_ONE;
+    
+    if(e->shared.type == ENTITY_ITEM)
+    {
+        update_entity_item(&e->shared, world_t);
+        
+        auto *item = &e->shared.item_e.item;
+        Item_Type *item_type = item_types + item->type;
+        
+        volume = V3(item_type->volume);
+        
+        if(item->type == ITEM_PLANT)
+        {
+            auto *plant = &e->shared.item_e.item.plant;
+            volume.z *= min(1.0f, plant->grow_progress);
+        }
+
+        base_color = item_type->color;
+    }
+    else if(e->shared.type == ENTITY_PLAYER)
+    {
+        auto *player_e = &e->shared.player_e;
+        
+        volume = { 1.2, 1.2, 3.4 };
+        
+        if(e->player_local.is_me) {
+            base_color = { 0.93, 0.52, 0.33, 1.0 };
+        } else {
+            base_color = { 0.93, 0.72, 0.52, 1.0 };
+        }
+    }
+    
 
     // PREVIEW ANIMATION //
     if(e->is_preview) {
@@ -147,27 +169,28 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
     }
     // ---
 
-    float height = item_type->volume.z;
-    Assert(e->shared.type == ENTITY_ITEM);
-    if(item->type == ITEM_PLANT)
-    {
-        auto *plant = &e->shared.item_e.item.plant;
-        height *= min(1.0f, plant->grow_progress);
-    }
+    v4 side_color_1 = base_color;
+    v4 side_color_2 = base_color;
+    
+    side_color_1.xyz *= shadow_factor;
+    side_color_2.xyz *= 1.0f / shadow_factor;
 
-#if 0 
-    // Bottom
-    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
-#endif
+    origin.xy -= volume.xy * 0.5f;
 
     // Sides //
-    draw_quad(origin, { (float)item_type->volume.x, 0, 0 }, { 0, 0, (float)height }, side_color_1, gfx);
-    draw_quad(origin, { 0, (float)item_type->volume.y, 0 }, { 0, 0, (float)height }, side_color_2, gfx);
+    draw_quad(origin, { (float)volume.x, 0, 0 }, { 0, 0, (float)volume.z }, side_color_1, gfx);
+    draw_quad(origin, { 0, (float)volume.y, 0 }, { 0, 0, (float)volume.z }, side_color_2, gfx);
 
     // Top //
     v3 top_origin = origin;
-    top_origin.z += height;
-    draw_quad(top_origin, { (float)item_type->volume.x, 0, 0 }, { 0, (float)item_type->volume.y, 0 }, item_type->color, gfx);
+    top_origin.z += volume.z;
+    draw_quad(top_origin, { (float)volume.x, 0, 0 }, { 0, (float)volume.y, 0 }, base_color, gfx);
+
+    if(e->shared.type == ENTITY_PLAYER)
+    {
+        float cube_size = 1.8;
+        draw_cube_ps(top_origin - V3_XY * cube_size * 0.5f, V3_ONE * cube_size, base_color, gfx);
+    }
 }
 
 void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)

@@ -195,6 +195,7 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                 for(int i = 0; i < ARRLEN(inventory); i++) {
                     Read_To_Ptr(Item, inventory + i, node);
                 }
+
                 
                 lock_mutex(mutex);
                 {
@@ -203,7 +204,8 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->shared.id        = p->id;
                     user->shared.username  = copy_of(&p->username, ALLOC_APP);
                     user->shared.color     = p->color;
-                    memcpy(user->shared.inventory, inventory, sizeof(user->shared.inventory));
+                    static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
+                    memcpy(user->shared.inventory, inventory, sizeof(inventory));
                 }
                 unlock_mutex(mutex);
             } break;
@@ -216,6 +218,8 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     Read_To_Ptr(Item, inventory + i, node);
                 }
 
+                static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
+
                 lock_mutex(mutex);
                 {
                     clear(&user->shared.username, ALLOC_APP);
@@ -223,7 +227,8 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->shared.id        = p->id;
                     user->shared.username  = copy_of(&p->username, ALLOC_APP);
                     user->shared.color     = p->color;
-                    memcpy(user->shared.inventory, inventory, sizeof(user->shared.inventory));
+                    static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
+                    memcpy(user->shared.inventory, inventory, sizeof(inventory));
                 }
                 unlock_mutex(mutex);
             } break;

@@ -28,6 +28,8 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 
 void create_dummy_entities(Room *room)
 {
+    return;
+    
     v3 pp = { 0, 0 };
     for(int i = 0; i < 4; i++)
     {
@@ -37,11 +39,10 @@ void create_dummy_entities(Room *room)
         Item item = {0};
         item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
 
-        S__Entity e = create_item_entity(&item, room->shared.t);
+        S__Entity e = create_item_entity(&item, pp, room->shared.t);
         e.id = 1 + room->next_entity_id_minus_one++;
-        e.p = pp;
-        e.p.x += item_type->volume.x * 0.5f;
-        e.p.y += item_type->volume.y * 0.5f + (i % 2);
+        e.item_e.p.x += item_type->volume.x * 0.5f;
+        e.item_e.p.y += item_type->volume.y * 0.5f + (i % 2);
 
         Assert(room->num_entities < ARRLEN(room->entities));
         room->entities[room->num_entities++] = { e };
@@ -422,6 +423,42 @@ void add_new_room_clients(Room_Server *server)
             auto *clients = &server->clients[room_index];
             client = array_add(*clients, *client);
             RS_Log("Added client (socket = %lld) to room %d.\n", client->node.socket.handle, client->room);
+
+            // @Norelease: @Temporary: We should not let players connect if there
+            //                         is no entity with their ID.
+            //                         Player entities should be added on request from
+            //                         User Server or another Room Server.
+            // MAKE SURE THERE IS A PLAYER ENTITY //
+            bool player_entity_exists = false;
+            for(int i = 0; i < room->num_entities; i++) {
+                auto *s_e = &room->entities[i].shared;
+                if(s_e->type != ENTITY_PLAYER) continue;
+
+                auto *p = &s_e->player_e;
+                if(p->user_id == client->user) {
+                    player_entity_exists = true;
+                    break;
+                }
+            }
+
+            if(!player_entity_exists) {
+                Entity e = {0};
+                e.shared.id     = 1 + room->next_entity_id_minus_one++;
+                e.shared.type   = ENTITY_PLAYER;
+                
+                v3 p = { (float)random_int(1, room_size_x-1), (float)random_int(1, room_size_y-1), 0 };
+
+                auto *player_e = &e.shared.player_e;
+                player_e->user_id     = client->user;
+                player_e->walk_p0 = p;
+                player_e->walk_p1 = p;
+                
+                Assert(room->num_entities < MAX_ENTITIES_PER_ROOM); // @Norelease: @Temporary: We should not add the entity here anyway (see comment above)
+                room->entities[room->num_entities++] = e;
+
+                room->did_change = true;
+            }
+            // ///////////////// //
         }
 
         queue->count = 0;
@@ -450,49 +487,82 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
 
 
 // TODO @Norelease: Make this real.
-// NOTE: Return value is true if the transaction was successfully committed.
+// NOTE: Return value is true if the user server voted to commit.
+// TODO: @Norelease: When we fail here, we just return false. We should not. We should retry until we succeed.
+//                   After a number of failed retries, send a report about that.
+//                   If the room server can't talk to the user server, there is no idea
+//                   that it keeps running anyway.. (????)
 //       If the return value is false, either the transaction was aborted because of an abort vote,
-//          or there was a communication error. If there was a communication error, *_com_error
-//          is set to true.
-bool fake_item_transaction(Item item, User_ID from_user, Room_Server *server, bool *_com_error)
+//          or there was a communication error.
+bool item_transaction_prepare(User_ID from_user, Item_ID item_id, Room_Server *server, Item *_item)
 {
-    
     //@Norelease: If we fail, disconnect from user server and try to reconnect.
     //           Keep trying until we can connect.
     //           We should not keep trying to connect to the same actual server,
     //           but do the user-id to server lookup every time.
 
-    *_com_error = true;
-    
     RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(from_user, server);
     if(us_con == NULL) return false;
-    
-    *_com_error = false;
 
-    USB_Transaction transaction = {0};
-    transaction.type = USB_T_ITEM;
-    transaction.item_details.item = item;
+    US_Transaction transaction = {0};
+    transaction.type = US_T_ITEM;
+    transaction.item_details.item_id = item_id;
 
-    *_com_error = true;
-    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, TRANSACTION_PREPARE, transaction);
-    *_com_error = false;
+    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, TRANSACTION_PREPARE, &transaction);
     
     UCB_Packet_Header response_header;
-    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, &response_header)) *_com_error = true;
-    
-    if(!*_com_error)
-    {
-        Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
-        auto &p = response_header.transaction_message;
-        
-        if(p.message == TRANSACTION_VOTE_COMMIT)     return true;
-        else if(p.message == TRANSACTION_VOTE_ABORT) return false;
+    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, &response_header)) return false;
 
-        *_com_error = true;
+    //--
+    
+    if(response_header.transaction_message.message == TRANSACTION_VOTE_COMMIT) {
+        *_item = response_header.transaction_message.commit_vote_payload.item;
+        return true;
     }
 
-    Assert(*_com_error);
+    if(response_header.transaction_message.message != TRANSACTION_VOTE_ABORT) {
+        Assert(false);
+    }
+    
     return false;
+}
+
+// TODO @Norelease: Make this real.
+// NOTE: Return value is true if there were no com errors.
+// TODO: @Norelease: When we fail here, we just return false. We should not. We should retry until we succeed.
+//                   After a number of failed retries, send a report about that.
+//                   If the room server can't talk to the user server, there is no idea
+//                   that it keeps running anyway.. (????)
+bool item_transaction_send_decision(bool commit, User_ID user_id, Room_Server *server)
+{
+    //@Norelease: If we fail, disconnect from user server and try to reconnect.
+    //           Keep trying until we can connect.
+    //           We should not keep trying to connect to the same actual server,
+    //           but do the user-id to server lookup every time.
+    
+    RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user_id, server);
+    if(us_con == NULL) {
+        RS_Log("Unable to connect to User Server for User ID = %llu.\n", user_id);
+        return false;
+    }
+    
+    auto message = (commit) ? TRANSACTION_COMMAND_COMMIT : TRANSACTION_COMMAND_ABORT;
+    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, message, NULL);
+    return true;
+}
+
+
+Entity *find_player_entity(User_ID user_id, Room *room)
+{
+    for(int i = 0; i < room->num_entities; i++) {
+        auto *e = &room->entities[i];
+        if(e->shared.type != ENTITY_PLAYER) continue;
+        if(e->shared.player_e.user_id == user_id) {
+            return e;
+        }
+    }
+
+    return NULL;
 }
 
 
@@ -511,49 +581,70 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             Fail_If_True(p.tile_ix >= room_size_x * room_size_y);
             Fail_If_True(p.tile_ix < 0);
 
-            auto tile_x = p.tile_ix % room_size_x;
-            auto tile_y = p.tile_ix / room_size_x;
+            v3 tp = tp_from_index(p.tile_ix);
 
-            if(p.item_to_place.id != NO_ITEM) {
-                
-                if(room->num_entities < MAX_ENTITIES_PER_ROOM) {
+            if(p.item_to_place != NO_ITEM)
+            {            
+                // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
+                //            This is so the game client can know when to for example remove preview entities.
+                // (@Hack)
+                room->did_change = true;
 
-                    v3 new_entity_p = { (float)tile_x, (float)tile_y, 0 };
-                    
-                    v3s volume = item_types[p.item_to_place.type].volume;
-                    if(volume.x % 2 != 0) new_entity_p.x += 0.5f;
-                    if(volume.y % 2 != 0) new_entity_p.y += 0.5f;
+                if(room->num_entities < MAX_ENTITIES_PER_ROOM)
+                {
+                    bool can_commit = true;
 
-                    bool transaction_com_error;
-                    
-                    if(!fake_item_transaction(p.item_to_place, client->user, server, &transaction_com_error))
-                    {
-                        const char *reason = "Abort";
-                        if(transaction_com_error) {
-                            reason = "Com Error";
-                        }                        
-                        RS_Log("Item transaction failed (Reason: %s) when trying to place item ID = %llu by user ID = %llu at (%f, %f, %f) in room.\n", reason, p.item_to_place.id, client->user, new_entity_p.x, new_entity_p.y, new_entity_p.z);
+                    bool com_error;
 
-                        // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
-                        //            This is so the game client can know when to for example remove preview entities.
-                        // (@Hack)
-                        room->did_change = true;
+                    // Get item, ask User Server if it can commit //
+                    Item item;
+                    if(can_commit && !item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
+                        can_commit = false;
                     }
-                    else {
+
+                    // Check if we can commit //
+                    if(can_commit) {
+                        can_commit = can_place_item_entity_at_tp(&item, tp, room->shared.t, &room->shared, room->entities, room->num_entities);
+                    }
+
+                    if(can_commit)
+                    {
+                        // Do commit //
+                        
+                        if(!item_transaction_send_decision(true, client->user, server)) {
+                            // @Norelease: Handle com error. This proc should probably not
+                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        }
+
+                        v3 p = item_entity_p_from_tp(tp, &item);
+                            
                         Entity e = {0};
-                        e.shared = create_item_entity(&p.item_to_place, room->shared.t);
+                        e.shared = create_item_entity(&item, p, room->shared.t);
                         e.shared.id   = 1 + room->next_entity_id_minus_one++;
-                        e.shared.p    = new_entity_p;
                         
                         room->entities[room->num_entities++] = e;
-                    
-                        room->did_change = true;
                     }
+                    else {
+                        // Do abort //
+                        
+                        if(!item_transaction_send_decision(false, client->user, server)) {
+                            // @Norelease: Handle com error. This proc should probably not
+                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        }
+                    }
+                    
                 }
             }
             else {
                 room->shared.tiles[p.tile_ix]++;
                 room->shared.tiles[p.tile_ix] %= TILE_NONE_OR_NUM;
+
+                Entity *e = find_player_entity(client->user, room);
+                if(e) {
+                    e->shared.player_e.walk_p0 = entity_position(&e->shared, room->shared.t);
+                    e->shared.player_e.walk_t0 = room->shared.t;
+                    e->shared.player_e.walk_p1 = tp_from_index(p.tile_ix);
+                }
                 
                 room->did_change = true;
             }

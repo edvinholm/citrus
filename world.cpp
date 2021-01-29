@@ -75,7 +75,7 @@ double world_time_for_room(Room *room, double system_time)
     return system_time + room->time_offset;
 }
 
-Entity *raycast_against_entities(Ray ray, Room *room, v3 *_hit_p = NULL)
+Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL)
 {
     Entity *closest_hit   = NULL;
     float   closest_ray_t = FLT_MAX;
@@ -83,19 +83,8 @@ Entity *raycast_against_entities(Ray ray, Room *room, v3 *_hit_p = NULL)
     for(int i = 0; i < room->entities.n; i++)
     {
         auto *e = &room->entities[i];
-        if(e->shared.type != ENTITY_ITEM) continue;
 
-        // @Speed!
-        
-        Assert(e->shared.item_e.item.type != ITEM_NONE_OR_NUM);
-        Item_Type *item_type = &item_types[e->shared.item_e.item.type];
-        
-        v3s item_type_volume = item_type->volume;
-        
-        AABB bbox;
-        bbox.s = { (float)item_type_volume.x, (float)item_type_volume.y, (float)item_type_volume.z };
-        bbox.p.xy = e->shared.p.xy - bbox.s.xy / 2.0f;
-        bbox.p.z  = e->shared.p.z;
+        AABB bbox = entity_aabb(&e->shared, world_t);
            
         float ray_t;
         v3 intersection;
@@ -178,28 +167,15 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
 }
 
 
-v3 tp_from_index(s32 tile_index)
-{
-    int y = tile_index / room_size_x;
-    int x = tile_index % room_size_x;
-    return { (float)x, (float)y, 0 };
-}
-
-
-
 // NOTE: tp is tile position.
 Entity create_preview_item_entity(Item *item, v3 tp, double world_t)
 {
+    v3 p = item_entity_p_from_tp(tp, item);
+    
     Entity e = {0};
-    e.shared = create_item_entity(item, world_t);
-    e.shared.p = tp;
+    e.shared = create_item_entity(item, p, world_t);
 
     e.is_preview = true;
-    
-    v3s volume = item_types[item->type].volume;
-    if(volume.x % 2 != 0) e.shared.p.x += 0.5f;
-    if(volume.y % 2 != 0) e.shared.p.y += 0.5f;
-
     return e;
 }
 
@@ -240,6 +216,17 @@ Entity *find_or_add_entity(Entity_ID id, Room *room)
     Entity new_entity = {0};
     new_entity.shared.id = id;
     return add_entity(new_entity, room);
+}
+
+void prepare_entity_for_drawing(Entity *e, User_ID my_user_id)
+{
+    if(e->shared.type != ENTITY_PLAYER) return;
+    e->player_local.is_me = (e->shared.player_e.user_id == my_user_id);
+}
+
+bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
+{
+    return can_place_item_entity_at_tp(item, tp, world_t, &room->shared, room->entities.e, room->entities.n);
 }
 
 // ///////////////////// //

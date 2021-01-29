@@ -631,7 +631,7 @@ void draw_world_view_background(UI_Element *e, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room *room, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
@@ -644,11 +644,18 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Graph
             draw_entity(&preview_entity, world_t, gfx);
 
             Assert(preview_entity.shared.type == ENTITY_ITEM);
+
+            v3 p = preview_entity.shared.item_e.p;
             
-            v3 p0 = preview_entity.shared.p;
+            v3 p0 = p;
             auto vol = item_types[selected_item->type].volume;
             p0.xy -= vol.xy * 0.5f;
-            draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, { 0.12, 0.12, 0.12, 1 }, gfx);
+
+            v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
+            if(!can_place_item_entity(selected_item, p, world_t, &room->shared, room->entities.e, room->entities.n))
+                shadow_color = { 0.4,   0.1,  0.1, 1 };
+            
+            draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
         }
         else {
             draw_quad(tp + V3_Z * 0.001f, V3_X, V3_Y, { 1, 0, 0, 1 }, gfx);
@@ -813,6 +820,9 @@ DWORD render_loop(void *loop_)
                        
                             m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx.z_for_2d);                        
 
+                            for(int i = 0; i < room->entities.n; i++) {
+                                prepare_entity_for_drawing(&room->entities[i], client->user.shared.id);
+                            }
                             draw_world(room, t, projection, &gfx);
 
                             v3 hovered_tile_p = {0};
@@ -820,7 +830,7 @@ DWORD render_loop(void *loop_)
                             hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
                             
                             Item *selected_item = get_selected_inventory_item(&client->user);
-                            draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, &gfx);
+                            draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, &client->game.room, &gfx);
 
                             gfx.z_for_2d -= 0.2;
 

@@ -1,7 +1,4 @@
 
-typedef u64 User_ID;
-const User_ID NO_USER = 0;
-
 struct S__User
 {
     User_ID id;

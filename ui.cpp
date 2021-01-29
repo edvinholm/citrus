@@ -1436,7 +1436,7 @@ UI_World_View *world_view(UI_Context ctx)
     return view;
 }
 
-void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, Room *room)
+void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, Room *room, double t)
 {    
     Assert(e->type == WORLD_VIEW);
     auto *view = &e->world_view;
@@ -1453,8 +1453,10 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     {
         Assert(point_inside_rect(mouse->p, view->a));
 
+        double world_t = world_time_for_room(room, t);
+        
         v3 entity_hit_p;
-        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, &entity_hit_p);
+        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, &entity_hit_p);
         if (entity_hit) {
 
             hovered_entity = entity_hit->shared.id;
@@ -1730,7 +1732,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             } break;
             case SLIDER:     update_slider(e, input, hovered_element);     break;
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
-            case WORLD_VIEW: update_world_view(e, input, hovered_element, room); break;
+            case WORLD_VIEW: update_world_view(e, input, hovered_element, room, t); break;
 
             case PANEL:
             case UI_TEXT:

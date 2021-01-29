@@ -60,7 +60,8 @@ bool equal(Item *a, Item *b)
 
 enum Entity_Type
 {
-    ENTITY_ITEM
+    ENTITY_ITEM,
+    ENTITY_PLAYER
 };
 
 typedef u64 Entity_ID;
@@ -70,11 +71,12 @@ struct S__Entity
 {
     Entity_ID id;
     
-    v3 p;
     Entity_Type type;
 
     union {
-        struct { // item
+        struct {
+            v3 p;
+            
             Item item;
 
             union {
@@ -84,48 +86,18 @@ struct S__Entity
                 } plant;
             };
         } item_e;
+
+        struct {
+            User_ID user_id;
+
+            v3         walk_p0;
+            v3         walk_p1;
+            World_Time walk_t0;
+            
+        } player_e;
     };
 };
   
-
-// TODO @Cleanup: Move from header.
-//                This should be available to both server and client though.
-void update_entity_item(S__Entity *e, double world_t)
-{
-    Assert(e->type == ENTITY_ITEM);
-
-    auto *item = &e->item_e.item;
-    switch(item->type) {
-        case ITEM_PLANT: {
-            auto *plant = &item->plant;
-            auto *state = &e->item_e.plant;
-
-            plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * (1.0f / 60.0f);
-        } break;
-    }
-}
-
-
-// TODO @Cleanup: Move from header.
-//                This should be available to both server and client though.
-S__Entity create_item_entity(Item *item, double world_t)
-{
-    S__Entity e = {0};
-    e.type = ENTITY_ITEM;
-    e.item_e.item = *item;
-
-    switch(e.item_e.item.type) {
-        case ITEM_PLANT: {
-            auto *plant_e = &e.item_e.plant;
-            plant_e->t_on_plant = world_t;
-            plant_e->grow_progress_on_plant = item->plant.grow_progress;
-        } break;
-    }
-
-    return e;
-}
-
-
 
 // Must fit in a s8.
 enum Tile_Type {
@@ -148,7 +120,7 @@ typedef s32 Room_ID; // Only positive numbers are allowed room IDs.
 // Contains what's shared between client and server.
 struct S__Room
 {
-    World_Time t;
+    World_Time t; // t should only be on server. Client computes this (system_time + time_offset). Send this only in INIT_ROOM
     Tile tiles[room_size_x * room_size_y];
 };
 void reset(S__Room *room) {

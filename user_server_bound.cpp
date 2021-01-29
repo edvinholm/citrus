@@ -17,20 +17,6 @@ enum USB_Packet_Type
     USB_TRANSACTION_MESSAGE = 3
 };
 
-enum USB_Transaction_Type
-{
-    USB_T_ITEM = 1
-};
-
-struct USB_Transaction
-{
-    USB_Transaction_Type type;
-    union {
-        struct {
-            Item item;
-        } item_details;
-    };
-};
 
 enum US_Client_Type
 {
@@ -53,7 +39,7 @@ struct USB_Packet_Header
         
         struct {
             Transaction_Message message;
-            USB_Transaction transaction;
+            US_Transaction transaction;
         } transaction_message;
     };
 };
@@ -75,53 +61,6 @@ bool write_USB_Packet_Type(USB_Packet_Type type, Network_Node *node)
 
 
 
-bool write_USB_Transaction_Type(USB_Transaction_Type type, Network_Node *node)
-{
-    Write(u16, type, node);
-    return true;
-}
-
-// @Norelease TODO: Check that it is a valid type.
-bool read_USB_Transaction_Type(USB_Transaction_Type *_type, Network_Node *node)
-{
-    Read(u16, type, node);
-    *_type = (USB_Transaction_Type)type;
-    return true;
-}
-
-bool read_USB_Transaction(USB_Transaction *_transaction, Network_Node *node)
-{
-    Read_To_Ptr(USB_Transaction_Type, &_transaction->type, node);
-    switch(_transaction->type) {
-        case USB_T_ITEM: {
-            auto *x = &_transaction->item_details;
-            Read_To_Ptr(Item, &x->item, node);
-        } break;
-
-        default: Assert(false); return false;
-    }
-
-    return true;
-}
-
-bool write_USB_Transaction(USB_Transaction transaction, Network_Node *node)
-{
-    Write(USB_Transaction_Type, transaction.type, node);
-    
-    switch(transaction.type)
-    {
-        case USB_T_ITEM: {
-            Write(Item, transaction.item_details.item, node);
-        } break;
-
-        default: Assert(false); return false;
-    }
-
-    return true;
-}
-
-
-
 bool read_US_Client_Type(US_Client_Type *_type, Network_Node *node)
 {
     Read(u8, type, node);
@@ -134,7 +73,6 @@ bool write_US_Client_Type(US_Client_Type type, Network_Node *node)
     Write(u8, type, node);
     return true;
 }
-
 
 
 bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
@@ -155,7 +93,10 @@ bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
         case USB_TRANSACTION_MESSAGE: {
             auto *p = &_header->transaction_message;
             Read_To_Ptr(Transaction_Message, &p->message, node);
-            Read_To_Ptr(USB_Transaction, &p->transaction, node);
+
+            if(p->message == TRANSACTION_PREPARE) {
+                Read_To_Ptr(US_Transaction, &p->transaction, node);
+            }
         } break;
 
         default: Assert(false); break;
@@ -198,19 +139,29 @@ bool send_USB_GOODBYE_packet_now(Network_Node *node)
 }
 
 
-bool enqueue_USB_TRANSACTION_MESSAGE_packet(Network_Node *node, Transaction_Message message, USB_Transaction transaction)
+bool enqueue_USB_TRANSACTION_MESSAGE_packet(Network_Node *node, Transaction_Message message, US_Transaction *transaction)
 {
+    if(message == TRANSACTION_PREPARE) {
+        Assert(transaction);
+    } else {
+        Assert(!transaction);
+    }
+    
     begin_outbound_packet(node);
     {
         Write(USB_Packet_Type, USB_TRANSACTION_MESSAGE, node);
         //--
     
         Write(Transaction_Message, message,    node);
-        Write(USB_Transaction,     transaction, node);
+
+        if(message == TRANSACTION_PREPARE) {
+            Write(US_Transaction, *transaction, node);
+        }
     }
     end_outbound_packet(node);
     return true;
 }
+
 
 
 

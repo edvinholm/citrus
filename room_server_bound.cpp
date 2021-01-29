@@ -25,7 +25,7 @@ struct RSB_Packet_Header
         
         struct {
             u64 tile_ix;
-            Item item_to_place;
+            Item_ID item_to_place;
         } click_tile;
     };
 };
@@ -70,8 +70,8 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
 
         case RSB_CLICK_TILE: {
             auto *p = &_header->click_tile;
-            Read_To_Ptr(u64, &p->tile_ix, node);
-            Read_To_Ptr(Item, &p->item_to_place, node);
+            Read_To_Ptr(u64,     &p->tile_ix, node);
+            Read_To_Ptr(Item_ID, &p->item_to_place, node);
         } break;
     }
     

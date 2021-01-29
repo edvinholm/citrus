@@ -10,6 +10,12 @@ namespace Client_Game
     {
         S__Entity shared; // @Jai: Using
         bool is_preview; // We use an entity with this set to true while we wait for a ROOM_UPDATE after we've sent a request to place an item in the room.
+
+        union {
+            struct {
+                bool is_me;
+            } player_local;
+        };
     };
  
     struct Room

@@ -183,13 +183,13 @@ DWORD user_server_listening_loop(void *user_server_)
     return 0;
 }
 
-void commit_transaction(USB_Transaction t, User *user)
+void commit_transaction(US_Transaction t, User *user)
 {
     switch(t.type) {
-        case USB_T_ITEM: {
+        case US_T_ITEM: {
 
             for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                if(user->shared.inventory[i].id == t.item_details.item.id) {
+                if(user->shared.inventory[i].id == t.item_details.item_id) {
                     // @Boilerplate: Client: world.cpp: empty_inventory_slot_locally()
                     Zero(user->shared.inventory[i]);
                     user->shared.inventory[i].id = NO_ITEM;
@@ -206,13 +206,19 @@ void commit_transaction(USB_Transaction t, User *user)
     }
 }
 
-bool transaction_possible(USB_Transaction t, User *user)
+bool transaction_possible(US_Transaction t, User *user, UCB_Transaction_Commit_Vote_Payload *_commit_vote_payload)
 {
+    Zero(*_commit_vote_payload);
+    
     switch(t.type) {
-        case USB_T_ITEM: {
+        case US_T_ITEM: {
             for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                if(equal(&user->shared.inventory[i], &t.item_details.item))
+                auto *item = &user->shared.inventory[i];
+                if(item->id == t.item_details.item_id)
+                {
+                    _commit_vote_payload->item = *item;
                     return true;
+                }
             }
             return false;
         } break;
@@ -221,11 +227,41 @@ bool transaction_possible(USB_Transaction t, User *user)
     }
 }
 
-bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, User *user)
+bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, User *user, bool *current_transaction_exists, US_Transaction *current_transaction)
 {
     // NOTE: USB_GOODBYE is handled somewhere else.
 
     auto *node = &client->node;
+
+    if(*current_transaction_exists) {
+
+        if(header.type == USB_TRANSACTION_MESSAGE) {
+            auto &p = header.transaction_message;
+
+            switch(p.message) {
+                case TRANSACTION_COMMAND_COMMIT: {
+                    commit_transaction(*current_transaction, user);
+                } break;
+
+                case TRANSACTION_COMMAND_ABORT: {
+                    // IMPORTANT: If we fail to do the transaction, we still want to send a USER_UPDATE.
+                    //            This is so the game client knows when to for example start showing the inventory item
+                    //            again that the player was trying to place.
+                    // (@Hack)
+                    user->inventory_changed = true;
+                } break;
+
+                default: Assert(false); return false;
+            }
+        }
+        else {
+            US_Log("Was waiting for a USB_TRANSACTION_MESSAGE but got header.type = %u.\n", header.type);
+            return false;
+        }
+
+        *current_transaction_exists = false;
+        return true;
+    }
     
     switch(header.type) {
 
@@ -235,17 +271,20 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
             switch(p.message) {
 
                 case TRANSACTION_PREPARE: {
-                    if(transaction_possible(p.transaction, user)) {
-                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, TRANSACTION_VOTE_COMMIT);
-                        commit_transaction(p.transaction, user);
-                    } else {
-                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, TRANSACTION_VOTE_ABORT);
+                    
+                    *current_transaction_exists = true;
+                    *current_transaction        = p.transaction;
 
-                        // IMPORTANT: If we fail to do the transaction, we still want to send a USER_UPDATE.
-                        //            This is so the game client knows when to for example start showing the inventory item
-                        //            again that the player was trying to place.
-                        // (@Hack)
-                        user->inventory_changed = true;
+                    UCB_Transaction_Commit_Vote_Payload commit_vote_payload;
+                    if(transaction_possible(p.transaction, user, &commit_vote_payload))
+                    {
+                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, p.transaction.type,
+                                 TRANSACTION_VOTE_COMMIT, &commit_vote_payload);
+                    }
+                    else
+                    {
+                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, p.transaction.type,
+                                 TRANSACTION_VOTE_ABORT);
                     }
                 } break;
 
@@ -403,6 +442,13 @@ void add_new_user_clients(User_Server *server)
     unlock_mutex(queue->mutex);
 }
 
+bool get_next_us_client_packet_or_disconnect(US_Client *client, USB_Packet_Header *_header, bool *_client_disconnected)
+{
+    *_client_disconnected = false;
+    
+    return true;
+}
+
 
 // REMEMBER to init_user_server before starting this.
 //          IMPORTANT: Do NOT deinit_user_server after
@@ -457,8 +503,11 @@ DWORD user_server_main_loop(void *server_) {
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
 
-                while(true) {
+                bool current_transaction_exists;
+                US_Transaction current_transaction;
 
+                while(true) {
+                    
                     bool error;
                     if(!receive_next_network_node_packet(&client->node, &error)) {
                         if(error) {
@@ -470,24 +519,28 @@ DWORD user_server_main_loop(void *server_) {
                     
                     USB_Packet_Header header;
                     USB_Header(client, &header);
-                    if(client == NULL) { c--; break; }
+                    if(client == NULL) {
+                        c--;
+                        break;
+                    }
 
                     bool do_disconnect = false;
-
+                    
                     if(header.type == USB_GOODBYE) {
                         // TODO @Norelease: Better logging, with more client info etc.
                         RS_Log("Client (socket = %lld) sent goodbye message.\n", client->node.socket.handle);
                         do_disconnect = true;
                     }
-                    else if(!read_and_handle_usb_packet(client, header, user)) {
+                    else if(!read_and_handle_usb_packet(client, header, user, &current_transaction_exists, &current_transaction)) {
                         do_disconnect = true;
                     }
-                    
+
                     if (do_disconnect) { // @Cleanup @Boilerplate
                         disconnect_user_client(client);
                         c--;
                         break;
                     }
+                    
                 }
             }
 

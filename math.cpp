@@ -166,8 +166,8 @@ T clamp(T value, T min = 0, T max = 1)
     return value;
 }
 
-inline
-float Lerp(float x, float y, float T)
+template<typename T, typename U, typename V>
+T lerp(T x, U y, V T)
 {
     return x + (y-x)*T;
 }
@@ -537,5 +537,25 @@ bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_r
 
     if(_intersection) *_intersection = closest_hit;
     if(_ray_t)        *_ray_t        = closest_hit_t;
+    return true;
+}
+
+bool aabb_intersects_aabb(AABB a, AABB b)
+{
+    // @Speed: Do we want to represent AABBs as centerpoint, "radiuses" instead, so we don't need to calculate that here?
+    
+    auto a_r = a.s * 0.5f;
+    auto a_c = a.p + a_r;
+    
+    auto b_r = b.s * 0.5f;
+    auto b_c = b.p + b_r;
+
+    // @Hack: We don't adjacent entities to count as intersecting....
+    //        So I added this stupid "very small" number here.
+    //        Hmm.. Probably will laugh at this in a couple of years. - EH, 2021-01-29
+    if (fabs(a_c.x - b_c.x) + 0.001f > (a_r.x + b_r.x)) return false;
+    if (fabs(a_c.y - b_c.y) + 0.001f > (a_r.y + b_r.y)) return false;
+    if (fabs(a_c.z - b_c.z) + 0.001f > (a_r.z + b_r.z)) return false;
+
     return true;
 }

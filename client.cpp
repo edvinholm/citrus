@@ -304,7 +304,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     }
 
     if(cui->user_window_open)
-    { _RIGHT_(320);
+    { _RIGHT_CUT_(320);
         user_window(P(ctx), client);
     }
 
@@ -324,12 +324,16 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             Entity *e = find_entity(room->selected_entity, room);
             if(e) {
                 auto *s_e = &e->shared;
-                update_entity_item(s_e, world_t);
 
-                UI_Click_State close_button_state;
-                item_window(P(ctx), &s_e->item_e.item, &close_button_state);
-                if(close_button_state & CLICKED_ENABLED) {
-                    room->selected_entity = NO_ENTITY;
+                if(s_e->type == ENTITY_ITEM)
+                {
+                    update_entity_item(s_e, world_t);
+
+                    UI_Click_State close_button_state;
+                    item_window(P(ctx), &s_e->item_e.item, &close_button_state);
+                    if(close_button_state & CLICKED_ENABLED) {
+                        room->selected_entity = NO_ENTITY;
+                    }
                 }
             }
         }
@@ -340,9 +344,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     bool ok_to_select_entity = true;
     
+    
     // CLICK TILE //
     if(wv->clicked_tile_ix >= 0)
     {
+        auto *user = &client->user;
+        auto *room = &client->game.room;
+        double world_t = world_time_for_room(room, t);
         Item *selected_item = get_selected_inventory_item(&client->user);
         
         if(wv->hovered_entity == NO_ENTITY || selected_item != NULL)
@@ -352,38 +360,43 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             auto &ct = action.click_tile;
             ct.tile_ix = wv->clicked_tile_ix;
 
-            if(selected_item) {
-                ct.item_to_place = *selected_item;
-            } else {
-                Item no_item = {0};
-                no_item.id = NO_ITEM;
-                ct.item_to_place = no_item;
-            }
-        
-            array_add(client->server_connections.room_action_queue, action);
+            v3 tp = tp_from_index(ct.tile_ix);
 
-            if(selected_item) {
-                Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(wv->clicked_tile_ix), world_time_for_room(&client->game.room, t));
-
-                // NOTE: We add a preview entity and remove the placed item locally, before
-                //       we know if the operation succeeds.
-                //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
-                //       transaction abort so we get our stuff back / know when to remove the
-                //       preview entity.
-
-                auto type = selected_item->type;
-            
-                add_entity(preview_entity, &client->game.room);
-                inventory_remove_item_locally(selected_item->id, &client->user);
-
-                if(!in_array(input->keys, VKEY_SHIFT) ||
-                   !select_next_inventory_item_of_type(type, &client->user))
-                {
-                    inventory_deselect(&client->user);
+            if(!selected_item || can_place_item_entity_at_tp(selected_item, tp, world_t, room))
+            {
+                if(selected_item) {
+                    ct.item_to_place = *selected_item;
+                } else {
+                    Item no_item = {0};
+                    no_item.id = NO_ITEM;
+                    ct.item_to_place = no_item;
                 }
-            }
+
+                array_add(client->server_connections.room_action_queue, action);
+
+                if(selected_item) {
+                    Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(wv->clicked_tile_ix), world_t);
+
+                    // NOTE: We add a preview entity and remove the placed item locally, before
+                    //       we know if the operation succeeds.
+                    //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
+                    //       transaction abort so we get our stuff back / know when to remove the
+                    //       preview entity.
+
+                    auto type = selected_item->type;
             
-            ok_to_select_entity = false;
+                    add_entity(preview_entity, room);
+                    inventory_remove_item_locally(selected_item->id, user);
+
+                    if(!in_array(input->keys, VKEY_SHIFT) ||
+                       !select_next_inventory_item_of_type(type, user))
+                    {
+                        inventory_deselect(user);
+                    }
+                }
+            
+                ok_to_select_entity = false;
+            }
         }
     }
 

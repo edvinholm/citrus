@@ -6,12 +6,15 @@
 
 #include "random.cpp"
 
+#include "user_pre.h"
 #include "game_shared.h"
 #include "game_server.h"
 using namespace Server_Game;
 
 #include "user.h"
 using namespace Server_User;
+
+#include "world_shared.cpp"
 
 #include "log.cpp"
 

@@ -19,7 +19,15 @@ enum UCB_Packet_Type
     UCB_USER_INIT = 3,
     UCB_USER_UPDATE = 4,
 
-    UCB_TRANSACTION_MESSAGE = 5
+    UCB_TRANSACTION_MESSAGE = 5,
+    UCB_ITEM_INFO = 6
+};
+
+struct UCB_Transaction_Commit_Vote_Payload
+{
+    union {
+        Item item;
+    };
 };
 
 struct UCB_Packet_Header
@@ -44,7 +52,12 @@ struct UCB_Packet_Header
         } user_update;
 
         struct {
+            US_Transaction_Type transaction_type;
             Transaction_Message message;
+
+            union {
+                UCB_Transaction_Commit_Vote_Payload commit_vote_payload; // Only valid if message == TRANSACTION_VOTE_COMMIT
+            };
         } transaction_message;
     };
 };
@@ -159,14 +172,29 @@ bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String usern
     return true;
 }
 
-bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node, Transaction_Message message)
+bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node,
+                                            US_Transaction_Type transaction_type,
+                                            Transaction_Message message,
+                                            UCB_Transaction_Commit_Vote_Payload *commit_vote_payload = NULL)
 {
     begin_outbound_packet(node);
     {
         Write(UCB_Packet_Type, UCB_TRANSACTION_MESSAGE, node);
         //--
 
+        Write(US_Transaction_Type, transaction_type, node);
         Write(Transaction_Message, message, node);
+
+        if(message == TRANSACTION_VOTE_COMMIT)
+        {
+            Assert(commit_vote_payload);
+            switch(transaction_type)
+            {
+                case US_T_ITEM: {
+                    Write(Item, commit_vote_payload->item, node);
+                } break;
+            }
+        }
     }
     end_outbound_packet(node);
     return true;
@@ -207,7 +235,18 @@ bool read_UCB_Packet_Header(UCB_Packet_Header *_header, Network_Node *node)
             
         case UCB_TRANSACTION_MESSAGE: {
             auto *p = &_header->transaction_message;
+            Read_To_Ptr(US_Transaction_Type, &p->transaction_type, node);
             Read_To_Ptr(Transaction_Message, &p->message, node);
+
+            if(p->message == TRANSACTION_VOTE_COMMIT)
+            {
+                switch(p->transaction_type)
+                {
+                    case US_T_ITEM: {
+                        Read_To_Ptr(Item, &p->commit_vote_payload.item, node);
+                    } break;
+                }
+            }
         } break;
 
         default: Assert(false); return false;

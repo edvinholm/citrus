@@ -566,12 +566,14 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
     Zero(*_entity);
     
     Read_To_Ptr(Entity_ID,   &_entity->id,   node);
-    Read_To_Ptr(v3,          &_entity->p,    node);
     Read_To_Ptr(Entity_Type, &_entity->type, node);
 
     switch(_entity->type) {
         case ENTITY_ITEM: {
             auto *x = &_entity->item_e;
+            
+            Read_To_Ptr(v3, &x->p, node);
+            
             Read_To_Ptr(Item, &x->item, node);
             
             switch(x->item.type) {
@@ -581,6 +583,15 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                     Read_To_Ptr(float,      &plant->grow_progress_on_plant, node);
                 } break;
             }
+        } break;
+            
+        case ENTITY_PLAYER: {
+            auto *x = &_entity->player_e;
+            Read_To_Ptr(User_ID, &x->user_id, node);
+            
+            Read_To_Ptr(v3,         &x->walk_p0, node);
+            Read_To_Ptr(v3,         &x->walk_p1, node);
+            Read_To_Ptr(World_Time, &x->walk_t0, node);
         } break;
 
         default: Assert(false); return false;
@@ -592,12 +603,14 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
 bool write_Entity(S__Entity *entity, Network_Node *node)
 {
     Write(Entity_ID,   entity->id,   node);
-    Write(v3,          entity->p,    node);
     Write(Entity_Type, entity->type, node);
 
     switch(entity->type) {
         case ENTITY_ITEM: {
             auto *x = &entity->item_e;
+            
+            Write(v3, x->p, node);
+            
             Write(Item, x->item, node);
             
             switch(x->item.type) {
@@ -608,6 +621,15 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                 } break;
             }
             
+        } break;
+
+        case ENTITY_PLAYER: {
+            auto *x = &entity->player_e;
+            Write(User_ID, x->user_id, node);
+
+            Write(v3,         x->walk_p0, node);
+            Write(v3,         x->walk_p1, node);
+            Write(World_Time, x->walk_t0, node);
         } break;
 
         default: Assert(false); return false;
