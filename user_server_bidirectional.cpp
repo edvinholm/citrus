@@ -13,7 +13,16 @@ struct US_Transaction
     US_Transaction_Type type;
     union {
         struct {
-            Item_ID item_id;
+            bool is_server_bound; // If true, the item should be transferred client -> server, otherwise server -> client
+            union {
+                struct {
+                    Item item;
+                } server_bound;
+                
+                struct {
+                    Item_ID item_id;      
+                } client_bound;
+            };
         } item_details;
     };
 };
@@ -37,9 +46,16 @@ bool read_US_Transaction(US_Transaction *_transaction, Network_Node *node)
 {
     Read_To_Ptr(US_Transaction_Type, &_transaction->type, node);
     switch(_transaction->type) {
+        
         case US_T_ITEM: {
             auto *x = &_transaction->item_details;
-            Read_To_Ptr(Item_ID, &x->item_id, node);
+            
+            Read_To_Ptr(bool,    &x->is_server_bound, node);
+            if(x->is_server_bound) {
+                Read_To_Ptr(Item, &x->server_bound.item, node);
+            } else {
+                Read_To_Ptr(Item_ID, &x->client_bound.item_id, node);
+            }
         } break;
 
         default: Assert(false); return false;
@@ -55,7 +71,14 @@ bool write_US_Transaction(US_Transaction transaction, Network_Node *node)
     switch(transaction.type)
     {
         case US_T_ITEM: {
-            Write(Item_ID, transaction.item_details.item_id, node);
+            auto *x = &transaction.item_details;
+            
+            Write(bool,    x->is_server_bound, node);
+            if(x->is_server_bound) {
+                Write(Item, x->server_bound.item, node);
+            } else {
+                Write(Item_ID, x->client_bound.item_id, node);
+            }
         } break;
 
         default: Assert(false); return false;

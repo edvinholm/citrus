@@ -16,6 +16,8 @@ namespace Client_Game
                 bool is_me;
             } player_local;
         };
+
+        bool exists_on_server; // Used on RCB_ROOM_UPDATE to know which entities to remove.
     };
  
     struct Room

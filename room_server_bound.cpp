@@ -8,6 +8,8 @@ enum RSB_Packet_Type
     RSB_GOODBYE = 2,
 
     RSB_CLICK_TILE = 3,
+
+    RSB_ENTITY_ACTION = 4,
 };
 
 // Room Server Bound Packet Header
@@ -27,6 +29,11 @@ struct RSB_Packet_Header
             u64 tile_ix;
             Item_ID item_to_place;
         } click_tile;
+
+        struct {
+            Entity_ID entity;
+            Entity_Action action;
+        } entity_action;
     };
 };
 
@@ -72,6 +79,12 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
             auto *p = &_header->click_tile;
             Read_To_Ptr(u64,     &p->tile_ix, node);
             Read_To_Ptr(Item_ID, &p->item_to_place, node);
+        } break;
+
+        case RSB_ENTITY_ACTION: {
+            auto *p = &_header->entity_action;
+            Read_To_Ptr(Entity_ID,     &p->entity, node);
+            Read_To_Ptr(Entity_Action, &p->action, node);
         } break;
     }
     
@@ -120,6 +133,20 @@ bool enqueue_RSB_CLICK_TILE_packet(Network_Node *node, u64 tile_ix, Item item_to
 
         Write(u64, tile_ix, node);
         Write(Item, item_to_place, node);
+    }
+    end_outbound_packet(node);
+    return true;
+}
+
+bool enqueue_RSB_ENTITY_ACTION_packet(Network_Node *node, Entity_ID entity, Entity_Action action)
+{
+    begin_outbound_packet(node);
+    {
+        Write(RSB_Packet_Type, RSB_ENTITY_ACTION, node);
+        //--
+
+        Write(Entity_ID,     entity, node);
+        Write(Entity_Action, action, node);
     }
     end_outbound_packet(node);
     return true;

@@ -187,19 +187,37 @@ void commit_transaction(US_Transaction t, User *user)
 {
     switch(t.type) {
         case US_T_ITEM: {
-
-            for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                if(user->shared.inventory[i].id == t.item_details.item_id) {
-                    // @Boilerplate: Client: world.cpp: empty_inventory_slot_locally()
-                    Zero(user->shared.inventory[i]);
-                    user->shared.inventory[i].id = NO_ITEM;
-                    user->shared.inventory[i].type = ITEM_NONE_OR_NUM;
+            auto *x = &t.item_details;
+            
+            if(x->is_server_bound)
+            {
+                auto *sb = &x->server_bound;
+                
+                auto *slot = find_first_empty_inventory_slot(&user->shared);
+                if(slot) {
+                    *slot = sb->item;
                     user->inventory_changed = true;
-                    return;
+                } else {
+                    Assert(false); // TODO @ReportError @Norelease
                 }
             }
+            else
+            {
+                auto *cb = &x->client_bound;
+                
+                for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
+                    if(user->shared.inventory[i].id == cb->item_id) {
+                        // @Boilerplate: Client: world.cpp: empty_inventory_slot_locally()
+                        Zero(user->shared.inventory[i]);
+                        user->shared.inventory[i].id = NO_ITEM;
+                        user->shared.inventory[i].type = ITEM_NONE_OR_NUM;
+                        user->inventory_changed = true;
+                        return;
+                    }
+                }
+                Assert(false);
+            }
             
-            Assert(false);
         } break;
 
         default: Assert(false); return;
@@ -212,15 +230,30 @@ bool transaction_possible(US_Transaction t, User *user, UCB_Transaction_Commit_V
     
     switch(t.type) {
         case US_T_ITEM: {
-            for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                auto *item = &user->shared.inventory[i];
-                if(item->id == t.item_details.item_id)
-                {
-                    _commit_vote_payload->item = *item;
-                    return true;
-                }
+
+            auto *x = &t.item_details;
+            
+            if(x->is_server_bound)
+            {
+                auto *sb = &x->server_bound;
+             
+                return inventory_has_available_space_for_item(&sb->item, &user->shared);
             }
-            return false;
+            else
+            {
+                auto *cb = &x->client_bound;
+                
+                for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
+                    auto *item = &user->shared.inventory[i];
+                    if(item->id == cb->item_id)
+                    {
+                        _commit_vote_payload->item = *item;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
         } break;
 
         default: Assert(false); return false;
@@ -234,8 +267,11 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
     auto *node = &client->node;
 
     if(*current_transaction_exists) {
-
+        
+        Assert(client->type != US_CLIENT_PLAYER);
+        
         if(header.type == USB_TRANSACTION_MESSAGE) {
+            
             auto &p = header.transaction_message;
 
             switch(p.message) {
@@ -266,6 +302,11 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
     switch(header.type) {
 
         case USB_TRANSACTION_MESSAGE: {
+            if(client->type == US_CLIENT_PLAYER) {
+                US_Log("Player client (socket = %lld) sent USB_TRANSACTION_MESSAGE (Illegal).\n", client->node.socket.handle);
+                return false;
+            }
+            
             auto &p = header.transaction_message;
             
             switch(p.message) {

@@ -132,3 +132,38 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, S__Room *roo
 {
     return can_place_item_entity(item, item_entity_p_from_tp(tp, item), world_t, room, entities, num_entities);
 }
+
+
+
+
+// NOTE: user can be null, when we for example do this on the Room Server.
+//       The room server don't know much about the user. So (IMPORTANT) it will not check
+//       stuff that is in the User struct. But it should then in some way ask the User
+//       Server if the action is possible, if there is a possibility that the User Server
+//       would say no.
+//
+//       An EXAMPLE is the pick-up action. On the client, we check that we can pick up the
+//       item from the room, and that we have available space in our User.inventory.
+//       The Room Server checks the first part locally, but the inventory part will get
+//       checked by the User Server when we do the item transaction.
+template<typename ENTITY>
+bool entity_action_predicted_possible(Entity_Action action, ENTITY *e, User_ID performer_user_id, S__User *user = NULL)
+{
+    switch(action.type) {
+        case ENTITY_ACT_PICK_UP: {
+            if(performer_user_id == NO_USER)  return false;
+            if(e->shared.type != ENTITY_ITEM) return false;
+
+            if(user) {
+                if(!inventory_has_available_space_for_item(&e->shared.item_e.item, user)) return false;
+            }
+            
+            return true;
+        } break;
+
+        default: Assert(false); return false;
+    }
+    
+    Assert(false);
+    return true;
+}

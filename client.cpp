@@ -110,22 +110,12 @@ void user_window(UI_Context ctx, Client *client)
 
                 auto cell_ix = r * cols + c;
                 Item *item = &user->shared.inventory[cell_ix];
+                if(item->id == NO_ITEM) item = NULL;
 
-                String label = EMPTY_STRING;
-                
-                if(item->id != NO_ITEM) {
-                    Assert(item->type != ITEM_NONE_OR_NUM);
-                    Item_Type *type = &item_types[item->type];
-                    
-                    Assert(type->name.length > 0);
-                    label = type->name;
-                    label.length = 1;
-                }
-
-                bool enabled = item->id != NO_ITEM;
+                bool enabled = item != NULL;
 
                 bool selected = (cell_ix == user->selected_inventory_item_plus_one - 1);
-                if(button(PC(ctx, cell_ix), label, enabled, selected) & CLICKED_ENABLED) {
+                if(ui_inventory_slot(PC(ctx, cell_ix), item, enabled, selected) & CLICKED_ENABLED) {
                     // @Norelease @Robustness: Make this an item ID.
                     //   So if the gets removed or moved on the server, the item will be
                     //   deselected, and not replaced by another item that takes its slot
@@ -157,7 +147,7 @@ void user_window(UI_Context ctx, Client *client)
 }
 
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
-void item_window(UI_Context ctx, Item *item, UI_Click_State *_close_button_state = NULL)
+void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL)
 {
     U(ctx);
     
@@ -170,6 +160,28 @@ void item_window(UI_Context ctx, Item *item, UI_Click_State *_close_button_state
     Rect window_a = begin_window(&window_id, P(ctx), type->name);
     {
         _AREA_(window_a);
+
+        if(e) {   
+            { _BOTTOM_CUT_(32);
+                                        
+                Entity_Action entity_action = {0};
+                entity_action.type = ENTITY_ACT_PICK_UP;
+    
+                bool enabled = entity_action_predicted_possible(entity_action, e, client->user.shared.id, &client->user.shared);
+                
+                if(button(P(ctx), STRING("PICK UP"), enabled) & CLICKED_ENABLED) {
+
+                    C_RS_Action action = {0};
+                    action.type = C_RS_ACT_ENTITY_ACTION;                    
+                    auto &act = action.entity_action;
+
+                    act.entity = e->shared.id;
+                    act.action = entity_action;
+
+                    array_add(client->server_connections.room_action_queue, action);
+                }
+            }
+        }
 
         auto image_s = area(ctx.layout).w * (1 - 0.61803);
         { _TOP_CUT_(image_s);
@@ -313,7 +325,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         
         Item *selected_item = get_selected_inventory_item(&client->user);
         if(selected_item) {
-            item_window(P(ctx), selected_item);
+            item_window(P(ctx), selected_item, client);
         }
 
         
@@ -330,7 +342,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     update_entity_item(s_e, world_t);
 
                     UI_Click_State close_button_state;
-                    item_window(P(ctx), &s_e->item_e.item, &close_button_state);
+                    item_window(P(ctx), &s_e->item_e.item, client, &close_button_state, e);
                     if(close_button_state & CLICKED_ENABLED) {
                         room->selected_entity = NO_ENTITY;
                     }

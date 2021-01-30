@@ -540,6 +540,7 @@ void ui_text(String text, UI_Context ctx)
 }
 
 
+
 UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false)
 {    
     U(ctx);
@@ -557,12 +558,51 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled 
     return btn->state;
 }
 
+UI_Click_State ui_inventory_slot(UI_Context ctx, Item *item, bool enabled = true, bool selected = false)
+{
+    U(ctx);
+    
+    auto id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, UI_INVENTORY_SLOT, ctx.manager);
+
+    Rect a = area(ctx.layout);
+
+    Item_Type_ID item_type = ITEM_NONE_OR_NUM;
+    float fill = 0;
+    
+    if(item) {
+        item_type = item->type;
+        switch(item->type) {
+            case ITEM_PLANT: {
+                fill = clamp(item->plant.grow_progress);
+            } break;
+        }
+    }
+    
+    auto *slot = &e->inventory_slot;
+    ui_set(e, &slot->a, a);
+    ui_set(e, &slot->item_type, item_type);
+    ui_set(e, &slot->fill, fill);
+    ui_set(e, &slot->enabled,  enabled);
+    ui_set(e, &slot->selected, selected);
+    
+    return slot->click_state;
+}
+
 void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
 {
     Assert(e->type == BUTTON);
     auto &btn   = e->button;
     
     ui_set(e, &btn.state, evaluate_click_state(btn.state, e == hovered_element, input, btn.enabled));
+}
+
+void update_inventory_slot(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    Assert(e->type == UI_INVENTORY_SLOT);
+    auto &slot   = e->inventory_slot;
+    
+    ui_set(e, &slot.click_state, evaluate_click_state(slot.click_state, e == hovered_element, input, slot.enabled));
 }
 
 
@@ -1515,7 +1555,11 @@ Rect ui_element_rect(UI_Element *e)
         case DROPDOWN:  return dropdown_rect(e->dropdown.box_a, e->dropdown.open);
         case UI_TEXT:   return e->text.a;
 
+        case UI_INVENTORY_SLOT: return e->inventory_slot.a;
+
         case WORLD_VIEW: return e->world_view.a;
+
+        default: Assert(false); break;
     }
 
     return {0};
@@ -1674,6 +1718,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             case DROPDOWN:   mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
             case WORLD_VIEW: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
 
+            case UI_INVENTORY_SLOT: mouse_over = point_inside_rect(mouse.p, e->inventory_slot.a); break;
+
             case UI_TEXT:
                 break;
                 
@@ -1734,6 +1780,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
             case WORLD_VIEW: update_world_view(e, input, hovered_element, room, t); break;
 
+            case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
+
             case PANEL:
             case UI_TEXT:
                 break;
@@ -1748,3 +1796,4 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
     else
         *_cursor = CURSOR_ICON_DEFAULT;
 }
+ 

@@ -7,7 +7,8 @@ enum Room_Server_Connection_Status
 
 enum C_RS_Action_Type
 {
-    C_RS_ACT_CLICK_TILE
+    C_RS_ACT_CLICK_TILE,
+    C_RS_ACT_ENTITY_ACTION
 };
 
 struct C_RS_Action
@@ -18,6 +19,11 @@ struct C_RS_Action
             s64 tile_ix;
             Item item_to_place;
         } click_tile;
+        
+        struct {
+            Entity_ID     entity;
+            Entity_Action action;
+        } entity_action;
     };
 };
 

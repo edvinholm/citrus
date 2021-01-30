@@ -116,6 +116,8 @@ enum UI_Element_Type
     DROPDOWN,
     UI_TEXT,
 
+    UI_INVENTORY_SLOT,
+
     WORLD_VIEW
 };
 
@@ -175,6 +177,19 @@ struct UI_Button
 
     UI_String label;
     
+    bool enabled;
+    bool selected;
+};
+
+
+struct UI_Inventory_Slot
+{
+    Rect a;
+    UI_Click_State click_state;
+    
+    Item_Type_ID item_type;
+    float fill;
+
     bool enabled;
     bool selected;
 };
@@ -259,6 +274,8 @@ struct UI_Element
         UI_Textfield textfield;
         UI_Slider    slider;
         UI_Dropdown  dropdown;
+        
+        UI_Inventory_Slot inventory_slot;
 
         UI_World_View world_view;
     };

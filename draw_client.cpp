@@ -303,90 +303,74 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     draw_body_text(text, FS_14, FONT_BODY, a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect);
 }
 
+// REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
+void _draw_button_label(String label, Rect a, Graphics *gfx)
+{
+    draw_string_in_rect_centered(label, a, FS_20, FONT_TITLE, {1, 1, 1, 1}, gfx);
+}
+
+// REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
+void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx,
+                 bool enabled = true, bool selected = false, String label = EMPTY_STRING)
+{
+    float z = eat_z_for_2d(gfx);
+    v3 p0 = { a.x, a.y, z };
+    
+    v4 c_idle     = { 0.05,  0.6,   0.30, 1 };
+    v4 c_hovered  = { 0.00, 0.65, 0.225, 1 };
+    v4 c_pressed  = { 0.00,  0.5,  0.20, 1 };
+    v4 c_disabled = { 0.30,  0.5,  0.35, 1 };
+    v4 c_selected = { 0.00, 0.85,  0.35, 1 };
+
+    v4 color;
+    if(!enabled)             color = c_disabled;
+    else if(selected)        color = c_selected;
+    else if(click_state & PRESSED) color = c_pressed;
+    else if(click_state & HOVERED) color = c_hovered;
+    else color = c_idle;
+
+    draw_quad(p0, V3_X * a.w, V3_Y * a.h, color, gfx);
+    if(label.length > 0)
+        _draw_button_label(label, a, gfx);
+}
+
 void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
-    _OPAQUE_UI_();    
-
     Assert(e->type == BUTTON);
     auto &btn = e->button;
-    auto a = btn.a;
-
-    float z = eat_z_for_2d(gfx);
     
-    v3 v[6] = {
-        { a.x,       a.y,       z },
-        { a.x,       a.y + a.h, z },
-        { a.x + a.w, a.y,       z },
+    _OPAQUE_UI_();
 
-        { a.x + a.w, a.y,       z },
-        { a.x,       a.y + a.h, z },
-        { a.x + a.w, a.y + a.h, z }
-    };
-        
-    v2 uv[6] = {0};
+    _draw_button(btn.a, btn.state, gfx,
+                btn.enabled, btn.selected, get_ui_string(btn.label, ui));
+}
 
-    // @Cleanup: Better names, single v4 to set a color.
+void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == UI_INVENTORY_SLOT);
+    auto &slot = e->inventory_slot;
 
-    v4 cc = { 0.05, 0.6, 0.3, 1 };
+    _OPAQUE_UI_();
     
-    v4 c[6] = {
-        cc, cc, cc,
-        cc, cc, cc
-    };
-    
-    v4 h[6] = {
-        { 0.00, 0.65, 0.225, 1 },
-        { 0.00, 0.65, 0.225, 1 },
-        { 0.00, 0.65, 0.225, 1 },
-        
-        { 0.00, 0.65, 0.225, 1 },
-        { 0.00, 0.65, 0.225, 1 },
-        { 0.00, 0.65, 0.225, 1 },
-    };
-    
-    v4 p[6] = {
-        { 0.00, 0.5, 0.20, 1 },
-        { 0.00, 0.5, 0.20, 1 },
-        { 0.00, 0.5, 0.20, 1 },
-        
-        { 0.00, 0.5, 0.20, 1 },
-        { 0.00, 0.5, 0.20, 1 },
-        { 0.00, 0.5, 0.20, 1 },
-    };
-    
-    v4 d[6] = {
-        { 0.30, 0.5, 0.35, 1 },
-        { 0.30, 0.5, 0.35, 1 },
-        { 0.30, 0.5, 0.35, 1 },
-        
-        { 0.30, 0.5, 0.35, 1 },
-        { 0.30, 0.5, 0.35, 1 },
-        { 0.30, 0.5, 0.35, 1 },
-    };
-    
-    v4 s[6] = {
-        { 0.00, 0.85, 0.35, 1 },
-        { 0.00, 0.85, 0.35, 1 },
-        { 0.00, 0.85, 0.35, 1 },
-        
-        { 0.00, 0.85, 0.35, 1 },
-        { 0.00, 0.85, 0.35, 1 },
-        { 0.00, 0.85, 0.35, 1 },
-    };
+    _draw_button(slot.a, slot.click_state, gfx,
+                 slot.enabled, slot.selected);
 
-    float tex[6] = {
-        0, 0, 0,
-        0, 0, 0
-    };
+    auto a = slot.a;
+    v3 fill_p0 = { a.x, a.y + a.h, eat_z_for_2d(gfx) };
+    if(slot.fill > 0) {
+        draw_quad(fill_p0, -V3_Y * a.h * slot.fill, V3_X * a.w, { 0.03, 0.8, 0.6, 1 }, gfx);
+    }
 
-    v4 *color = c;
-    if(!btn.enabled)             color = d;
-    else if(btn.selected)        color = s;
-    else if(btn.state & PRESSED) color = p;
-    else if(btn.state & HOVERED) color = h;
-
-    triangles(v, uv, color, tex, 6, gfx);
-    draw_string_in_rect_centered(get_ui_string(btn.label, ui), a, FS_20, FONT_TITLE, {1, 1, 1, 1}, gfx);
+    String label = EMPTY_STRING;
+    
+    if(slot.item_type != ITEM_NONE_OR_NUM) {
+        Item_Type *type = &item_types[slot.item_type];
+        label = type->name;
+        Assert(label.length > 0);
+        label.length = 1;
+    }
+    
+    _draw_button_label(label, slot.a, gfx);
 }
 
 void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
@@ -710,7 +694,8 @@ DWORD render_loop(void *loop_)
     while(true)
     {        
         // @Cleanup?
-        UI_World_View *world_view = NULL;
+        bool world_view_exists = false;
+        UI_World_View world_view;
         m4x4 world_projection;
     
         lock_mutex(client->mutex);
@@ -805,6 +790,8 @@ DWORD render_loop(void *loop_)
                         case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
                         case SLIDER:   draw_slider(e, &gfx);      break;
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
+                            
+                        case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
 
                         case WORLD_VIEW: {
                             auto *room = &client->game.room;
@@ -813,7 +800,7 @@ DWORD render_loop(void *loop_)
                             
                             draw_world_view_background(e, &gfx);
 
-                            if(world_view != NULL) {
+                            if(world_view_exists) {
                                 Assert(false);
                                 break;
                             }
@@ -834,7 +821,8 @@ DWORD render_loop(void *loop_)
 
                             gfx.z_for_2d -= 0.2;
 
-                            world_view = &e->world_view;
+                            world_view_exists = true;
+                            world_view = e->world_view;
                             world_projection = projection;
                             
                         } break;
@@ -894,8 +882,8 @@ DWORD render_loop(void *loop_)
                 }
 
                 // WORLD //
-                if(world_view) {
-                    config_gpu_for_world(&gfx, world_view->a, world_projection);
+                if(world_view_exists) {
+                    config_gpu_for_world(&gfx, world_view.a, world_projection);
                     {
                         // Opaque
                         gpu_set_depth_mask(true);

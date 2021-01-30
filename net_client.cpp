@@ -54,6 +54,11 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                     auto &ct = action.click_tile;
                     Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place);
                 } break;
+                    
+                case C_RS_ACT_ENTITY_ACTION: {
+                    auto &ea = action.entity_action;
+                    Enqueue(RSB_ENTITY_ACTION, node, ea.entity, ea.action);
+                } break;
             }
         }
     }
@@ -124,6 +129,11 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                 lock_mutex(mutex);
                 {
                     remove_preview_entities(room);
+
+                    // Reset exists_on_server
+                    for(int i = 0; i < room->entities.n; i++) {
+                        room->entities[i].exists_on_server = false;
+                    }
                     
                     Tile *tiles = room->shared.tiles;
                     for(int t = p->tile0; t < p->tile1; t++) {
@@ -135,6 +145,16 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
 
                         auto *e = find_or_add_entity(s_e->id, room);
                         e->shared = *s_e;
+                        e->exists_on_server = true;
+                    }
+
+                    // Remove entities with exists_on_server == false
+                    for(int i = 0; i < room->entities.n; i++) {
+                        auto *e = &room->entities[i];
+                        if(e->exists_on_server) continue;
+
+                        array_unordered_remove(room->entities, i);
+                        i--;
                     }
 
                     if(p->tile1 - p->tile0 > 0) {
@@ -195,7 +215,6 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                 for(int i = 0; i < ARRLEN(inventory); i++) {
                     Read_To_Ptr(Item, inventory + i, node);
                 }
-
                 
                 lock_mutex(mutex);
                 {
@@ -231,6 +250,7 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     memcpy(user->shared.inventory, inventory, sizeof(inventory));
                 }
                 unlock_mutex(mutex);
+                
             } break;
         };
         

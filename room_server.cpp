@@ -27,9 +27,7 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
     Log(__VA_ARGS__)
 
 void create_dummy_entities(Room *room)
-{
-    return;
-    
+{    
     v3 pp = { 0, 0 };
     for(int i = 0; i < 4; i++)
     {
@@ -37,7 +35,8 @@ void create_dummy_entities(Room *room)
         Item_Type *item_type = item_types + item_type_id;
         
         Item item = {0};
-        item.type = item_type_id; // NOTE: We don't assign an ID to the item here, but this is just @Temporary stuff so it doesn't matter.
+        item.id = random_int(999, 9999);// NOTE: We don't assign a unique ID to the item here, but this is just @Temporary stuff so it doesn't matter.
+        item.type = item_type_id; 
 
         S__Entity e = create_item_entity(&item, pp, room->shared.t);
         e.id = 1 + room->next_entity_id_minus_one++;
@@ -494,36 +493,65 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
 //                   that it keeps running anyway.. (????)
 //       If the return value is false, either the transaction was aborted because of an abort vote,
 //          or there was a communication error.
-bool item_transaction_prepare(User_ID from_user, Item_ID item_id, Room_Server *server, Item *_item)
+bool user_server_transaction_prepare(User_ID user, US_Transaction transaction, Room_Server *server, UCB_Packet_Header *_response_header)
 {
     //@Norelease: If we fail, disconnect from user server and try to reconnect.
     //           Keep trying until we can connect.
     //           We should not keep trying to connect to the same actual server,
     //           but do the user-id to server lookup every time.
 
-    RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(from_user, server);
+    RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user, server);
     if(us_con == NULL) return false;
-
-    US_Transaction transaction = {0};
-    transaction.type = US_T_ITEM;
-    transaction.item_details.item_id = item_id;
 
     Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, TRANSACTION_PREPARE, &transaction);
     
-    UCB_Packet_Header response_header;
-    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, &response_header)) return false;
-
-    //--
+    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, _response_header)) return false;
+    Assert(_response_header->type == UCB_TRANSACTION_MESSAGE);
     
+    return true;
+}
+
+bool inbound_item_transaction_prepare(User_ID user, Item_ID item_id, Room_Server *server, Item *_item)
+{
+    US_Transaction transaction = {0};
+    transaction.type = US_T_ITEM;
+    transaction.item_details.is_server_bound = false;
+    transaction.item_details.client_bound.item_id = item_id;
+
+    UCB_Packet_Header response_header;
+    Fail_If_True(!user_server_transaction_prepare(user, transaction, server, &response_header));
+    
+    Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
+
     if(response_header.transaction_message.message == TRANSACTION_VOTE_COMMIT) {
         *_item = response_header.transaction_message.commit_vote_payload.item;
         return true;
     }
 
-    if(response_header.transaction_message.message != TRANSACTION_VOTE_ABORT) {
-        Assert(false);
-    }
+    Assert(response_header.transaction_message.message == TRANSACTION_VOTE_ABORT);
+
+    return false;
+}
+
+
+bool outbound_item_transaction_prepare(User_ID user, Item *item, Room_Server *server)
+{
+    US_Transaction transaction = {0};
+    transaction.type = US_T_ITEM;
+    transaction.item_details.is_server_bound = true;
+    transaction.item_details.server_bound.item = *item;
+
+    UCB_Packet_Header response_header;
+    Fail_If_True(!user_server_transaction_prepare(user, transaction, server, &response_header));
     
+    Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
+
+    if(response_header.transaction_message.message == TRANSACTION_VOTE_COMMIT) {
+        return true;
+    }
+
+    Assert(response_header.transaction_message.message == TRANSACTION_VOTE_ABORT);
+
     return false;
 }
 
@@ -552,6 +580,18 @@ bool item_transaction_send_decision(bool commit, User_ID user_id, Room_Server *s
 }
 
 
+Entity *find_entity(Entity_ID id, Room *room)
+{
+    for(int i = 0; i < room->num_entities; i++) {
+        auto *e = &room->entities[i];
+        if(e->shared.id == id) {
+            return e;
+        }
+    }
+
+    return NULL;
+}
+
 Entity *find_player_entity(User_ID user_id, Room *room)
 {
     for(int i = 0; i < room->num_entities; i++) {
@@ -563,6 +603,68 @@ Entity *find_player_entity(User_ID user_id, Room *room)
     }
 
     return NULL;
+}
+
+bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *server)
+{
+    Assert(as_user != NO_USER);
+    Assert(e->shared.type == ENTITY_ITEM);
+    
+    update_entity_item(&e->shared, room->shared.t);
+    
+    bool can_commit = true;
+    
+    if(can_commit && !outbound_item_transaction_prepare(as_user, &e->shared.item_e.item, server)) {
+        can_commit = false;
+    }
+
+    // Check if we can commit //
+    if(can_commit) {
+        can_commit = true;
+    }
+
+    if(can_commit)
+    {
+        // Do commit //
+                        
+        if(!item_transaction_send_decision(true, as_user, server)) {
+            // @Norelease: Handle com error. This proc should probably not
+            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+        }
+        else {
+            // REMOVE ENTITY //
+            *e = room->entities[room->num_entities-1];
+            room->num_entities--;
+            room->did_change = true;
+            
+            return true;
+        }
+    }
+    else {
+        // Do abort //
+                        
+        if(!item_transaction_send_decision(false, as_user, server)) {
+            // @Norelease: Handle com error. This proc should probably not
+            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+        }
+    }
+
+    return false;
+}
+
+void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
+{
+    if(!entity_action_predicted_possible(action, e, (as_user != NO_USER), NULL)) return;
+   
+    switch(action.type) {
+        case ENTITY_ACT_PICK_UP: {
+            Assert(as_user != NO_USER);
+            Assert(e->shared.type == ENTITY_ITEM);
+            
+            bool success = pick_up_item_entity(as_user, e, room, server);
+            RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+        } break;
+    }
 }
 
 
@@ -594,11 +696,9 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 {
                     bool can_commit = true;
 
-                    bool com_error;
-
                     // Get item, ask User Server if it can commit //
                     Item item;
-                    if(can_commit && !item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
+                    if(can_commit && !inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
                         can_commit = false;
                     }
 
@@ -636,9 +736,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 }
             }
             else {
-                room->shared.tiles[p.tile_ix]++;
-                room->shared.tiles[p.tile_ix] %= TILE_NONE_OR_NUM;
-
+                
                 Entity *e = find_player_entity(client->user, room);
                 if(e) {
                     e->shared.player_e.walk_p0 = entity_position(&e->shared, room->shared.t);
@@ -648,6 +746,18 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 
                 room->did_change = true;
             }
+            
+        } break;
+
+        case RSB_ENTITY_ACTION: {
+            auto *p = &header.entity_action;
+
+            Entity *e = find_entity(p->entity, room);
+            if(!e) {
+                return true; // It's OK, the entity might have been destroyed after the client sent the request.
+            }
+
+            perform_entity_action_if_possible(client->user, e, p->action, room, server);
             
         } break;
             

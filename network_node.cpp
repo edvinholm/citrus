@@ -248,6 +248,15 @@ bool read_float(float *_f, Network_Node *node)
 }
 
 inline
+bool read_bool(bool *_b, Network_Node *node)
+{
+    Read(u8, i, node);
+    *_b = (i == 0) ? false : true;
+    return true;
+}
+
+
+inline
 bool read_v3(v3 *_u, Network_Node *node)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -366,6 +375,13 @@ bool write_float(float f, Network_Node *node)
     u32 i;
     memcpy(&i, &f, 4);
     return write_u32(i, node);
+}
+
+
+inline
+bool write_bool(bool b, Network_Node *node)
+{
+    return write_u8(b ? 1 : 0, node);
 }
 
 inline
@@ -637,6 +653,37 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
 
     return true;
 }
+
+
+
+// @Norelease TODO: Check that it is a valid type.
+bool read_Entity_Action_Type(Entity_Action_Type *_type, Network_Node *node)
+{
+    Read(u32, i, node);
+    *_type = (Entity_Action_Type)i;
+    return true;
+}
+
+bool write_Entity_Action_Type(Entity_Action_Type type, Network_Node *node)
+{
+    Write(u32, type, node);
+    return true;
+}
+
+
+// @Norelease TODO: Check that it is a valid type.
+bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
+{
+    Read_To_Ptr(Entity_Action_Type, &_action->type, node);
+    return true;
+}
+
+bool write_Entity_Action(Entity_Action action, Network_Node *node)
+{
+    Write(Entity_Action_Type, action.type, node);
+    return true;
+}
+
 
 // Tile //
 bool read_Tile(Tile *_tile, Network_Node *node)

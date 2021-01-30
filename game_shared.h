@@ -27,6 +27,16 @@ struct Item_Type
     String name;
 };
 
+enum Entity_Action_Type
+{
+    ENTITY_ACT_PICK_UP = 1
+};
+
+struct Entity_Action
+{
+    Entity_Action_Type type;
+};
+
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") }, // Chair
     { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") },   // Bed
