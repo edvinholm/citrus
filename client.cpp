@@ -151,6 +151,14 @@ String entity_action_label(Entity_Action action)
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
         case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &action.set_power_mode;
+            if(x->set_to_on) {
+                return STRING("START");
+            } else {
+                return STRING("STOP");
+            }
+        } break;
 
         default: Assert(false); return STRING("???"); break;
     }
@@ -176,7 +184,9 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
     {
         _AREA_(window_a);
 
-        if(e) {   
+        if(e) {
+            Assert(e->type == ENTITY_ITEM);
+            
             Array<Entity_Action_Type, ALLOC_TMP> actions = {0};
             get_available_actions_for_entity(e, &actions);
 
@@ -188,6 +198,17 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                 
                 Entity_Action entity_action = {0};
                 entity_action.type = actions[i];
+
+                // @Cleanup: This should be done somewhere else...
+                //           Should get_available_actions_for_entity return Entity_Actions instead of Entity_Action_Types?
+                //           But some actions we want the user to decide parameters for.
+                switch(entity_action.type) {
+                    case ENTITY_ACT_SET_POWER_MODE: {
+                        Assert(e->item_e.item.type == ITEM_MACHINE);
+                        auto *machine_e = &e->item_e.machine;
+                        entity_action.set_power_mode.set_to_on = (machine_e->stop_t >= machine_e->start_t);
+                    } break;
+                }
     
                 bool enabled = entity_action_predicted_possible(entity_action, e, client->user.id, world_t, &client->user);
                 

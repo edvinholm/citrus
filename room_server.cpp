@@ -134,56 +134,6 @@ void randomize_tiles(Tile *tiles, u64 num_tiles, int x) {
     }
 }
 
-void update_room(Room *room, int index) {
-
-    Assert(room->t > 0); // Should be initialized when created
-
-    auto t = get_time();
-    
-    double last_t = room->t;
-    room->t = t;
-    double dt = t - last_t;
-
-    room->randomize_cooldown -= dt;
-    while(room->randomize_cooldown <= 0) {
-        
-        Tile *tiles = room->tiles;
-        Tile *at  = tiles;
-        Tile *end = tiles + room_size_x * room_size_y;
-        while(at < end) {
-            
-            if(*at == TILE_WATER) {
-                
-                int y = (at - tiles) / room_size_x;
-                int x = (at - tiles) % room_size_x;
-
-#if 0
-                if(y > 0) {
-                    
-                    Tile *north = at - room_size_x;
-                    
-                    if(*north != TILE_WATER) {
-                        if(*north != TILE_STONE) {
-                            *north = TILE_WATER;
-                        }
-                        *at = TILE_GRASS;
-                        room->did_change = true;
-                    }
-                }
-#endif
-                
-            }
-            
-            at++;
-        }
-#if 0
-        randomize_tiles(room->tiles, ARRLEN(room->tiles), random_int(1, 10));
-        room->did_change = true;
-#endif
-        room->randomize_cooldown += 0.2;
-    }
-}
-
 
 
 bool receive_next_rsb_packet(Network_Node *node, RSB_Packet_Header *_packet_header, bool *_error, bool block = false)
@@ -606,6 +556,17 @@ Entity *find_player_entity(User_ID user_id, Room *room)
     return NULL;
 }
 
+void do_place_item_entity_at_tp(Item *item, v3 tp, Room *room)
+{
+    v3 p = item_entity_p_from_tp(tp, item);
+                            
+    Entity e = {0};
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, room->t);
+    e.id   = 1 + room->next_entity_id_minus_one++;
+                        
+    room->entities[room->num_entities++] = e;
+}
+
 bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *server)
 {
     Assert(as_user != NO_USER);
@@ -677,9 +638,119 @@ void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action
             }
         } break;
 
+        case ENTITY_ACT_SET_POWER_MODE: {
+            Assert(e->type == ENTITY_ITEM);
+            Assert(e->item_e.item.type == ITEM_MACHINE);
+            
+            auto *machine = &e->item_e.machine;
+            if(action.set_power_mode.set_to_on) {
+                Assert(machine->stop_t >= machine->start_t);
+                machine->start_t = room->t;
+            } else {
+                Assert(machine->start_t > machine->stop_t);
+                machine->stop_t = room->t;
+            }
+
+            room->did_change = true;
+        } break;
+
         default: Assert(false); return;
     }
 }
+
+
+void update_entity(Entity *e, Room *room, bool *_do_destroy)
+{
+    *_do_destroy = false;
+    
+    if(e->type != ENTITY_ITEM) return;
+    if(e->item_e.item.type != ITEM_MACHINE) return;
+
+    auto *machine = &e->item_e.machine;
+    if(machine->stop_t >= machine->start_t) return; // Machine is not running.
+
+    double time_since_start = room->t - machine->start_t;
+    if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
+    {
+        Item plant = {0};
+        plant.id = random_int(200, 300); // @Norelease: Make unique
+        plant.type = ITEM_PLANT;
+
+        v3 tp = entity_position(e, room->t) - V3_Y * 2;
+        
+        if(can_place_item_entity_at_tp(&plant, tp, room->t, room, room->entities, room->num_entities))
+        {
+            do_place_item_entity_at_tp(&plant, tp, room);
+            room->did_change = true;
+        }
+    }
+}
+
+double max_update_step_delta_time_for_entity(Entity *e, Room *room)
+{   
+    if(e->type != ENTITY_ITEM) return DBL_MAX;
+    if(e->item_e.item.type != ITEM_MACHINE)  return DBL_MAX;
+
+    auto *machine = &e->item_e.machine;
+    if(machine->stop_t >= machine->start_t) return DBL_MAX; // Machine is not running.
+
+    double time_since_start = room->t - machine->start_t;
+    if(time_since_start >= 3.0) return DBL_MAX;
+
+    return 3.0 - time_since_start;
+}
+
+double max_update_step_delta_time_for_room(Room *room)
+{
+    double result = DBL_MAX;
+    
+    for(int i = 0; i < room->num_entities; i++) {
+        auto max_dt = max_update_step_delta_time_for_entity(&room->entities[i], room);
+        
+        if(max_dt > 0 && !doubles_equal(max_dt, 0)) {
+            if(max_dt < result) result = max_dt;
+        }
+    }
+
+    Assert(result > 0);
+    Assert(!doubles_equal(result, 0));
+    return result;
+}
+
+void update_room(Room *room, int index)
+{
+    Assert(room->t > 0); // Should be initialized when created
+
+    auto t = get_time();
+
+    double last_t = room->t;
+    double total_dt = t - last_t;
+    double dt_left = total_dt;
+    while(dt_left)
+    {
+        double dt = min(dt_left, max_update_step_delta_time_for_room(room));
+        Assert(dt > 0);
+
+        room->t += dt;
+
+        for(int i = 0; i < room->num_entities; i++)
+        {
+            bool do_destroy;
+            update_entity(&room->entities[i], room, &do_destroy);
+            if(do_destroy) {
+                room->entities[i] = room->entities[room->num_entities-1];
+                room->num_entities--;
+                room->did_change = true;
+            }
+        }
+
+        dt_left -= dt;
+    }
+
+    Assert(floats_equal(room->t, t));
+    room->t = t;
+}
+
 
 
 bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Room *room, Room_Server *server)
@@ -730,13 +801,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                             //             return on error, but instead retry until it succeeds (See comment for the proc.)
                         }
 
-                        v3 p = item_entity_p_from_tp(tp, &item);
-                            
-                        Entity e = {0};
-                        *static_cast<S__Entity *>(&e) = create_item_entity(&item, p, room->t);
-                        e.id   = 1 + room->next_entity_id_minus_one++;
-                        
-                        room->entities[room->num_entities++] = e;
+                        do_place_item_entity_at_tp(&item, tp, room);
                     }
                     else {
                         // Do abort //

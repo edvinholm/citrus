@@ -248,6 +248,11 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_
         case ITEM_PLANT: {
             array_add(*_actions, ENTITY_ACT_HARVEST);
         } break;
+
+        case ITEM_MACHINE: {
+            auto *machine_e = &e->item_e.machine;
+            array_add(*_actions, ENTITY_ACT_SET_POWER_MODE);
+        } break;
     }
 }
 

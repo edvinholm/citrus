@@ -15,6 +15,7 @@ enum Item_Type_ID
     ITEM_BED,
     ITEM_TABLE,
     ITEM_PLANT,
+    ITEM_MACHINE,
 
     ITEM_NONE_OR_NUM
 };
@@ -30,19 +31,29 @@ struct Item_Type
 enum Entity_Action_Type
 {
     ENTITY_ACT_PICK_UP = 1,
-    ENTITY_ACT_HARVEST = 2
+
+    ENTITY_ACT_HARVEST = 2,
+
+    ENTITY_ACT_SET_POWER_MODE = 3
 };
 
 struct Entity_Action
 {
     Entity_Action_Type type;
+
+    union {
+        struct {
+            bool set_to_on;
+        } set_power_mode;
+    };
 };
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") }, // Chair
-    { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") },   // Bed
-    { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0}, STRING("Table") }, // Table
-    { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0}, STRING("Plant") }, // Plant
+    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") },
+    { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") }, 
+    { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0}, STRING("Table") },
+    { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0}, STRING("Plant") },
+    { {2, 2, 2}, {0.3, 0.5, 0.5, 1.0}, STRING("Machine") }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -95,6 +106,11 @@ struct S__Entity
                     World_Time t_on_plant;
                     float grow_progress_on_plant;
                 } plant;
+                
+                struct {
+                    World_Time start_t; // NOTE: Machine is on if start_t > stop_t.
+                    World_Time stop_t;
+                } machine;
             };
         } item_e;
 

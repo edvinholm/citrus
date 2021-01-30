@@ -158,7 +158,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
             
-            if(performer_user_id == NO_USER)  return false;
+            if(performer_user_id == NO_USER)  return false; // Because we need an inventory to place the item in.
             if(e->type != ENTITY_ITEM) return false;
     
             if(user) {
@@ -170,10 +170,12 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
 
         case ENTITY_ACT_HARVEST: {
 
-            if(performer_user_id == NO_USER)  return false;
+            if(performer_user_id == NO_USER)  return false; // Because we need an inventory to place the harvested items in.
             if(e->type != ENTITY_ITEM) return false;
 
             auto *item = &e->item_e.item;
+            if(item->type != ITEM_PLANT) return false;
+            
             if(item->plant.grow_progress < 0.75f) return false;
 
             if(user) {
@@ -184,6 +186,25 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
             return true;
             
         } break;
+
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &action.set_power_mode;
+            
+            if(e->type != ENTITY_ITEM) return false;
+
+            auto *item = &e->item_e.item;
+            if(item->type != ITEM_MACHINE) return false;            
+
+            auto *machine_e = &e->item_e.machine;
+            if(x->set_to_on) {
+                if(machine_e->start_t > machine_e->stop_t) return false; // Already started
+            }
+            else {
+                if(machine_e->stop_t >= machine_e->start_t) return false; // Already stopped.
+            }
+
+            return true;
+        };
 
         default: Assert(false); return false;
     }

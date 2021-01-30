@@ -598,6 +598,19 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                     Read_To_Ptr(World_Time, &plant->t_on_plant,             node);
                     Read_To_Ptr(float,      &plant->grow_progress_on_plant, node);
                 } break;
+
+                case ITEM_MACHINE: {
+                    auto *machine = &x->machine;
+                    Read_To_Ptr(World_Time, &machine->start_t, node);
+                    Read_To_Ptr(World_Time, &machine->stop_t,  node);
+                } break;
+
+                case ITEM_CHAIR:
+                case ITEM_BED:
+                case ITEM_TABLE:
+                    break;
+
+                default: Assert(false); break;
             }
         } break;
             
@@ -635,6 +648,19 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                     Write(World_Time, plant->t_on_plant,             node);
                     Write(float,      plant->grow_progress_on_plant, node);
                 } break;
+
+                case ITEM_MACHINE: {
+                    auto *machine = &x->machine;
+                    Write(World_Time, machine->start_t, node);
+                    Write(World_Time, machine->stop_t, node);
+                } break;
+                    
+                case ITEM_CHAIR:
+                case ITEM_BED:
+                case ITEM_TABLE:
+                    break;
+
+                default: Assert(false); break;
             }
             
         } break;
@@ -675,12 +701,28 @@ bool write_Entity_Action_Type(Entity_Action_Type type, Network_Node *node)
 bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
 {
     Read_To_Ptr(Entity_Action_Type, &_action->type, node);
+
+    switch(_action->type) {
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &_action->set_power_mode;
+            Read_To_Ptr(bool, &x->set_to_on, node);
+        } break;
+    }
+    
     return true;
 }
 
 bool write_Entity_Action(Entity_Action action, Network_Node *node)
 {
     Write(Entity_Action_Type, action.type, node);
+
+    switch(action.type) {
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &action.set_power_mode;
+            Write(bool, x->set_to_on, node);
+        } break;
+    }
+    
     return true;
 }
 
