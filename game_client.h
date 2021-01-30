@@ -6,9 +6,8 @@
 namespace Client_Game
 {
     
-    struct Entity
+    struct Entity: public S__Entity
     {
-        S__Entity shared; // @Jai: Using
         bool is_preview; // We use an entity with this set to true while we wait for a ROOM_UPDATE after we've sent a request to place an item in the room.
 
         union {
@@ -20,9 +19,8 @@ namespace Client_Game
         bool exists_on_server; // Used on RCB_ROOM_UPDATE to know which entities to remove.
     };
  
-    struct Room
+    struct Room: public S__Room
     {
-        S__Room shared; // @Jai: Using
         double time_offset; // To get the current World_Time, do <system time> + time_offset.
 
         Array<Entity, ALLOC_GAME> entities;
@@ -31,7 +29,7 @@ namespace Client_Game
         bool static_geometry_up_to_date;
     };
     void reset(Room *room) {
-        reset(&room->shared);
+        reset(static_cast<S__Room *>(room));
         room->entities.n = 0;
         room->static_geometry_up_to_date = false;
     }

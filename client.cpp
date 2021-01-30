@@ -95,7 +95,7 @@ void user_window(UI_Context ctx, Client *client)
     bool connected  = client->server_connections.user.status == USER_CONNECT__CONNECTED; // @Cleanup
     bool connecting = client->server_connections.user_connect_requested;
 
-    _WINDOW_(P(ctx), user->shared.username, true, connected, user->shared.color);
+    _WINDOW_(P(ctx), user->username, true, connected, user->color);
 
     if(connected) {
         _TOP_CUT_(480);
@@ -109,7 +109,7 @@ void user_window(UI_Context ctx, Client *client)
                 _CELL_();
 
                 auto cell_ix = r * cols + c;
-                Item *item = &user->shared.inventory[cell_ix];
+                Item *item = &user->inventory[cell_ix];
                 if(item->id == NO_ITEM) item = NULL;
 
                 bool enabled = item != NULL;
@@ -189,7 +189,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                 Entity_Action entity_action = {0};
                 entity_action.type = actions[i];
     
-                bool enabled = entity_action_predicted_possible(entity_action, &e->shared, client->user.shared.id, world_t, &client->user.shared);
+                bool enabled = entity_action_predicted_possible(entity_action, e, client->user.id, world_t, &client->user);
                 
                 if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED) {
 
@@ -197,7 +197,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                     action.type = C_RS_ACT_ENTITY_ACTION;                    
                     auto &act = action.entity_action;
 
-                    act.entity = e->shared.id;
+                    act.entity = e->id;
                     act.action = entity_action;
 
                     array_add(client->server_connections.room_action_queue, action);
@@ -359,14 +359,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         {
             Entity *e = find_entity(room->selected_entity, room);
             if(e) {
-                auto *s_e = &e->shared;
-
-                if(s_e->type == ENTITY_ITEM)
+                if(e->type == ENTITY_ITEM)
                 {
-                    update_entity_item(s_e, world_t);
+                    update_entity_item(e, world_t);
 
                     UI_Click_State close_button_state;
-                    item_window(P(ctx), &s_e->item_e.item, client, &close_button_state, e, world_t);
+                    item_window(P(ctx), &e->item_e.item, client, &close_button_state, e, world_t);
                     if(close_button_state & CLICKED_ENABLED) {
                         room->selected_entity = NO_ENTITY;
                     }

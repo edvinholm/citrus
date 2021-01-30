@@ -120,7 +120,7 @@ bool can_place_item_entity(Item *item, v3 p, double world_t, S__Room *room, ENTI
     for(int i = 0; i < num_entities; i++)
     {
         auto *e = entities + i;
-        AABB other_bbox = entity_aabb(&e->shared, world_t);
+        AABB other_bbox = entity_aabb(e, world_t);
         
         if(aabb_intersects_aabb(my_bbox, other_bbox))
             return false;

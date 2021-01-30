@@ -4,7 +4,7 @@
 Item *get_selected_inventory_item(User *user)
 {
     if(user->selected_inventory_item_plus_one == 0) return NULL;
-    Item *item = &user->shared.inventory[user->selected_inventory_item_plus_one-1];
+    Item *item = &user->inventory[user->selected_inventory_item_plus_one-1];
     if(item->id == NO_ITEM) return NULL;
     Assert(item->type != ITEM_NONE_OR_NUM);
     return item;
@@ -18,9 +18,9 @@ void inventory_deselect(User *user)
 void empty_inventory_slot_locally(int slot_ix, User *user)
 {
     Assert(slot_ix >= 0);
-    Assert(slot_ix < ARRLEN(user->shared.inventory));
+    Assert(slot_ix < ARRLEN(user->inventory));
 
-    auto *slot = &user->shared.inventory[slot_ix];
+    auto *slot = &user->inventory[slot_ix];
 
     // @Boilerplate: User Server: commit_transaction().
     Zero(*slot);
@@ -30,9 +30,9 @@ void empty_inventory_slot_locally(int slot_ix, User *user)
 
 void inventory_remove_item_locally(Item_ID id, User *user)
 {
-    for(int i = 0; i < ARRLEN(user->shared.inventory); i++)
+    for(int i = 0; i < ARRLEN(user->inventory); i++)
     {
-        auto *item = &user->shared.inventory[i];
+        auto *item = &user->inventory[i];
         if(item->id == id) {
             empty_inventory_slot_locally(i, user);
             return;
@@ -46,12 +46,12 @@ bool select_next_inventory_item_of_type(Item_Type_ID type, User *user)
 {
     auto selected_slot = user->selected_inventory_item_plus_one-1;
     auto slot_at = selected_slot + 1;
-    auto *inventory = user->shared.inventory;
+    auto *inventory = user->inventory;
     
     while(true)
     {
         if(slot_at == selected_slot) break;
-        if(slot_at >= ARRLEN(user->shared.inventory)) slot_at = 0;
+        if(slot_at >= ARRLEN(user->inventory)) slot_at = 0;
 
         if(inventory[slot_at].type == type) {
             user->selected_inventory_item_plus_one = slot_at+1;
@@ -84,7 +84,7 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p
     {
         auto *e = &room->entities[i];
 
-        AABB bbox = entity_aabb(&e->shared, world_t);
+        AABB bbox = entity_aabb(static_cast<S__Entity *>(e), world_t);
            
         float ray_t;
         v3 intersection;
@@ -173,7 +173,7 @@ Entity create_preview_item_entity(Item *item, v3 tp, double world_t)
     v3 p = item_entity_p_from_tp(tp, item);
     
     Entity e = {0};
-    e.shared = create_item_entity(item, p, world_t);
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, world_t);
 
     e.is_preview = true;
     return e;
@@ -202,7 +202,7 @@ Entity *find_entity(Entity_ID id, Room *room)
 {
     for(int i = 0; i < room->entities.n; i++) {
         auto *e = &room->entities[i];
-        if(e->shared.id == id) return e;
+        if(e->id == id) return e;
     }
 
     return NULL;
@@ -214,19 +214,19 @@ Entity *find_or_add_entity(Entity_ID id, Room *room)
     if(found_entity) return found_entity;
     
     Entity new_entity = {0};
-    new_entity.shared.id = id;
+    new_entity.id = id;
     return add_entity(new_entity, room);
 }
 
 void prepare_entity_for_drawing(Entity *e, User_ID my_user_id)
 {
-    if(e->shared.type != ENTITY_PLAYER) return;
-    e->player_local.is_me = (e->shared.player_e.user_id == my_user_id);
+    if(e->type != ENTITY_PLAYER) return;
+    e->player_local.is_me = (e->player_e.user_id == my_user_id);
 }
 
 bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
 {
-    return can_place_item_entity_at_tp(item, tp, world_t, &room->shared, room->entities.e, room->entities.n);
+    return can_place_item_entity_at_tp(item, tp, world_t, static_cast<S__Room *>(room), room->entities.e, room->entities.n);
 }
 
 
@@ -236,10 +236,10 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_
 {
     _actions->n = 0;
     
-    if(e->shared.type != ENTITY_ITEM) return;
+    if(e->type != ENTITY_ITEM) return;
 
-    Assert(e->shared.type == ENTITY_ITEM);
-    Item *item = &e->shared.item_e.item;
+    Assert(e->type == ENTITY_ITEM);
+    Item *item = &e->item_e.item;
     
     array_add(*_actions, ENTITY_ACT_PICK_UP);
 

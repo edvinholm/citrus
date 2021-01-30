@@ -38,7 +38,8 @@ void create_dummy_entities(Room *room)
         item.id = random_int(999, 9999);// NOTE: We don't assign a unique ID to the item here, but this is just @Temporary stuff so it doesn't matter.
         item.type = item_type_id; 
 
-        S__Entity e = create_item_entity(&item, pp, room->shared.t);
+        Entity e = {0};
+        *static_cast<S__Entity *>(&e) = create_item_entity(&item, pp, room->t);
         e.id = 1 + room->next_entity_id_minus_one++;
         e.item_e.p.x += item_type->volume.x * 0.5f;
         e.item_e.p.y += item_type->volume.y * 0.5f + (i % 2);
@@ -58,14 +59,14 @@ void create_dummy_rooms(Room_Server *server)
     
     for(int i = 0; i < 8; i++) {
         Room room = {0};
-        room.shared.t = get_time();
+        room.t = get_time();
         room.randomize_cooldown = random_float() * 3.0;
 
         create_dummy_entities(&room);
 
 #if 0
         for(int t = 0; t < room_size_x * room_size_y; t++) {
-            room.shared.tiles[t] = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
+            room.tiles[t] = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
         }
 #else
         for(int y = 0; y < room_size_y; y++) {
@@ -84,7 +85,7 @@ void create_dummy_rooms(Room_Server *server)
                     t = TILE_SAND;
                 }
 
-                room.shared.tiles[y * room_size_x + x] = t;
+                room.tiles[y * room_size_x + x] = t;
             }
         }
 #endif
@@ -135,18 +136,18 @@ void randomize_tiles(Tile *tiles, u64 num_tiles, int x) {
 
 void update_room(Room *room, int index) {
 
-    Assert(room->shared.t > 0); // Should be initialized when created
+    Assert(room->t > 0); // Should be initialized when created
 
     auto t = get_time();
     
-    double last_t = room->shared.t;
-    room->shared.t = t;
+    double last_t = room->t;
+    room->t = t;
     double dt = t - last_t;
 
     room->randomize_cooldown -= dt;
     while(room->randomize_cooldown <= 0) {
         
-        Tile *tiles = room->shared.tiles;
+        Tile *tiles = room->tiles;
         Tile *at  = tiles;
         Tile *end = tiles + room_size_x * room_size_y;
         while(at < end) {
@@ -176,7 +177,7 @@ void update_room(Room *room, int index) {
             at++;
         }
 #if 0
-        randomize_tiles(room->shared.tiles, ARRLEN(room->shared.tiles), random_int(1, 10));
+        randomize_tiles(room->tiles, ARRLEN(room->tiles), random_int(1, 10));
         room->did_change = true;
 #endif
         room->randomize_cooldown += 0.2;
@@ -364,7 +365,7 @@ void disconnect_room_client(RS_Client *client)
 
 bool initialize_room_client(RS_Client *client, Room *room)
 {
-    RCB_Packet(client, ROOM_INIT, room->shared.t, room->num_entities, room->entities, room->shared.tiles);
+    RCB_Packet(client, ROOM_INIT, room->t, room->num_entities, room->entities, room->tiles);
     return true;
 }
 
@@ -430,10 +431,10 @@ void add_new_room_clients(Room_Server *server)
             // MAKE SURE THERE IS A PLAYER ENTITY //
             bool player_entity_exists = false;
             for(int i = 0; i < room->num_entities; i++) {
-                auto *s_e = &room->entities[i].shared;
-                if(s_e->type != ENTITY_PLAYER) continue;
+                auto *e = &room->entities[i];
+                if(e->type != ENTITY_PLAYER) continue;
 
-                auto *p = &s_e->player_e;
+                auto *p = &e->player_e;
                 if(p->user_id == client->user) {
                     player_entity_exists = true;
                     break;
@@ -442,12 +443,12 @@ void add_new_room_clients(Room_Server *server)
 
             if(!player_entity_exists) {
                 Entity e = {0};
-                e.shared.id     = 1 + room->next_entity_id_minus_one++;
-                e.shared.type   = ENTITY_PLAYER;
+                e.id     = 1 + room->next_entity_id_minus_one++;
+                e.type   = ENTITY_PLAYER;
                 
                 v3 p = { (float)random_int(1, room_size_x-1), (float)random_int(1, room_size_y-1), 0 };
 
-                auto *player_e = &e.shared.player_e;
+                auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
                 player_e->walk_p0 = p;
                 player_e->walk_p1 = p;
@@ -584,7 +585,7 @@ Entity *find_entity(Entity_ID id, Room *room)
 {
     for(int i = 0; i < room->num_entities; i++) {
         auto *e = &room->entities[i];
-        if(e->shared.id == id) {
+        if(e->id == id) {
             return e;
         }
     }
@@ -596,8 +597,8 @@ Entity *find_player_entity(User_ID user_id, Room *room)
 {
     for(int i = 0; i < room->num_entities; i++) {
         auto *e = &room->entities[i];
-        if(e->shared.type != ENTITY_PLAYER) continue;
-        if(e->shared.player_e.user_id == user_id) {
+        if(e->type != ENTITY_PLAYER) continue;
+        if(e->player_e.user_id == user_id) {
             return e;
         }
     }
@@ -608,13 +609,13 @@ Entity *find_player_entity(User_ID user_id, Room *room)
 bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *server)
 {
     Assert(as_user != NO_USER);
-    Assert(e->shared.type == ENTITY_ITEM);
+    Assert(e->type == ENTITY_ITEM);
     
-    update_entity_item(&e->shared, room->shared.t);
+    update_entity_item(e, room->t);
     
     bool can_commit = true;
     
-    if(can_commit && !outbound_item_transaction_prepare(as_user, &e->shared.item_e.item, server)) {
+    if(can_commit && !outbound_item_transaction_prepare(as_user, &e->item_e.item, server)) {
         can_commit = false;
     }
 
@@ -654,25 +655,25 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
 
 void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
 {
-    if(!entity_action_predicted_possible(action, &e->shared, as_user, room->shared.t, NULL)) return;
+    if(!entity_action_predicted_possible(action, e, as_user, room->t, NULL)) return;
 
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
             Assert(as_user != NO_USER);
-            Assert(e->shared.type == ENTITY_ITEM);
+            Assert(e->type == ENTITY_ITEM);
             
             if(pick_up_item_entity(as_user, e, room, server)) {
-                RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+                RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
             }
         } break;
 
         case ENTITY_ACT_HARVEST: {
             Assert(as_user != NO_USER);
-            Assert(e->shared.type == ENTITY_ITEM);
+            Assert(e->type == ENTITY_ITEM);
             
             // @Temporary @Norelease
             if(pick_up_item_entity(as_user, e, room, server)) {
-                RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+                RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
             }
         } break;
 
@@ -717,7 +718,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
                     // Check if we can commit //
                     if(can_commit) {
-                        can_commit = can_place_item_entity_at_tp(&item, tp, room->shared.t, &room->shared, room->entities, room->num_entities);
+                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room, room->entities, room->num_entities);
                     }
 
                     if(can_commit)
@@ -732,8 +733,8 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                         v3 p = item_entity_p_from_tp(tp, &item);
                             
                         Entity e = {0};
-                        e.shared = create_item_entity(&item, p, room->shared.t);
-                        e.shared.id   = 1 + room->next_entity_id_minus_one++;
+                        *static_cast<S__Entity *>(&e) = create_item_entity(&item, p, room->t);
+                        e.id   = 1 + room->next_entity_id_minus_one++;
                         
                         room->entities[room->num_entities++] = e;
                     }
@@ -752,9 +753,9 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 
                 Entity *e = find_player_entity(client->user, room);
                 if(e) {
-                    e->shared.player_e.walk_p0 = entity_position(&e->shared, room->shared.t);
-                    e->shared.player_e.walk_t0 = room->shared.t;
-                    e->shared.player_e.walk_p1 = tp_from_index(p.tile_ix);
+                    e->player_e.walk_p0 = entity_position(e, room->t);
+                    e->player_e.walk_t0 = room->t;
+                    e->player_e.walk_p1 = tp_from_index(p.tile_ix);
                 }
                 
                 room->did_change = true;
@@ -902,7 +903,7 @@ DWORD room_server_main_loop(void *server_)
             // TODO @Norelease: Only send tiles/entities that changed.
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
-                RCB_Packet(client, ROOM_CHANGED, 0, room_size, room->shared.tiles, room->num_entities, room->entities);
+                RCB_Packet(client, ROOM_CHANGED, 0, room_size, room->tiles, room->num_entities, room->entities);
                 if(client == NULL) c--;
             }
         }

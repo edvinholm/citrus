@@ -94,16 +94,16 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                 
                 for(int i = 0; i < p->num_entities; i++) {
                     Zero(entities[i]);
-                    Read_To_Ptr(Entity, &entities[i].shared, node);
+                    Read_To_Ptr(Entity, &entities[i], node);
                 }
 
                 lock_mutex(mutex);
                 {
-                    room->shared.t = p->time;
-                    room->time_offset = room->shared.t - t;
+                    room->t = p->time;
+                    room->time_offset = room->t - t;
                     
                     Assert(sizeof(Tile) == 1);
-                    memcpy(room->shared.tiles, p->tiles, room_size_x * room_size_y);
+                    memcpy(room->tiles, p->tiles, room_size_x * room_size_y);
 
                     array_set(room->entities, entities);
                     
@@ -135,16 +135,17 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                         room->entities[i].exists_on_server = false;
                     }
                     
-                    Tile *tiles = room->shared.tiles;
+                    Tile *tiles = room->tiles;
                     for(int t = p->tile0; t < p->tile1; t++) {
                         tiles[t] = p->tiles[t - p->tile0];
                     }
 
                     for(int i = 0; i < s_entities.n; i++) {
-                        auto *s_e = &s_entities[i];
-
-                        auto *e = find_or_add_entity(s_e->id, room);
-                        e->shared = *s_e;
+                        
+                        auto *e = find_or_add_entity(s_entities[i].id, room);
+                        auto *s_e = static_cast<S__Entity *>(e);
+                        *s_e = s_entities[i];
+                        
                         e->exists_on_server = true;
                     }
 
@@ -211,20 +212,20 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
             case UCB_USER_INIT: {
                 auto *p = &header.user_init;
 
-                Item inventory[ARRLEN(user->shared.inventory)];
+                Item inventory[ARRLEN(user->inventory)];
                 for(int i = 0; i < ARRLEN(inventory); i++) {
                     Read_To_Ptr(Item, inventory + i, node);
                 }
                 
                 lock_mutex(mutex);
                 {
-                    clear(&user->shared.username, ALLOC_APP);
+                    clear(&user->username, ALLOC_APP);
                     
-                    user->shared.id        = p->id;
-                    user->shared.username  = copy_of(&p->username, ALLOC_APP);
-                    user->shared.color     = p->color;
-                    static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
-                    memcpy(user->shared.inventory, inventory, sizeof(inventory));
+                    user->id        = p->id;
+                    user->username  = copy_of(&p->username, ALLOC_APP);
+                    user->color     = p->color;
+                    static_assert(sizeof(inventory) == sizeof(user->inventory));
+                    memcpy(user->inventory, inventory, sizeof(inventory));
                 }
                 unlock_mutex(mutex);
             } break;
@@ -232,22 +233,22 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
             case UCB_USER_UPDATE: {
                 auto *p = &header.user_update;
                 
-                Item inventory[ARRLEN(user->shared.inventory)];
+                Item inventory[ARRLEN(user->inventory)];
                 for(int i = 0; i < ARRLEN(inventory); i++) {
                     Read_To_Ptr(Item, inventory + i, node);
                 }
 
-                static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
+                static_assert(sizeof(inventory) == sizeof(user->inventory));
 
                 lock_mutex(mutex);
                 {
-                    clear(&user->shared.username, ALLOC_APP);
+                    clear(&user->username, ALLOC_APP);
                     
-                    user->shared.id        = p->id;
-                    user->shared.username  = copy_of(&p->username, ALLOC_APP);
-                    user->shared.color     = p->color;
-                    static_assert(sizeof(inventory) == sizeof(user->shared.inventory));
-                    memcpy(user->shared.inventory, inventory, sizeof(inventory));
+                    user->id        = p->id;
+                    user->username  = copy_of(&p->username, ALLOC_APP);
+                    user->color     = p->color;
+                    static_assert(sizeof(inventory) == sizeof(user->inventory));
+                    memcpy(user->inventory, inventory, sizeof(inventory));
                 }
                 unlock_mutex(mutex);
                 

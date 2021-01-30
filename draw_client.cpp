@@ -627,16 +627,16 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room 
             Entity preview_entity = create_preview_item_entity(selected_item, tp, world_t);
             draw_entity(&preview_entity, world_t, gfx);
 
-            Assert(preview_entity.shared.type == ENTITY_ITEM);
+            Assert(preview_entity.type == ENTITY_ITEM);
 
-            v3 p = preview_entity.shared.item_e.p;
+            v3 p = preview_entity.item_e.p;
             
             v3 p0 = p;
             auto vol = item_types[selected_item->type].volume;
             p0.xy -= vol.xy * 0.5f;
 
             v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
-            if(!can_place_item_entity(selected_item, p, world_t, &room->shared, room->entities.e, room->entities.n))
+            if(!can_place_item_entity(selected_item, p, world_t, room, room->entities.e, room->entities.n))
                 shadow_color = { 0.4,   0.1,  0.1, 1 };
             
             draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
@@ -808,7 +808,7 @@ DWORD render_loop(void *loop_)
                             m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx.z_for_2d);                        
 
                             for(int i = 0; i < room->entities.n; i++) {
-                                prepare_entity_for_drawing(&room->entities[i], client->user.shared.id);
+                                prepare_entity_for_drawing(&room->entities[i], client->user.id);
                             }
                             draw_world(room, t, projection, &gfx);
 

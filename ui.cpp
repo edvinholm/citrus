@@ -1499,7 +1499,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
         Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, &entity_hit_p);
         if (entity_hit) {
 
-            hovered_entity = entity_hit->shared.id;
+            hovered_entity = entity_hit->id;
 
             if (view->click_state & PRESSED_NOW) {
                 view->pressed_entity = hovered_entity;

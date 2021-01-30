@@ -7,7 +7,7 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
     v4 water = {0.1,  0.3, 0.5,  0.9f};
 
-    auto *tiles = room->shared.tiles;
+    auto *tiles = room->tiles;
 
     float tile_s = 1;
     
@@ -125,33 +125,35 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 
 void draw_entity(Entity *e, double world_t, Graphics *gfx)
 {
+    auto *s_e = static_cast<S__Entity *>(e);
+    
     float shadow_factor = 0.90f;
     
-    v3 origin = entity_position(&e->shared, world_t);
+    v3 origin = entity_position(s_e, world_t);
     v3 volume = V3_ONE;
 
     v4 base_color = V4_ONE;
     
-    if(e->shared.type == ENTITY_ITEM)
+    if(e->type == ENTITY_ITEM)
     {
-        update_entity_item(&e->shared, world_t);
+        update_entity_item(s_e, world_t);
         
-        auto *item = &e->shared.item_e.item;
+        auto *item = &e->item_e.item;
         Item_Type *item_type = item_types + item->type;
         
         volume = V3(item_type->volume);
         
         if(item->type == ITEM_PLANT)
         {
-            auto *plant = &e->shared.item_e.item.plant;
+            auto *plant = &e->item_e.item.plant;
             volume.z *= min(1.0f, plant->grow_progress);
         }
 
         base_color = item_type->color;
     }
-    else if(e->shared.type == ENTITY_PLAYER)
+    else if(e->type == ENTITY_PLAYER)
     {
-        auto *player_e = &e->shared.player_e;
+        auto *player_e = &e->player_e;
         
         volume = { 1.2, 1.2, 3.4 };
         
@@ -186,7 +188,7 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
     top_origin.z += volume.z;
     draw_quad(top_origin, { (float)volume.x, 0, 0 }, { 0, (float)volume.y, 0 }, base_color, gfx);
 
-    if(e->shared.type == ENTITY_PLAYER)
+    if(e->type == ENTITY_PLAYER)
     {
         float cube_size = 1.8;
         draw_cube_ps(top_origin - V3_XY * cube_size * 0.5f, V3_ONE * cube_size, base_color, gfx);
@@ -206,7 +208,7 @@ void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
     v4 water = {0.1,  0.3, 0.5,  0.9f};
 
-    auto *tiles = room->shared.tiles;
+    auto *tiles = room->tiles;
 
     const float tile_s = 1;
     

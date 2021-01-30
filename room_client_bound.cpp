@@ -179,7 +179,7 @@ bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_e
         Write_Bytes(tiles, room_size_x * room_size_y, node);
                 
         for(int i = 0; i < num_entities; i++) {
-            Write(Entity, &entities[i].shared, node);
+            Write(Entity, &entities[i], node);
         }
     }
     end_outbound_packet(node);
@@ -207,7 +207,7 @@ bool enqueue_RCB_ROOM_CHANGED_packet(Network_Node *node,
         Entity *end_entity = entities + num_entities;
         while(at_entity < end_entity)
         {
-            Write(Entity, &(at_entity++)->shared, node);
+            Write(Entity, at_entity++, node);
         }
     }
     end_outbound_packet(node);

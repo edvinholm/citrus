@@ -11,10 +11,8 @@ struct S__User
 
 namespace Client_User
 {
-    struct User
+    struct User: public S__User
     {
-        S__User shared;
-
         int selected_inventory_item_plus_one;
     };
 };
