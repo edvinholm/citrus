@@ -29,7 +29,8 @@ struct Item_Type
 
 enum Entity_Action_Type
 {
-    ENTITY_ACT_PICK_UP = 1
+    ENTITY_ACT_PICK_UP = 1,
+    ENTITY_ACT_HARVEST = 2
 };
 
 struct Entity_Action

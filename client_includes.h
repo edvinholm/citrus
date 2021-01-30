@@ -57,8 +57,8 @@
 #include "game_shared.h"
 #include "user.h"
 
-#include "world_shared.cpp"
 #include "user_shared.cpp"
+#include "world_shared.cpp"
 
 #include "transaction.h"
 

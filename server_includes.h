@@ -14,8 +14,8 @@ using namespace Server_Game;
 #include "user.h"
 using namespace Server_User;
 
-#include "world_shared.cpp"
 #include "user_shared.cpp"
+#include "world_shared.cpp"
 
 #include "log.cpp"
 

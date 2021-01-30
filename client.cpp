@@ -146,8 +146,23 @@ void user_window(UI_Context ctx, Client *client)
     }
 }
 
+String entity_action_label(Entity_Action action)
+{
+    switch(action.type) {
+        case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
+        case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
+
+        default: Assert(false); return STRING("???"); break;
+    }
+
+    Assert(false);
+    return EMPTY_STRING;
+}
+
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
-void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL)
+// REMEMBER: world_t is local to the Room Server we're on. User Server has no world_t.
+//           So passing a world_t but no entity does not make sense... -EH, 2021-01-30
+void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL, double world_t = 0)
 {
     U(ctx);
     
@@ -162,14 +177,21 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
         _AREA_(window_a);
 
         if(e) {   
-            { _BOTTOM_CUT_(32);
-                                        
-                Entity_Action entity_action = {0};
-                entity_action.type = ENTITY_ACT_PICK_UP;
-    
-                bool enabled = entity_action_predicted_possible(entity_action, e, client->user.shared.id, &client->user.shared);
+            Array<Entity_Action_Type, ALLOC_TMP> actions = {0};
+            get_available_actions_for_entity(e, &actions);
+
+            for(int i = 0; i < actions.n; i++) {
+
+                if(i > 0) { _BOTTOM_CUT_(window_default_padding); }
                 
-                if(button(P(ctx), STRING("PICK UP"), enabled) & CLICKED_ENABLED) {
+                _BOTTOM_CUT_(32);
+                
+                Entity_Action entity_action = {0};
+                entity_action.type = actions[i];
+    
+                bool enabled = entity_action_predicted_possible(entity_action, &e->shared, client->user.shared.id, world_t, &client->user.shared);
+                
+                if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED) {
 
                     C_RS_Action action = {0};
                     action.type = C_RS_ACT_ENTITY_ACTION;                    
@@ -259,6 +281,10 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     Rect a = area(ctx.layout);
 
+    auto *room = &client->game.room;
+    auto world_t = world_time_for_room(room, t);
+    
+
 //    _SHRINK_(10);
 
     { _RIGHT_(400);
@@ -329,8 +355,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
 
         
-        auto *room = &client->game.room;
-        auto world_t = world_time_for_room(room, t);
         if(room->selected_entity != NO_ENTITY)
         {
             Entity *e = find_entity(room->selected_entity, room);
@@ -342,7 +366,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     update_entity_item(s_e, world_t);
 
                     UI_Click_State close_button_state;
-                    item_window(P(ctx), &s_e->item_e.item, client, &close_button_state, e);
+                    item_window(P(ctx), &s_e->item_e.item, client, &close_button_state, e, world_t);
                     if(close_button_state & CLICKED_ENABLED) {
                         room->selected_entity = NO_ENTITY;
                     }

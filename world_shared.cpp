@@ -19,7 +19,9 @@ void update_entity_item(S__Entity *e, double world_t)
             auto *plant = &item->plant;
             auto *state = &e->item_e.plant;
 
-            plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * (1.0f / 60.0f);
+            float grow_speed = 1.0f / 60.0f;
+            plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * grow_speed;
+            plant->grow_progress = clamp(plant->grow_progress);
         } break;
     }
 }
@@ -146,19 +148,41 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, S__Room *roo
 //       item from the room, and that we have available space in our User.inventory.
 //       The Room Server checks the first part locally, but the inventory part will get
 //       checked by the User Server when we do the item transaction.
-template<typename ENTITY>
-bool entity_action_predicted_possible(Entity_Action action, ENTITY *e, User_ID performer_user_id, S__User *user = NULL)
+bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_ID performer_user_id, double world_t, S__User *user = NULL)
 {
+    // Update the entity's item so we can check its state.
+    if(e->type == ENTITY_ITEM) {
+        update_entity_item(e, world_t);
+    }
+    
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
+            
             if(performer_user_id == NO_USER)  return false;
-            if(e->shared.type != ENTITY_ITEM) return false;
-
+            if(e->type != ENTITY_ITEM) return false;
+    
             if(user) {
-                if(!inventory_has_available_space_for_item(&e->shared.item_e.item, user)) return false;
+                if(!inventory_has_available_space_for_item(&e->item_e.item, user)) return false;
             }
             
             return true;
+        } break;
+
+        case ENTITY_ACT_HARVEST: {
+
+            if(performer_user_id == NO_USER)  return false;
+            if(e->type != ENTITY_ITEM) return false;
+
+            auto *item = &e->item_e.item;
+            if(item->plant.grow_progress < 0.75f) return false;
+
+            if(user) {
+                // @Temporary: @Norelease Should check if harvested item(s) fits in inventory, not if the plant itself fits.
+                if(!inventory_has_available_space_for_item(&e->item_e.item, user)) return false;
+            }
+            
+            return true;
+            
         } break;
 
         default: Assert(false); return false;

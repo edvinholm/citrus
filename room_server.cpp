@@ -654,16 +654,29 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
 
 void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
 {
-    if(!entity_action_predicted_possible(action, e, (as_user != NO_USER), NULL)) return;
-   
+    if(!entity_action_predicted_possible(action, &e->shared, as_user, room->shared.t, NULL)) return;
+
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
             Assert(as_user != NO_USER);
             Assert(e->shared.type == ENTITY_ITEM);
             
-            bool success = pick_up_item_entity(as_user, e, room, server);
-            RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+            if(pick_up_item_entity(as_user, e, room, server)) {
+                RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+            }
         } break;
+
+        case ENTITY_ACT_HARVEST: {
+            Assert(as_user != NO_USER);
+            Assert(e->shared.type == ENTITY_ITEM);
+            
+            // @Temporary @Norelease
+            if(pick_up_item_entity(as_user, e, room, server)) {
+                RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu).\n", as_user, e->shared.id, e->shared.item_e.item.id);
+            }
+        } break;
+
+        default: Assert(false); return;
     }
 }
 

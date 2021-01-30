@@ -229,4 +229,26 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
     return can_place_item_entity_at_tp(item, tp, world_t, &room->shared, room->entities.e, room->entities.n);
 }
 
+
+// IMPORTANT: The *_actions array should be in a valid state before calling this proc!
+template<Allocator_ID A>
+void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_actions)
+{
+    _actions->n = 0;
+    
+    if(e->shared.type != ENTITY_ITEM) return;
+
+    Assert(e->shared.type == ENTITY_ITEM);
+    Item *item = &e->shared.item_e.item;
+    
+    array_add(*_actions, ENTITY_ACT_PICK_UP);
+
+    switch(item->type)
+    {
+        case ITEM_PLANT: {
+            array_add(*_actions, ENTITY_ACT_HARVEST);
+        } break;
+    }
+}
+
 // ///////////////////// //
