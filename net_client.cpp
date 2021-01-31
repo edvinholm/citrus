@@ -224,6 +224,7 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->id        = p->id;
                     user->username  = copy_of(&p->username, ALLOC_APP);
                     user->color     = p->color;
+                    user->money     = p->money;
                     static_assert(sizeof(inventory) == sizeof(user->inventory));
                     memcpy(user->inventory, inventory, sizeof(inventory));
                 }
@@ -247,6 +248,7 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->id        = p->id;
                     user->username  = copy_of(&p->username, ALLOC_APP);
                     user->color     = p->color;
+                    user->money     = p->money;
                     static_assert(sizeof(inventory) == sizeof(user->inventory));
                     memcpy(user->inventory, inventory, sizeof(inventory));
                 }

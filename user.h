@@ -1,9 +1,12 @@
 
+typedef s64 Money;
+
 struct S__User
 {
     User_ID id;
     String username;
     v4 color;
+    Money money; // @Norelease: This should only be shared with the client for this player, not other ones.
 
     Item inventory[8*14];
 };
@@ -20,9 +23,8 @@ namespace Client_User
 
 namespace Server_User
 {
-    struct User
+    struct User: public S__User
     {
-        S__User shared;
-        bool inventory_changed;
+        bool did_change;
     };
 };

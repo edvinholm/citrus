@@ -228,6 +228,8 @@ void clear_ui_element(UI_Element *e)
         case SLIDER:
         case UI_TEXT:
 
+        case UI_INVENTORY_SLOT:
+
         case WORLD_VIEW:
             break;
 
@@ -528,7 +530,7 @@ void panel(UI_Context ctx)
     ui_set(e, &panel->a, area(ctx.layout));
 }
 
-void ui_text(String text, UI_Context ctx)
+void ui_text(UI_Context ctx, String text)
 {
     U(ctx);
     

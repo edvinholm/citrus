@@ -45,18 +45,19 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
     
     for(int i = 0; i < ARRLEN(usernames); i++) {
         User user = {0};
-        user.shared.id = next_user_id++; 
-        user.shared.username = copy_cstring_to_string(usernames[i], allocator);
-        user.shared.color = { random_float(),  random_float(),  random_float(), 1 };
+        user.id = next_user_id++; 
+        user.username = copy_cstring_to_string(usernames[i], allocator);
+        user.color = { random_float(),  random_float(),  random_float(), 1 };
+        user.money = random_int(-100, 1000);
 
-        Assert(user.shared.id != NO_USER);
+        Assert(user.id != NO_USER);
 
-        for(int j = 0; j < ARRLEN(user.shared.inventory); j++)
+        for(int j = 0; j < ARRLEN(user.inventory); j++)
         {
             Item item = {0};
             item.id   = next_item_id++;
             item.type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM-1);
-            user.shared.inventory[j] = item;
+            user.inventory[j] = item;
         }
         
         array_add(server->users,   user);
@@ -65,11 +66,11 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
 
     US_Log("Dummy users:\n");
     for(int i = 0; i < server->users.n; i++) {
-        auto &sh = server->users[i].shared;
-        auto &c = sh.color;
+        auto &u = server->users[i];
+        auto &c = u.color;
 
-        int num_spaces = max(1, 32 - sh.username.length);
-        US_Log("    %.*s", (int)sh.username.length, sh.username.data);
+        int num_spaces = max(1, 32 - u.username.length);
+        US_Log("    %.*s", (int)u.username.length, u.username.data);
         for(int i = 0; i < num_spaces; i++) {
             US_Log_No_T(" ");
         }
@@ -193,10 +194,10 @@ void commit_transaction(US_Transaction t, User *user)
             {
                 auto *sb = &x->server_bound;
                 
-                auto *slot = find_first_empty_inventory_slot(&user->shared);
+                auto *slot = find_first_empty_inventory_slot(user);
                 if(slot) {
                     *slot = sb->item;
-                    user->inventory_changed = true;
+                    user->did_change = true;
                 } else {
                     Assert(false); // TODO @ReportError @Norelease
                 }
@@ -205,13 +206,13 @@ void commit_transaction(US_Transaction t, User *user)
             {
                 auto *cb = &x->client_bound;
                 
-                for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                    if(user->shared.inventory[i].id == cb->item_id) {
+                for(int i = 0; i < ARRLEN(user->inventory); i++) {
+                    if(user->inventory[i].id == cb->item_id) {
                         // @Boilerplate: Client: world.cpp: empty_inventory_slot_locally()
-                        Zero(user->shared.inventory[i]);
-                        user->shared.inventory[i].id = NO_ITEM;
-                        user->shared.inventory[i].type = ITEM_NONE_OR_NUM;
-                        user->inventory_changed = true;
+                        Zero(user->inventory[i]);
+                        user->inventory[i].id = NO_ITEM;
+                        user->inventory[i].type = ITEM_NONE_OR_NUM;
+                        user->did_change = true;
                         return;
                     }
                 }
@@ -237,14 +238,14 @@ bool transaction_possible(US_Transaction t, User *user, UCB_Transaction_Commit_V
             {
                 auto *sb = &x->server_bound;
              
-                return inventory_has_available_space_for_item(&sb->item, &user->shared);
+                return inventory_has_available_space_for_item(&sb->item, user);
             }
             else
             {
                 auto *cb = &x->client_bound;
                 
-                for(int i = 0; i < ARRLEN(user->shared.inventory); i++) {
-                    auto *item = &user->shared.inventory[i];
+                for(int i = 0; i < ARRLEN(user->inventory); i++) {
+                    auto *item = &user->inventory[i];
                     if(item->id == cb->item_id)
                     {
                         _commit_vote_payload->item = *item;
@@ -284,7 +285,7 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
                     //            This is so the game client knows when to for example start showing the inventory item
                     //            again that the player was trying to place.
                     // (@Hack)
-                    user->inventory_changed = true;
+                    user->did_change = true;
                 } break;
 
                 default: Assert(false); return false;
@@ -359,7 +360,7 @@ void disconnect_user_client(US_Client *client)
     auto *server = client->server;
     for(int i = 0; i < server->users.n; i++)
     {
-        if(server->users[i].shared.id == client->user_id) {
+        if(server->users[i].id == client->user_id) {
             auto *clients = &server->clients[i];
             Assert(client >= clients->e);
             Assert(client < clients->e + clients->n);
@@ -434,7 +435,7 @@ void add_new_user_clients(User_Server *server)
             User *user = NULL;
             int user_index = -1;
             for(int u = 0; u < server->users.n; u++) {
-                if(server->users[u].shared.id == requested_user) {
+                if(server->users[u].id == requested_user) {
                     user_index = u;
                     user = server->users.e + u;
                     break;
@@ -466,12 +467,11 @@ void add_new_user_clients(User_Server *server)
                  
             auto *clients = &server->clients[user_index];
             client = array_add(*clients, *client);
-            US_Log("Added client (socket = %lld) to user (username = %.*s).\n", client->node.socket.handle, (int)user->shared.username.length, user->shared.username.data);
+            US_Log("Added client (socket = %lld) to user (username = %.*s).\n", client->node.socket.handle, (int)user->username.length, user->username.data);
 
             if(client->type == US_CLIENT_PLAYER)
             {
-                auto &u = user->shared;
-                UCB_Packet(USER_INIT, client, u.id, u.username, u.color, u.inventory);
+                UCB_Packet(USER_INIT, client, user->id, user->username, user->color, user->money, user->inventory);
                 if(!client) {
                     US_Log("Unable to init user client.\n"); // initialize_user_client() disconnects client for us on error.
                 }
@@ -537,7 +537,6 @@ DWORD user_server_main_loop(void *server_) {
         for(int i = 0; i < server->users.n; i++)
         {
             User *user    = &server->users[i];
-            S__User *s_user = &user->shared;
             auto &clients = server->clients[i];
             
             // LISTEN TO WHAT THE CLIENTS HAVE TO SAY //
@@ -590,12 +589,12 @@ DWORD user_server_main_loop(void *server_) {
                 auto *client = &clients[c];
                 if(client->type != US_CLIENT_PLAYER) continue;
 
-                if(user->inventory_changed) {
-                    UCB_Packet(USER_UPDATE, client, s_user->id, s_user->username, s_user->color, s_user->inventory);
+                if(user->did_change) {
+                    UCB_Packet(USER_UPDATE, client, user->id, user->username, user->color, user->money, user->inventory);
                 }
             }
 
-            user->inventory_changed = false;
+            user->did_change = false;
         }
         
 

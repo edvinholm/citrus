@@ -438,6 +438,7 @@ bool write_String(String str, Network_Node *node)
 
 
 // User //
+static_assert(sizeof(User_ID) == sizeof(u64));
 bool read_User_ID(User_ID *_user_id, Network_Node *node)
 {
     Read(u64, id, node);
@@ -450,6 +451,21 @@ bool write_User_ID(User_ID user_id, Network_Node *node)
     Write(u64, user_id, node);
     return true;
 }
+
+static_assert(sizeof(Money) == sizeof(u64));
+bool read_Money(Money *_money, Network_Node *node)
+{
+    Read(s64, i, node);
+    *_money = (Money)i;
+    return true;
+}
+
+bool write_Money(Money money, Network_Node *node)
+{
+    Write(s64, money, node);
+    return true;
+}
+
 
 
 

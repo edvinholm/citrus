@@ -68,7 +68,7 @@ void user_window(UI_Context ctx, Client *client)
     char *usernames[] = {
         "Tachophobia",
         "Sailor88",
-        "WhoLetTheDogsOut",
+        //"WhoLetTheDogsOut",
         "MrCool",
         "kadlfgAJb!",
         "LongLongWay.9000",
@@ -80,7 +80,7 @@ void user_window(UI_Context ctx, Client *client)
     User_ID user_ids[] = {
         1,
         2,
-        3,
+        //3,
         4,
         5,
         6,
@@ -98,8 +98,12 @@ void user_window(UI_Context ctx, Client *client)
     _WINDOW_(P(ctx), user->username, true, connected, user->color);
 
     if(connected) {
-        _TOP_CUT_(480);
+        _TOP_CUT_(480 + 72);
         cut_bottom(4, ctx.layout);
+
+        { _BOTTOM_CUT_(72);
+            ui_text(P(ctx), concat_tmp("Money: ¤", user->money, ctx.manager->string_builder));
+        }
 
         int cols = 8;
         int rows = 14;
@@ -249,7 +253,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
             { _TOP_CUT_(20);
                 v3s vol = type->volume;
                 String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
-                ui_text(volume_str, P(ctx));
+                ui_text(P(ctx), volume_str);
             }
         }
 
@@ -260,7 +264,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                 { _TOP_CUT_(20);   
                     float grow_progress = plant->grow_progress;
                     String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
-                    ui_text(grow_str, P(ctx));
+                    ui_text(P(ctx), grow_str);
                 }
             };
         }

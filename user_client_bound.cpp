@@ -41,14 +41,16 @@ struct UCB_Packet_Header
         
         struct {
             User_ID id;
-            String  username;
-            v4      color;
+            String username;
+            v4 color;
+            Money money;
         } user_init;
 
         struct {
             User_ID id;
-            String  username;
-            v4      color;
+            String username;
+            v4 color;
+            Money money;
         } user_update;
 
         struct {
@@ -136,7 +138,7 @@ bool send_UCB_GOODBYE_packet_now(Network_Node *node)
 }
 
 
-bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String username, v4 color, Item *inventory)
+bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Item *inventory)
 {
     begin_outbound_packet(node);
     {
@@ -146,6 +148,7 @@ bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String usernam
         Write(User_ID, id,       node);
         Write(String,  username, node);
         Write(v4,      color,    node);
+        Write(Money,   money,    node);
         for(int i = 0; i < ARRLEN(S__User::inventory); i++) {
             Write(Item, inventory[i], node);
         }
@@ -154,7 +157,7 @@ bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String usernam
     return true;
 }
 
-bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String username, v4 color, Item *inventory)
+bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Item *inventory)
 {
     begin_outbound_packet(node);
     {
@@ -164,6 +167,7 @@ bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String usern
         Write(User_ID, id,       node);
         Write(String,  username, node);
         Write(v4,      color,    node);
+        Write(Money,   money,    node);
         for(int i = 0; i < ARRLEN(S__User::inventory); i++) {
             Write(Item, inventory[i], node);
         }
@@ -224,6 +228,7 @@ bool read_UCB_Packet_Header(UCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(User_ID, &p->id,       node);
             Read_To_Ptr(String,  &p->username, node);
             Read_To_Ptr(v4,      &p->color,    node);
+            Read_To_Ptr(Money,   &p->money,    node);
         } break;
 
         case UCB_USER_UPDATE: {
@@ -231,6 +236,7 @@ bool read_UCB_Packet_Header(UCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(User_ID, &p->id,       node);
             Read_To_Ptr(String,  &p->username, node);
             Read_To_Ptr(v4,      &p->color,    node);
+            Read_To_Ptr(Money,   &p->money,    node);
         } break;
             
         case UCB_TRANSACTION_MESSAGE: {

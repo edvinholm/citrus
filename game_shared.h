@@ -151,7 +151,7 @@ struct S__Entity
             v3 walk_p1;
 
             u8 action_queue_length;
-            Player_Action action_queue[8];
+            Player_Action action_queue[16];
             
         } player_e;
     };
