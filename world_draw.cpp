@@ -6,10 +6,14 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     v4 grass = {0.25, 0.6,  0.1, 1.0f};
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
     v4 water = {0.1,  0.3, 0.5,  0.9f};
+    
+    v4 wall = {0.9, 0.9, 0.9, 1};
 
     auto *tiles = room->tiles;
 
     float tile_s = 1;
+    
+    float shadow_factor = 0.90f;
     
     for(int y = 0; y < room_size_y; y++) {
         for(int x = 0; x < room_size_x; x++) {
@@ -21,10 +25,11 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
             v4 *color = NULL;
             float z = -0.0001f;
             switch(tile) {
-                case TILE_SAND:  color = &sand; break;
+                case TILE_SAND:  color = &sand;  break;
                 case TILE_GRASS: color = &grass; break;
                 case TILE_STONE: color = &stone; break;
                 case TILE_WATER: color = &stone; z = -1; break;
+                case TILE_WALL:  color = &wall;  z = 7;  break;
                 default: Assert(false); break;
             }
 
@@ -32,17 +37,27 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
 
                 // WEST
-                if(x != 0 && tiles[y * room_size_x + x - 1] != TILE_WATER)
+                if(x != 0 && tiles[y * room_size_x + x - 1] != tile)
                     draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
                 // NORTH
-                if(y != 0 && tiles[(y-1) * room_size_x + x] != TILE_WATER)
+                if(y != 0 && tiles[(y-1) * room_size_x + x] != tile)
                     draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
                 // EAST
-                if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != TILE_WATER)
+                if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != tile)
                     draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
                 // SOUTH
-                if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != TILE_WATER)
+                if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != tile)
                     draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+            }
+            else if(tile == TILE_WALL) {
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+
+                // X
+                if(x == 0 || tiles[y * room_size_x + x - 1] != tile)
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color * shadow_factor, gfx);
+                // Y
+                if(y == 0 || tiles[(y-1) * room_size_x + x] != tile)
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color * (1.0f/shadow_factor), gfx);                
             }
             else if(color){
                 draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
@@ -51,7 +66,6 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     }
 
     // GROUND SIDES //
-    float shadow_factor = 0.90f;
     v4 side_color_base = sand;
 
     for(int i = 0; i < 2; i++) {

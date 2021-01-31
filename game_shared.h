@@ -158,14 +158,16 @@ struct S__Entity
 };
   
 
-// Must fit in a s8.
+// Must fit in an s8.
 enum Tile_Type {
     TILE_SAND = 0,
     TILE_GRASS = 1,
     TILE_STONE = 2,
     TILE_WATER = 3,
 
-    TILE_NONE_OR_NUM = 4
+    TILE_WALL = 4,
+    
+    TILE_NONE_OR_NUM = 5
 };
 
 typedef s8 Tile;

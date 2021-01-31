@@ -68,6 +68,8 @@ v3 entity_position(S__Entity *e, double world_t)
             auto p1 = e->player_e.walk_p1;
             auto t0 = e->player_e.walk_t0;
 
+            if (is_zero(magnitude(p1 - p0))) return p1; // Prevent dividing by zero.
+
             auto x = player_walk_speed * ((world_t - t0) / magnitude(p1 - p0));
             return lerp(p0, p1, clamp(x));
             

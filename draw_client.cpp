@@ -718,58 +718,11 @@ DWORD render_loop(void *loop_)
 
 
             // Find dirty rects //
-            if(first_frame) {
+            if(first_frame || true /* @Norelease */) {
                 Rect frame_a = { 0, 0, gfx.frame_s.w, gfx.frame_s.h }; // TODO: Do this when window size changes
                 array_add(dirty_rects, frame_a);
             }
-            for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
-            {
-                UI_ID id      = ui->elements_in_depth_order[i];
-                UI_Element *e = find_ui_element(id, ui);
-                Assert(e);
-
-                if(e->needs_redraw) {
-                    // Add dirty rects for element
-                    for(int r = 0; r < 2; r++) {
-
-                        Rect a;
-                        if(r == 0) {
-                            a = e->last_dirty_rect;
-                            if(a.w < 0.001f && a.h < 0.001f) continue;
-                        } else {
-                            a = ui_element_rect(e);
-                            if(equal(a, e->last_dirty_rect)) continue;
-                            e->last_dirty_rect = a;
-                            Assert(r == 1);
-                        }
-                        
-                        bool added = false;
-                        
-                        for(int j = 0; j < dirty_rects.n; j++) {
-                            Rect *b = &dirty_rects[j];
-
-                            if(rect_inside_rect(a, *b)) {
-                                added = true;
-                                break;
-                            }
-
-                            if(rects_overlap(a, *b)) {
-                                *b = rect_union(a, *b);
-                                added = true;
-                                break;
-                            }
-                        }
-
-                        if(!added) {
-                            array_add(dirty_rects, a);
-                        }
-                    }
-                    
-                    e->needs_redraw = false;
-                }
-            }
-            // --
-
+            
             if(dirty_rects.n > 0)
             {
                 // Draw UI //

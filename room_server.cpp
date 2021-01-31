@@ -74,9 +74,14 @@ void create_dummy_rooms(Room_Server *server)
 
                 v2 tp = { (float)x, (float)y };
                 v2 c  = { room_size_x / 2.0f, room_size_y / 2.0f };
-                
+
                 Tile t = TILE_GRASS;
-                if(magnitude(tp - c) > room_size_x * 0.5f * 0.9f)
+                if(y == room_size_y-1 ||
+                   x == room_size_x-1)
+                {
+                    t = TILE_WALL;
+                }
+                else if(magnitude(tp - c) > room_size_x * 0.5f * 0.9f)
                 {
                     t = TILE_WATER;
                 }
@@ -693,8 +698,6 @@ bool update_player_action(Player_Action *action, Entity *player_entity, Room *ro
 {
     Assert(player_entity->type == ENTITY_PLAYER);
     auto *player_e = &player_entity->player_e;
-
-    Assert(action->next_update_t >= room->t);
     
     if(doubles_equal(action->next_update_t, room->t))
     {
@@ -717,12 +720,16 @@ bool update_player_action(Player_Action *action, Entity *player_entity, Room *ro
                 return true;
             } break;
 
-            default: Assert(false); break;
+            default: Assert(false); return true;
         }
     }
 
-    Assert(action->next_update_t >= room->t);
-
+    if(action->next_update_t <= room->t) {
+        RS_Log("ERROR: action->next_update_t > room->t | next = %f, room = %f.\n", action->next_update_t, room->t);
+        Assert(false);
+        return true;
+    }
+    
     return false;
 }
 
@@ -768,13 +775,23 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
     }
 
     action->next_update_t = next_update_t;
+
+    if(action->next_update_t < room->t) {
+        Assert(false);
+        return false;
+    }
     
-    while(action->next_update_t < room->t || doubles_equal(next_update_t, room->t))
+    while(doubles_equal(action->next_update_t, room->t))
     {
         if(update_player_action(action, e, room, server)) {
             Assert(player_e->action_queue_length > 0);
             dequeue_player_action(0, e, room, server);
             break;
+        }
+    
+        if(action->next_update_t < room->t) {
+            Assert(false);
+            return false;
         }
     }
 
@@ -789,7 +806,7 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
     Assert(index >= 0);
     Assert(index < player_e->action_queue_length);
 
-    for(int i = index; i < player_e->action_queue_length; i++)
+    for(int i = index; i < player_e->action_queue_length-1; i++)
         player_e->action_queue[i] = player_e->action_queue[i+1];
     player_e->action_queue_length--;
 
