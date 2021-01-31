@@ -288,16 +288,16 @@ Rect cut_right_square(Layout_Manager *manager)
 
 
 #define _TOP_SQUARE_CUT_() \
-    _AREA_(cut_top_square());
+    _AREA_(cut_top_square(ctx.layout));
 
 #define _BOTTOM_SQUARE_CUT_() \
-    _AREA_(cut_bottom_square());
+    _AREA_(cut_bottom_square(ctx.layout));
 
 #define _LEFT_SQUARE_CUT_() \
-    _AREA_(cut_left_square());
+    _AREA_(cut_left_square(ctx.layout));
 
 #define _RIGHT_SQUARE_CUT_() \
-    _AREA_(cut_right_square());
+    _AREA_(cut_right_square(ctx.layout));
 
 
 

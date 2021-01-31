@@ -577,6 +577,111 @@ bool write_Entity_ID(Entity_ID id, Network_Node *node)
     return true;
 }
 
+
+// @Norelease TODO: Check that it is a valid type.
+bool read_Entity_Action_Type(Entity_Action_Type *_type, Network_Node *node)
+{
+    Read(u32, i, node);
+    *_type = (Entity_Action_Type)i;
+    return true;
+}
+
+bool write_Entity_Action_Type(Entity_Action_Type type, Network_Node *node)
+{
+    Write(u32, type, node);
+    return true;
+}
+
+
+bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
+{
+    Read_To_Ptr(Entity_Action_Type, &_action->type, node);
+
+    switch(_action->type) {
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &_action->set_power_mode;
+            Read_To_Ptr(bool, &x->set_to_on, node);
+        } break;
+    }
+    
+    return true;
+}
+
+bool write_Entity_Action(Entity_Action action, Network_Node *node)
+{
+    Write(Entity_Action_Type, action.type, node);
+
+    switch(action.type) {
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &action.set_power_mode;
+            Write(bool, x->set_to_on, node);
+        } break;
+    }
+    
+    return true;
+}
+
+
+// @Norelease TODO: Check that it is a valid type.
+bool read_Player_Action_Type(Player_Action_Type *_type, Network_Node *node)
+{
+    Read(u32, i, node);
+    *_type = (Player_Action_Type)i;
+    return true;
+}
+
+bool write_Player_Action_Type(Player_Action_Type type, Network_Node *node)
+{
+    Write(u32, type, node);
+    return true;
+}
+
+
+bool read_Player_Action(Player_Action *_action, Network_Node *node)
+{
+    Read_To_Ptr(Player_Action_Type, &_action->type, node);
+
+    switch(_action->type) {
+        case PLAYER_ACT_ENTITY: {
+            auto *x = &_action->entity;
+            Read_To_Ptr(Entity_ID,     &x->target, node);
+            Read_To_Ptr(Entity_Action, &x->action, node);
+        } break;
+
+        case PLAYER_ACT_WALK: {
+            auto *x = &_action->walk;
+            Read_To_Ptr(v3,         &x->p1, node);
+        } break;
+
+        default: Assert(false); return false;
+    }
+
+    return true;
+}
+
+bool write_Player_Action(Player_Action action, Network_Node *node)
+{
+    Write(Player_Action_Type, action.type, node);
+
+    switch(action.type) {
+        case PLAYER_ACT_ENTITY: {
+            auto *x = &action.entity;
+            Write(Entity_ID,     x->target, node);
+            Write(Entity_Action, x->action, node);
+        } break;
+
+        case PLAYER_ACT_WALK: {
+            auto *x = &action.walk;
+            Write(v3, x->p1, node);
+        } break;
+
+        default: Assert(false); return false;
+    }
+
+    return true;
+}
+
+
 bool read_Entity(S__Entity *_entity, Network_Node *node)
 {
     Zero(*_entity);
@@ -621,6 +726,12 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             Read_To_Ptr(v3,         &x->walk_p0, node);
             Read_To_Ptr(v3,         &x->walk_p1, node);
             Read_To_Ptr(World_Time, &x->walk_t0, node);
+
+            Read_To_Ptr(u8, &x->action_queue_length, node);
+            Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
+            for(int i = 0; i < x->action_queue_length; i++) {
+                Read_To_Ptr(Player_Action, &x->action_queue[i], node);
+            }
         } break;
 
         default: Assert(false); return false;
@@ -672,6 +783,12 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             Write(v3,         x->walk_p0, node);
             Write(v3,         x->walk_p1, node);
             Write(World_Time, x->walk_t0, node);
+
+            Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
+            Write(u8, x->action_queue_length, node);
+            for(int i = 0; i < x->action_queue_length; i++) {
+                Write(Player_Action, x->action_queue[i], node);
+            }
         } break;
 
         default: Assert(false); return false;
@@ -680,51 +797,6 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
     return true;
 }
 
-
-
-// @Norelease TODO: Check that it is a valid type.
-bool read_Entity_Action_Type(Entity_Action_Type *_type, Network_Node *node)
-{
-    Read(u32, i, node);
-    *_type = (Entity_Action_Type)i;
-    return true;
-}
-
-bool write_Entity_Action_Type(Entity_Action_Type type, Network_Node *node)
-{
-    Write(u32, type, node);
-    return true;
-}
-
-
-// @Norelease TODO: Check that it is a valid type.
-bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
-{
-    Read_To_Ptr(Entity_Action_Type, &_action->type, node);
-
-    switch(_action->type) {
-        case ENTITY_ACT_SET_POWER_MODE: {
-            auto *x = &_action->set_power_mode;
-            Read_To_Ptr(bool, &x->set_to_on, node);
-        } break;
-    }
-    
-    return true;
-}
-
-bool write_Entity_Action(Entity_Action action, Network_Node *node)
-{
-    Write(Entity_Action_Type, action.type, node);
-
-    switch(action.type) {
-        case ENTITY_ACT_SET_POWER_MODE: {
-            auto *x = &action.set_power_mode;
-            Write(bool, x->set_to_on, node);
-        } break;
-    }
-    
-    return true;
-}
 
 
 // Tile //

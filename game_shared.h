@@ -48,6 +48,7 @@ struct Entity_Action
     };
 };
 
+
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") },
     { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") }, 
@@ -89,6 +90,34 @@ enum Entity_Type
 typedef u64 Entity_ID;
 const Entity_ID NO_ENTITY = 0;
 
+const double player_walk_speed = 4.2f;
+static_assert(player_walk_speed > 0);
+
+
+enum Player_Action_Type
+{
+    PLAYER_ACT_ENTITY,
+    PLAYER_ACT_WALK
+};
+
+struct Player_Action
+{
+    Player_Action_Type type;
+    World_Time next_update_t;
+
+    union {
+        struct {
+            v3 p1;
+        } walk;
+
+        struct {
+            Entity_ID     target;
+            Entity_Action action;
+        } entity;
+    };
+};
+
+
 struct S__Entity
 {
     Entity_ID id;
@@ -117,9 +146,12 @@ struct S__Entity
         struct {
             User_ID user_id;
 
-            v3         walk_p0;
-            v3         walk_p1;
             World_Time walk_t0;
+            v3 walk_p0;
+            v3 walk_p1;
+
+            u8 action_queue_length;
+            Player_Action action_queue[8];
             
         } player_e;
     };

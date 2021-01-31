@@ -146,6 +146,17 @@ void user_window(UI_Context ctx, Client *client)
     }
 }
 
+User_ID current_user_id(Client *client)
+{
+    return client->server_connections.user.current_user;
+}
+
+User *current_user(Client *client)
+{
+    if(current_user_id(client) == NO_USER) return NULL;
+    return &client->user;
+}
+
 String entity_action_label(Entity_Action action)
 {
     switch(action.type) {
@@ -292,8 +303,6 @@ void room_window(UI_Context ctx, Client *client)
 }
 
 
-
-
 void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 {
     U(ctx);
@@ -304,7 +313,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     auto *room = &client->game.room;
     auto world_t = world_time_for_room(room, t);
-    
+
+    Entity *player_entity = NULL;
+    User_ID current_user = current_user_id(client);
+    if(current_user != NO_USER) {
+        player_entity = find_player_entity(current_user, room);
+    }
 
 //    _SHRINK_(10);
 
@@ -394,12 +408,56 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
     }
 
+
+    // Over world view
+    { _AREA_COPY_();
+        { _RIGHT_CUT_(48);
+            if(player_entity != NULL) {
+                Assert(player_entity->type == ENTITY_PLAYER);
+
+                auto *player_e = &player_entity->player_e;
+                for(int i = 0; i < player_e->action_queue_length; i++)
+                {
+                    auto *action = &player_e->action_queue[i];
+
+                    String label = STRING("?");
+                    
+                    switch(action->type) {
+                        case PLAYER_ACT_ENTITY: {
+                            auto *entity_action = &action->entity;
+                            
+                            Assert(entity_action->target != NO_ENTITY);
+                            Entity *target = find_entity(entity_action->target, room);
+
+                            Assert(target); // @Norelease: This fails if this is a pick-up action and the action is already performed. But we shouldn't reach this point if the action already is performed.                    
+                            Assert(target->type == ENTITY_ITEM); // @Temporary @Norelease: We will have player->player actions, right?
+
+                            label = item_types[target->item_e.item.type].name;
+                            Assert(label.length > 0);
+                            label.length = 1;
+                        } break;
+
+                        case PLAYER_ACT_WALK: {
+                            label = STRING("WALK");
+                        } break;
+
+                        default: Assert(false); break;
+                    }
+                    
+                    _TOP_SQUARE_CUT_();
+                    _SHRINK_(8);
+                    bool enabled = false;
+                    button(PC(ctx, i), label, enabled);
+                }
+            }
+        }
+    }
     
     auto *wv = world_view(P(ctx));
+    
 
     bool ok_to_select_entity = true;
-    
-    
+        
     // CLICK TILE //
     if(wv->clicked_tile_ix >= 0)
     {

@@ -614,16 +614,41 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     return false;
 }
 
-void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
+// NOTE: Returns starting position.
+v3 player_walk_to(v3 p1, Entity *e, Room *room)
 {
-    if(!entity_action_predicted_possible(action, e, as_user, room->t, NULL)) return;
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
 
+    v3 p0 = entity_position(e, room->t);
+    
+    player_e->walk_t0 = room->t;
+    player_e->walk_p0 = p0;
+    player_e->walk_p1 = p1;
+
+    room->did_change = true;
+
+    return p0;
+}
+
+bool perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
+{
+    Entity *player = NULL;
+    if(as_user != NO_USER) {
+        player = find_player_entity(as_user, room);
+    }
+    
+    if(!entity_action_predicted_possible(action, e, as_user, room->t, NULL)) return false;
+
+    bool action_performed = false;
+    
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
             Assert(as_user != NO_USER);
             Assert(e->type == ENTITY_ITEM);
             
-            if(pick_up_item_entity(as_user, e, room, server)) {
+            action_performed = pick_up_item_entity(as_user, e, room, server);
+            if(action_performed) {   
                 RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
             }
         } break;
@@ -633,7 +658,8 @@ void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action
             Assert(e->type == ENTITY_ITEM);
             
             // @Temporary @Norelease
-            if(pick_up_item_entity(as_user, e, room, server)) {
+            action_performed = pick_up_item_entity(as_user, e, room, server);
+            if(action_performed) {   
                 RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
             }
         } break;
@@ -652,52 +678,244 @@ void perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action
             }
 
             room->did_change = true;
+            
+            action_performed = true;
         } break;
 
-        default: Assert(false); return;
+        default: Assert(false); return false;
     }
+
+    return action_performed;
 }
 
-
-void update_entity(Entity *e, Room *room, bool *_do_destroy)
+// NOTE: Returns true if the action should be dequeued.
+bool update_player_action(Player_Action *action, Entity *player_entity, Room *room, Room_Server *server)
 {
-    *_do_destroy = false;
+    Assert(player_entity->type == ENTITY_PLAYER);
+    auto *player_e = &player_entity->player_e;
+
+    Assert(action->next_update_t >= room->t);
     
-    if(e->type != ENTITY_ITEM) return;
-    if(e->item_e.item.type != ITEM_MACHINE) return;
-
-    auto *machine = &e->item_e.machine;
-    if(machine->stop_t >= machine->start_t) return; // Machine is not running.
-
-    double time_since_start = room->t - machine->start_t;
-    if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
+    if(doubles_equal(action->next_update_t, room->t))
     {
-        Item plant = {0};
-        plant.id = random_int(200, 300); // @Norelease: Make unique
-        plant.type = ITEM_PLANT;
+        switch(action->type) {
+            case PLAYER_ACT_ENTITY: {
+                auto *x = &action->entity;
 
-        v3 tp = entity_position(e, room->t) - V3_Y * 2;
-        
-        if(can_place_item_entity_at_tp(&plant, tp, room->t, room, room->entities, room->num_entities))
-        {
-            do_place_item_entity_at_tp(&plant, tp, room);
-            room->did_change = true;
+                auto *target = find_entity(x->target, room);
+                if (!target) return true; // This is OK, the entity might have been destroyed. (We should probably stop walking then, but keep this check anyway.)
+                        
+                if(!perform_entity_action_if_possible(player_e->user_id, target, x->action, room, server)) { // NOTE: We might do actions in multiple steps. That's why we have an if statement here.
+                    return true;
+                }
+                else {
+                    return true;
+                }
+            } break;
+
+            case PLAYER_ACT_WALK: {
+                return true;
+            } break;
+
+            default: Assert(false); break;
         }
     }
+
+    Assert(action->next_update_t >= room->t);
+
+    return false;
 }
 
+void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server);
+
+// NOTE: Returns false if the action can't start.
+bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *server)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+    
+    Assert(player_e->action_queue_length > 0);
+    auto *action = &player_e->action_queue[0];
+
+    double next_update_t = 0;
+
+    switch(action->type) {
+        case PLAYER_ACT_WALK: {
+            v3 p1 = action->walk.p1;
+            v3 p0 = player_walk_to(p1, e, room);
+            next_update_t = (room->t + magnitude(p1 - p0) / player_walk_speed);
+        } break;
+        
+        case PLAYER_ACT_ENTITY: {
+            auto *x = &action->entity;
+            auto *target_entity = find_entity(x->target, room);
+            if(!target_entity) return false;
+
+            Assert(player_e->user_id != NO_USER);
+            if(!entity_action_predicted_possible(x->action, target_entity, player_e->user_id, room->t, NULL))
+                return false;
+            
+            v3 p1 = entity_position(target_entity, room->t);
+            v3 p0 = player_walk_to(p1, e, room);
+            next_update_t = (room->t + magnitude(p1 - p0) / player_walk_speed);
+        } break;
+
+        default: {
+            RS_Log("Unhandled player action type %d in %s.\n", action->type, __FUNCTION__);
+            Assert(false);
+            return false;
+        } break;
+    }
+
+    action->next_update_t = next_update_t;
+    
+    while(action->next_update_t < room->t || doubles_equal(next_update_t, room->t))
+    {
+        if(update_player_action(action, e, room, server)) {
+            Assert(player_e->action_queue_length > 0);
+            dequeue_player_action(0, e, room, server);
+            break;
+        }
+    }
+
+    return true;
+}
+
+void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+    
+    Assert(index >= 0);
+    Assert(index < player_e->action_queue_length);
+
+    for(int i = index; i < player_e->action_queue_length; i++)
+        player_e->action_queue[i] = player_e->action_queue[i+1];
+    player_e->action_queue_length--;
+
+    if(index == 0 && player_e->action_queue_length > 0)
+    {
+        // If we dequeued the first action, we need to start the new first one.
+        if(!begin_performing_first_player_action(e, room, server))
+        {
+            // Recursive. We want to continue dequeueing until an action is successfully
+            // started, or the queue is empty.
+            dequeue_player_action(0, e, room, server);
+        }
+    }
+    
+    room->did_change = true;
+}
+
+bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Server *server)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+
+    if(player_e->action_queue_length >= ARRLEN(player_e->action_queue))
+        return false;
+
+    bool first_in_queue = (player_e->action_queue_length == 0);
+
+    player_e->action_queue[player_e->action_queue_length++] = *action;
+    room->did_change = true;
+
+    if(first_in_queue) {
+        if(!begin_performing_first_player_action(e, room, server)) {
+            RS_Log("Failed to start performing the action we just enqueued....\n");
+            Assert(false);
+            dequeue_player_action(0, e, room, server);
+            return false;
+        }
+    }
+
+    
+    return true;
+}
+
+
+void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy)
+{
+    *_do_destroy = false;
+
+    switch(e->type) {
+        case ENTITY_ITEM: {
+            
+            if(e->item_e.item.type != ITEM_MACHINE) return;
+
+            auto *machine = &e->item_e.machine;
+            if(machine->stop_t >= machine->start_t) return; // Machine is not running.
+
+            double time_since_start = room->t - machine->start_t;
+            if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
+            {
+                Item plant = {0};
+                plant.id = random_int(200, 300); // @Norelease: Make unique
+                plant.type = ITEM_PLANT;
+
+                v3 tp = entity_position(e, room->t) - V3_Y * 2;
+        
+                if(can_place_item_entity_at_tp(&plant, tp, room->t, room, room->entities, room->num_entities))
+                {
+                    do_place_item_entity_at_tp(&plant, tp, room);
+                }
+                machine->stop_t = room->t;
+                room->did_change = true;
+            }
+        } break;
+
+        case ENTITY_PLAYER: {
+            auto *player_e = &e->player_e;
+
+            if(player_e->action_queue_length == 0) break;
+            auto *action = &player_e->action_queue[0];
+
+            if(update_player_action(action, e, room, server)) {
+                dequeue_player_action(0, e, room, server);
+            }
+        } break;
+    }
+}
+
+
+
 double max_update_step_delta_time_for_entity(Entity *e, Room *room)
-{   
-    if(e->type != ENTITY_ITEM) return DBL_MAX;
-    if(e->item_e.item.type != ITEM_MACHINE)  return DBL_MAX;
+{
+    switch(e->type) {
+        case ENTITY_ITEM: {
+            
+            if(e->item_e.item.type != ITEM_MACHINE) break;
 
-    auto *machine = &e->item_e.machine;
-    if(machine->stop_t >= machine->start_t) return DBL_MAX; // Machine is not running.
+            auto *machine = &e->item_e.machine;
+            if(machine->stop_t >= machine->start_t) break; // Machine is not running.
 
-    double time_since_start = room->t - machine->start_t;
-    if(time_since_start >= 3.0) return DBL_MAX;
+            double time_since_start = room->t - machine->start_t;
+            if(time_since_start >= 3.0) break;
 
-    return 3.0 - time_since_start;
+            return 3.0 - time_since_start;
+            
+        } break;
+
+        case ENTITY_PLAYER: {
+            auto *player_e = &e->player_e;
+
+            if(player_e->action_queue_length == 0) break;
+            auto *action = &player_e->action_queue[0];
+
+            if(action->next_update_t <= room->t) {
+                // The action should have been removed or it should have updated its next_update_t.
+                Assert(false);
+                break;
+            }
+
+            return action->next_update_t - room->t;
+            
+        } break;
+
+        default: break;
+    }
+
+    return DBL_MAX;
 }
 
 double max_update_step_delta_time_for_room(Room *room)
@@ -717,7 +935,7 @@ double max_update_step_delta_time_for_room(Room *room)
     return result;
 }
 
-void update_room(Room *room, int index)
+void update_room(Room *room, int index, Room_Server *server)
 {
     Assert(room->t > 0); // Should be initialized when created
 
@@ -736,7 +954,7 @@ void update_room(Room *room, int index)
         for(int i = 0; i < room->num_entities; i++)
         {
             bool do_destroy;
-            update_entity(&room->entities[i], room, &do_destroy);
+            update_entity(&room->entities[i], room, server, &do_destroy);
             if(do_destroy) {
                 room->entities[i] = room->entities[room->num_entities-1];
                 room->num_entities--;
@@ -818,12 +1036,16 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 
                 Entity *e = find_player_entity(client->user, room);
                 if(e) {
-                    e->player_e.walk_p0 = entity_position(e, room->t);
-                    e->player_e.walk_t0 = room->t;
-                    e->player_e.walk_p1 = tp_from_index(p.tile_ix);
+                    auto p1 = tp_from_index(p.tile_ix);
+                    
+                    Player_Action action = {0};
+                    action.type = PLAYER_ACT_WALK;
+                    action.walk.p1 = p1;
+
+                    if(enqueue_player_action(e, &action, room, server)) {
+
+                    }
                 }
-                
-                room->did_change = true;
             }
             
         } break;
@@ -836,7 +1058,33 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 return true; // It's OK, the entity might have been destroyed after the client sent the request.
             }
 
-            perform_entity_action_if_possible(client->user, e, p->action, room, server);
+            Entity *player = NULL;
+            if(client->user != NO_USER) {
+                player = find_player_entity(client->user, room);
+                if(!player) {
+                    RS_Log("Player trying to perform entity action, but that player's entity was not found.\n");
+                    return false;
+                }
+            }
+
+            if(player) {
+                auto *player_e = &player->player_e;
+
+                Player_Action player_action = {0};
+                player_action.type = PLAYER_ACT_ENTITY;
+                player_action.entity.target = e->id;
+                player_action.entity.action = p->action;
+
+                if(enqueue_player_action(player, &player_action, room, server)) {
+                    
+                }
+            }
+            else {
+                Assert(client->user == NO_USER);
+                if(perform_entity_action_if_possible(client->user, e, p->action, room, server)) {
+
+                }
+            }
             
         } break;
             
@@ -955,7 +1203,7 @@ DWORD room_server_main_loop(void *server_)
             }
 
             // RUN SIMULATION //
-            update_room(room, i);
+            update_room(room, i, server);
             //
 
             // SEND UPDATES TO CLIENTS //

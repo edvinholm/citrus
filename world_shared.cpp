@@ -63,14 +63,12 @@ v3 entity_position(S__Entity *e, double world_t)
         } break;
             
         case ENTITY_PLAYER:
-        {
-            float walk_speed = 4.2f;
-            
+        {   
             auto p0 = e->player_e.walk_p0;
             auto p1 = e->player_e.walk_p1;
             auto t0 = e->player_e.walk_t0;
 
-            auto x = walk_speed * ((world_t - t0) / magnitude(p1 - p0));
+            auto x = player_walk_speed * ((world_t - t0) / magnitude(p1 - p0));
             return lerp(p0, p1, clamp(x));
             
         } break;
@@ -160,11 +158,19 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
             
             if(performer_user_id == NO_USER)  return false; // Because we need an inventory to place the item in.
             if(e->type != ENTITY_ITEM) return false;
+            
+            auto *item_e = &e->item_e;
+            auto *item   = &e->item_e.item;
+
+            if(item->type == ITEM_MACHINE) {
+                auto *machine = &item_e->machine;
+                if(machine->start_t > machine->stop_t) return false;
+            }
     
             if(user) {
-                if(!inventory_has_available_space_for_item(&e->item_e.item, user)) return false;
+                if(!inventory_has_available_space_for_item(item, user)) return false;
             }
-            
+
             return true;
         } break;
 

@@ -57,7 +57,7 @@ enum User_Server_Connection_Status
 struct User_Server_Connection
 {
     User_Server_Connection_Status status;
-    User_ID current_user; // @Temporary: Should be an ID.
+    User_ID current_user;
     Network_Node node;
 
     bool last_connect_attempt_failed;

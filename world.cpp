@@ -218,6 +218,17 @@ Entity *find_or_add_entity(Entity_ID id, Room *room)
     return add_entity(new_entity, room);
 }
 
+Entity *find_player_entity(User_ID user_id, Room *room)
+{
+    for(int i = 0; i < room->entities.n; i++) {
+        auto *e = &room->entities[i];
+        if(e->type != ENTITY_PLAYER) continue;
+        if(e->player_e.user_id == user_id) return e;
+    }
+
+    return NULL;
+}
+
 void prepare_entity_for_drawing(Entity *e, User_ID my_user_id)
 {
     if(e->type != ENTITY_PLAYER) return;
