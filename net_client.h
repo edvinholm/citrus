@@ -8,7 +8,8 @@ enum Room_Server_Connection_Status
 enum C_RS_Action_Type
 {
     C_RS_ACT_CLICK_TILE,
-    C_RS_ACT_ENTITY_ACTION
+    C_RS_ACT_ENTITY_ACTION,
+    C_RS_ACT_CHAT
 };
 
 struct C_RS_Action
@@ -24,6 +25,10 @@ struct C_RS_Action
             Entity_ID     entity;
             Entity_Action action;
         } entity_action;
+
+        struct {
+            
+        } chat;
     };
 };
 

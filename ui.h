@@ -117,6 +117,7 @@ enum UI_Element_Type
     UI_TEXT,
 
     UI_INVENTORY_SLOT,
+    UI_CHAT,
 
     WORLD_VIEW
 };
@@ -192,6 +193,12 @@ struct UI_Inventory_Slot
 
     bool enabled;
     bool selected;
+};
+
+struct UI_Chat
+{
+    Rect a;
+    UI_String text;
 };
 
 struct UI_Scrollbar
@@ -276,6 +283,7 @@ struct UI_Element
         UI_Dropdown  dropdown;
         
         UI_Inventory_Slot inventory_slot;
+        UI_Chat chat;
 
         UI_World_View world_view;
     };

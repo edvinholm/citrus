@@ -70,7 +70,7 @@ v3 entity_position(S__Entity *e, double world_t)
 
             if (is_zero(magnitude(p1 - p0))) return p1; // Prevent dividing by zero.
 
-            auto x = player_walk_speed * ((world_t - t0) / magnitude(p1 - p0));
+            double x = player_walk_speed * ((world_t - t0) / magnitude(p1 - p0));
             return lerp(p0, p1, clamp(x));
             
         } break;

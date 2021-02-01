@@ -1,50 +1,5 @@
 
 
-
-// @Temporary
-void bar_window(UI_Context ctx, Input_Manager *input)
-{
-    U(ctx);
-
-    _CENTER_X_(320);
-
-    int c = 2;
-
-    const Allocator_ID allocator = ALLOC_APP;
-
-    static String the_string = copy_cstring_to_string("But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness. No one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful. Nor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.", allocator);
-
-
-    UI_ID window_id;
-    { _WINDOW_(P(ctx), STRING("REFRIGERATOR"));
-
-        _GRID_(1, c, 4);
-
-        for(int i = 0; i < 1 * c; i++) {
-            _CELL_();
-
-            if(i == 0) {
-                //ui_text(the_string, PC(ctx, i));
-                bool text_did_change;
-                String text = textfield_tmp(the_string, input, PC(ctx, i), &text_did_change);
-                if(text_did_change) {
-                    // @Speed!!!
-                    clear(&the_string, allocator);
-                    the_string = copy_of(&text, allocator);
-                }
-            } else {
-                bool text_did_change;
-                String text = textfield_tmp(the_string, input, PC(ctx, i), &text_did_change);
-                if(text_did_change) {
-                    // @Speed!!!
-                    clear(&the_string, allocator);
-                    the_string = copy_of(&text, allocator);
-                }
-            }
-        }
-    }
-}
-
 void request_connection_to_room(Room_ID id, Client *client)
 {
     Assert(client->server_connections.room_connect_requested == false);
@@ -152,13 +107,27 @@ void user_window(UI_Context ctx, Client *client)
 
 User_ID current_user_id(Client *client)
 {
-    return client->server_connections.user.current_user;
+    if(client->server_connections.user.status != USER_SERVER_CONNECTED) return NO_USER;
+    if(!client->user.initialized) return NO_USER;
+
+    Assert(client->user.id == client->server_connections.user.current_user);
+    return client->user.id;
 }
 
 User *current_user(Client *client)
 {
     if(current_user_id(client) == NO_USER) return NULL;
     return &client->user;
+}
+
+bool action_of_type_queued(C_RS_Action_Type type, Client *client)
+{
+    auto &queue = client->server_connections.room_action_queue;
+    for(int i = 0; i < queue.n; i++) {
+        if(queue[i].type == type) return true;
+    }
+
+    return false;
 }
 
 String entity_action_label(Entity_Action action)
@@ -307,6 +276,45 @@ void room_window(UI_Context ctx, Client *client)
 }
 
 
+void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
+{
+    U(ctx);
+
+    auto *user = current_user(client);
+    if(!user) return;
+    
+    auto *draft = &client->user.chat_draft;
+            
+    { _SHRINK_(4);
+        { _LEFT_CUT_(480);
+            bool enabled = true;
+            bool text_did_change;
+
+            String text = { draft->e, draft->n };
+            text = textfield_tmp(text, input, P(ctx), &text_did_change, enabled);
+            array_set(*draft, text.data, text.length);
+        }
+        cut_left(4, ctx.layout);
+
+        { _LEFT_SQUARE_CUT_();
+
+            bool enabled = (!action_of_type_queued(C_RS_ACT_CHAT, client) &&
+                            draft->n > 0);
+            
+            if(button(P(ctx), STRING("SAY"), enabled) & CLICKED_ENABLED)
+            {
+                C_RS_Action action = {0};
+                action.type = C_RS_ACT_CHAT;
+                auto &chat = action.chat;
+
+                array_add(client->server_connections.room_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+            }
+        }
+    }
+    
+    panel(P(ctx));
+}
+
 void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 {
     U(ctx);
@@ -322,13 +330,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     User_ID current_user = current_user_id(client);
     if(current_user != NO_USER) {
         player_entity = find_player_entity(current_user, room);
-    }
-
-//    _SHRINK_(10);
-
-    { _RIGHT_(400);
-        _BOTTOM_(400);
-        bar_window(P(ctx), input);
     }
 
     const float menu_bar_button_s = 64;
@@ -412,9 +413,89 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
     }
 
+    // BOTTOM PANEL //
+    if(cui->open_bottom_panel_tab != BP_TAB_NONE_OR_NUM)
+    { _BOTTOM_CUT_(100);
+
+        switch(cui->open_bottom_panel_tab) {
+            case BP_TAB_CHAT: {
+                chat_panel(P(ctx), input, client);
+            } break;
+
+            default:
+                panel(P(ctx));
+                break;
+        }
+
+    }
+    {_BOTTOM_(28);
+        // Tabs
+        for(int i = 0; i < BP_TAB_NONE_OR_NUM; i++) {
+            auto tab = (Bottom_Panel_Tab)i;
+            
+            _LEFT_SLIDE_(120);
+
+            String label = bottom_panel_tab_labels[tab];
+            bool selected = (cui->open_bottom_panel_tab == tab);
+            
+            if(button(PC(ctx, i), label, true, selected) & CLICKED_ENABLED) {
+                if(cui->open_bottom_panel_tab != tab)
+                    cui->open_bottom_panel_tab = tab;
+                else
+                    cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
+            }
+        }
+    }
+    
+
+    // A little @Hacky. These are when we build the world_view UI element.
+    // We need to do it here just because we want to have some elements over
+    // the world view, and therefore need to build them before it.
+    Rect world_view_a     = area(ctx.layout);
+    m4x4 world_projection = world_projection_matrix(world_view_a);
 
     // Over world view
     { _AREA_COPY_();
+
+        // CHAT // // @Temporary
+        float chat_y = world_view_a.y + world_view_a.h;
+        for(int i = room->num_chat_messages-1; i >= 0; i--) {
+            auto *chat = &room->chat_messages[i];
+
+            if(world_t - chat->t >= 30) continue;
+
+            auto *e = find_player_entity(chat->user, room);
+            if(!e) continue;
+            Assert(e->type == ENTITY_PLAYER);
+
+            v3 entity_p      = entity_position(e, world_t);
+            v2 bottom_center = world_to_screen_space(entity_p + V3_Z * 5, world_view_a, world_projection);
+
+            bottom_center.y = min(chat_y, bottom_center.y);
+            if(bottom_center.y < chat_y) chat_y = bottom_center.y;
+
+            // @Robustness: If we change how we draw chat messages we need to change this code that measures the string.
+            const Font_Size fs = FS_14;
+            const Font_ID font = FONT_BODY;
+            
+            float max_w = 160;
+            Body_Text bt = create_body_text(chat->text, {0, 0, max_w, 0}, fs, font, client->fonts);
+
+            float w = max_w;
+            if(bt.lines.n == 1) w = body_text_line_width(0, &bt, client->fonts);
+
+            Rect a;
+            a.s = { w + 8, body_text_height(&bt) + 4 };
+            a.x = bottom_center.x - a.w / 2.0f;
+            a.y = bottom_center.y - a.h;
+            
+            chat_y -= a.h + 8;
+
+            _AREA_(a);
+            ui_chat(PC(ctx, i), chat->text);
+        }
+        
+        // ACTION QUEUE //
         { _RIGHT_CUT_(48);
             if(player_entity != NULL) {
                 Assert(player_entity->type == ENTITY_PLAYER);
@@ -489,6 +570,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     ct.item_to_place = no_item;
                 }
 
+                // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
                 array_add(client->server_connections.room_action_queue, action);
 
                 if(selected_item) {
@@ -696,6 +778,10 @@ int client_entry_point(int num_args, char **arguments)
 
     // INIT GAME //
     init_game(&client.game);
+    //--
+
+    // INIT CLIENT UI //
+    init_client_ui(&client.cui);
     //--
 
     // START RENDER LOOP //

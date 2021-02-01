@@ -10,6 +10,10 @@ struct S__User
 
     Item inventory[8*14];
 };
+void clear(S__User *user, Allocator_ID allocator)
+{
+    clear(&user->username, allocator);
+}
 
 
 namespace Client_User
@@ -17,7 +21,19 @@ namespace Client_User
     struct User: public S__User
     {
         int selected_inventory_item_plus_one;
+        Array<u8, ALLOC_APP> chat_draft;
+
+        bool initialized;
     };
+
+    void clear_and_reset(User *user, Allocator_ID allocator)
+    {
+        clear(static_cast<S__User *>(user), allocator);
+
+        clear(&user->chat_draft);
+
+        Zero(*user);
+    }
 };
 
 

@@ -41,6 +41,7 @@ struct RCB_Packet_Header
             u32 tile0;
             u32 tile1;
             u32 num_entities;
+            u16 num_chat_messages;
             Tile *tiles;
         } room_update;
     };
@@ -117,6 +118,9 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(u32, &p.num_entities, node);
             Fail_If_True(p.num_entities > MAX_ENTITIES_PER_ROOM);
 
+            Read_To_Ptr(u16, &p.num_chat_messages, node);
+            Fail_If_True(p.num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
+
             static_assert(sizeof(*p.tiles) == 1);
             Data_Ptr(p.tiles, p.tile1 - p.tile0, node);
         } break;
@@ -187,9 +191,10 @@ bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_e
 }
 
 // NOTE: tiles should point to all_tiles + tile0
-bool enqueue_RCB_ROOM_CHANGED_packet(Network_Node *node,
-                                   u64 tile0, u64 tile1, Tile *tiles,
-                                   u64 num_entities, Entity *entities)
+bool enqueue_RCB_ROOM_UPDATE_packet(Network_Node *node,
+                                    u32 tile0, u32 tile1, Tile *tiles,
+                                    u32 num_entities, Entity *entities,
+                                    u16 num_chat_messages, Chat_Message *chat_messages)
 {
     begin_outbound_packet(node);
     {
@@ -198,16 +203,22 @@ bool enqueue_RCB_ROOM_CHANGED_packet(Network_Node *node,
         
         Write(u32, tile0, node);
         Write(u32, tile1, node);
-        Write(u32, num_entities, node);
+        Write(u32, num_entities,      node);
+        Write(u16, num_chat_messages, node);
 
         Assert(sizeof(Tile) == 1);
         Write_Bytes(tiles, (tile1 - tile0), node);
 
         Entity *at_entity  = entities;
         Entity *end_entity = entities + num_entities;
-        while(at_entity < end_entity)
-        {
+        while(at_entity < end_entity) {
             Write(Entity, at_entity++, node);
+        }
+        
+        Chat_Message *at_chat  = chat_messages;
+        Chat_Message *end_chat = chat_messages + num_chat_messages;
+        while(at_chat < end_chat) {
+            Write(Chat_Message, *(at_chat++), node);
         }
     }
     end_outbound_packet(node);

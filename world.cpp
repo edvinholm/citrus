@@ -166,6 +166,18 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
     return ray;
 }
 
+v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
+{
+    v2 result = vecmatmul(p, projection).xy;
+
+    result.y *= -1;
+    result += V2_XY;
+    result  = compmul(result, viewport.s / 2.0f);
+    result += viewport.p;
+
+    return result;
+}
+
 
 // NOTE: tp is tile position.
 Entity create_preview_item_entity(Item *item, v3 tp, double world_t)

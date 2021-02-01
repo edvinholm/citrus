@@ -1,4 +1,16 @@
 
+enum Bottom_Panel_Tab
+{
+    BP_TAB_CHAT,
+
+    BP_TAB_NONE_OR_NUM
+};
+
+String bottom_panel_tab_labels[] = {
+    STRING("CHAT")
+};
+static_assert(ARRLEN(bottom_panel_tab_labels) == BP_TAB_NONE_OR_NUM);
+
 struct Client_UI
 {
     bool room_window_open;
@@ -7,7 +19,14 @@ struct Client_UI
 #if DEVELOPER
     bool dev_window_open;
 #endif
+
+    Bottom_Panel_Tab open_bottom_panel_tab;
 };
+
+void init_client_ui(Client_UI *cui)
+{
+    cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
+}
 
 struct Client
 {
@@ -37,3 +56,6 @@ struct Client
     // @Norelease: Doing Developer stuff in release build...
     Developer developer;
 };
+
+User_ID current_user_id(Client *client);
+User *current_user(Client *client);

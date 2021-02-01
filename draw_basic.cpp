@@ -81,6 +81,7 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
     triangles(v, uvs, colors, tex, 6, gfx);
 }
 
+
 void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v3 p1 = p0 + s;

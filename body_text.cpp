@@ -564,8 +564,7 @@ float body_text_height(Body_Text *bt)
     return bt->line_height * bt->lines.n;
 }
 
-inline
-float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
+float body_text_line_width(int line_index, Body_Text *bt, Font *fonts)
 {
     Assert(line_index >= 0 && line_index < bt->lines.n);
     
@@ -577,7 +576,7 @@ float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
     if(line_index == bt->lines.n-1) end = bt->text.data + bt->text.length;
     else  end = bt->text.data + bt->lines[line_index+1].start_byte;
 
-    Font *font = &gfx->fonts[bt->font];
+    Font *font = &fonts[bt->font];
 
     float x0 = pp.x;
     float min_x = FLT_MAX;
@@ -607,6 +606,12 @@ float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
     }
 
     return max(0, max_x - min_x);
+}
+
+inline
+float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
+{
+    return body_text_line_width(line_index, bt, gfx->fonts);
 }
 
 

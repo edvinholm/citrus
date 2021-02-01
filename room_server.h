@@ -8,6 +8,8 @@ struct RS_Client {
     Room_Server *server;
     Room_ID room;
     User_ID user; // Can be NO_USER if the client is another server.
+
+    World_Time room_t_on_connect;
 };
 
 void clear(RS_Client *client) {

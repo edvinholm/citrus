@@ -373,6 +373,18 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     _draw_button_label(label, slot.a, gfx);
 }
 
+void draw_chat(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == UI_CHAT);
+    auto *chat = &e->chat;
+
+    _TRANSLUCENT_UI_();
+    
+    String text = get_ui_string(chat->text, ui);
+    draw_rect(chat->a, { 1, 1, 1, 1 }, gfx);
+    draw_body_text(text, FS_14, FONT_BODY, shrunken(chat->a, 2), {0.1, 0.1, 0.1, 1}, gfx, false);
+}
+
 void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 {
     _OPAQUE_UI_();    
@@ -526,38 +538,6 @@ void draw_slider(UI_Element *e, Graphics *gfx)
     };
         
     v2 uv[6] = {0};
-
-    /* Cool gradient:
-       v4 c[6] = {
-       { 0, 0, 1, 1 },
-       { 1, 0, 1, 1 },
-       { 0, 1, 1, 1 },
-                    
-       { 0, 0, 1, 1 },
-       { 1, 0, 1, 1 },
-       { 0, 1, 1, 1 }
-       };
-       
-       v4 h[6] = {
-       { 0, 0, 0.5, 1 },
-       { 1, 0, 0.5, 1 },
-       { 0, 1, 0.5, 1 },
-                    
-       { 0, 0, 0.5, 1 },
-       { 1, 0, 0.5, 1 },
-       { 0, 1, 0.5, 1 }
-       };
-
-       v4 p[6] = {
-       { 0, 0, 0.5, 1 },
-       { 0.5, 0, 1.0, 1 },
-       { 0, 1, 0.5, 1 },
-                    
-       { 0, 0, 0.5, 1 },
-       { 0.5, 0, 1.0, 1 },
-       { 0, 1, 0.5, 1 }
-       };
-    */
     
     v4 c[6] = {
         { 0.05, 0.4, 0.5, 1 },
@@ -603,15 +583,9 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     auto *dd = &e->dropdown;
     
     draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
+    
 }
 
-void draw_world_view_background(UI_Element *e, Graphics *gfx)
-{
-    _OPAQUE_UI_();
-
-    Assert(e->type == WORLD_VIEW);
-    draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, gfx);
-}
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
@@ -646,6 +620,45 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room 
         }
     }
 }
+
+
+m4x4 draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx, User *user = NULL)
+{
+    _OPAQUE_UI_();
+
+    Assert(e->type == WORLD_VIEW);
+    auto *wv = &e->world_view;
+    
+    double world_t = world_time_for_room(room, t);
+
+    // BACKGROUND //
+    draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, gfx);
+
+    // PROJECTION MATRIX //
+    m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx->z_for_2d);
+
+    // PREPARE ENTITIES //
+    for(int i = 0; i < room->entities.n; i++) {
+        prepare_entity_for_drawing(&room->entities[i], (user) ? user->id : NO_USER);
+    }
+
+    // DRAW WORLD //
+    draw_world(room, world_t, projection, gfx);
+
+    // HOVERED TILE, ITEM PREVIEW //
+    v3 hovered_tile_p = {0};
+    hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
+    hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
+
+    Item *selected_item = (user) ? get_selected_inventory_item(user) : NULL;
+    draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, room, gfx);
+
+    // EAT Z //
+    gfx->z_for_2d -= 0.2;
+
+    return projection;
+}
+
 
 DWORD render_loop(void *loop_)
 {
@@ -745,41 +758,24 @@ DWORD render_loop(void *loop_)
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
                             
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
+                        case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
 
                         case WORLD_VIEW: {
                             auto *room = &client->game.room;
-                            
-                            double world_t = world_time_for_room(room, t);
-                            
-                            draw_world_view_background(e, &gfx);
 
                             if(world_view_exists) {
                                 Assert(false);
                                 break;
                             }
-                       
-                            m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx.z_for_2d);                        
 
-                            for(int i = 0; i < room->entities.n; i++) {
-                                prepare_entity_for_drawing(&room->entities[i], client->user.id);
-                            }
-                            draw_world(room, t, projection, &gfx);
-
-                            v3 hovered_tile_p = {0};
-                            hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
-                            hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
+                            m4x4 projection = draw_world_view(e, room, t, &gfx, current_user(client));
                             
-                            Item *selected_item = get_selected_inventory_item(&client->user);
-                            draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, &client->game.room, &gfx);
-
-                            gfx.z_for_2d -= 0.2;
-
                             world_view_exists = true;
                             world_view = e->world_view;
                             world_projection = projection;
-                            
+                                
                         } break;
-                        
+
                         default: Assert(false); break;
                     }
                 }

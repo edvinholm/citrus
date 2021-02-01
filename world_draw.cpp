@@ -209,10 +209,8 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
     }
 }
 
-void draw_world(Room *room, double system_t, m4x4 projection, Graphics *gfx)
+void draw_world(Room *room, double world_t, m4x4 projection, Graphics *gfx)
 {
-    auto world_t  = system_t + room->time_offset;
-    
     maybe_update_static_room_vaos(room, gfx);
     
 #if 1

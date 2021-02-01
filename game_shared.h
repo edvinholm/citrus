@@ -5,6 +5,7 @@
 */
 
 const int MAX_ENTITIES_PER_ROOM = 256;
+const int MAX_CHAT_MESSAGES_PER_ROOM = 32;
 
 typedef double World_Time;
 
@@ -172,6 +173,14 @@ enum Tile_Type {
 
 typedef s8 Tile;
 
+
+struct Chat_Message {
+    World_Time t;
+    User_ID user;
+    String text; // @Norelease: Make all chat message texts be allocated together.
+};
+
+
 const u64 room_size_x = 32;
 const u64 room_size_y = 32;
 const u64 room_size   = room_size_x * room_size_y;
@@ -183,6 +192,9 @@ struct S__Room
 {
     World_Time t; // t should only be on server. Client computes this (system_time + time_offset). Send this only in INIT_ROOM
     Tile tiles[room_size_x * room_size_y];
+    
+    int num_chat_messages;
+    Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
 };
 void reset(S__Room *room) {
     memset(room->tiles, 0, sizeof(room->tiles));

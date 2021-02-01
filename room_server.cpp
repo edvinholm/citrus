@@ -377,6 +377,7 @@ void add_new_room_clients(Room_Server *server)
             Assert(room_index != -1);
             auto *clients = &server->clients[room_index];
             client = array_add(*clients, *client);
+            client->room_t_on_connect = room->t;
             RS_Log("Added client (socket = %lld) to room %d.\n", client->node.socket.handle, client->room);
 
             // @Norelease: @Temporary: We should not let players connect if there
@@ -986,7 +987,32 @@ void update_room(Room *room, int index, Room_Server *server)
     room->t = t;
 }
 
+void add_chat_message(User_ID user, String text, Room *room)
+{
+    const Allocator_ID allocator = ALLOC_MALLOC;
+    
+    Chat_Message message = {0};
+    message.t    = room->t;
+    message.user = user;
+    message.text = copy_of(&text, allocator);
 
+    Assert(room->num_chat_messages <= MAX_CHAT_MESSAGES_PER_ROOM);
+    if(room->num_chat_messages == MAX_CHAT_MESSAGES_PER_ROOM)
+    {
+        clear(&room->chat_messages[0].text, allocator);
+        
+        for(int i = 0; i < room->num_chat_messages-1; i++) {
+            room->chat_messages[i] = room->chat_messages[i+1];
+        }
+        room->num_chat_messages--;
+    }
+
+    Assert(room->num_chat_messages >= 0);
+    Assert(room->num_chat_messages < MAX_CHAT_MESSAGES_PER_ROOM);
+
+    room->chat_messages[room->num_chat_messages++] = message;
+    room->did_change = true;
+}
 
 bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Room *room, Room_Server *server)
 {
@@ -1005,66 +1031,68 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
             v3 tp = tp_from_index(p.tile_ix);
 
-            if(p.item_to_place != NO_ITEM)
-            {            
-                // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
-                //            This is so the game client can know when to for example remove preview entities.
-                // (@Hack)
-                room->did_change = true;
+            if(client->user != NO_USER)
+            {   
+                if(p.item_to_place != NO_ITEM)
+                {            
+                    // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
+                    //            This is so the game client can know when to for example remove preview entities.
+                    // (@Hack)
+                    room->did_change = true;
 
-                if(room->num_entities < MAX_ENTITIES_PER_ROOM)
-                {
-                    bool can_commit = true;
-
-                    // Get item, ask User Server if it can commit //
-                    Item item;
-                    if(can_commit && !inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
-                        can_commit = false;
-                    }
-
-                    // Check if we can commit //
-                    if(can_commit) {
-                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room, room->entities, room->num_entities);
-                    }
-
-                    if(can_commit)
+                    if(room->num_entities < MAX_ENTITIES_PER_ROOM)
                     {
-                        // Do commit //
-                        
-                        if(!item_transaction_send_decision(true, client->user, server)) {
-                            // @Norelease: Handle com error. This proc should probably not
-                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        bool can_commit = true;
+
+                        // Get item, ask User Server if it can commit //
+                        Item item;
+                        if(can_commit && !inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
+                            can_commit = false;
                         }
 
-                        do_place_item_entity_at_tp(&item, tp, room);
-                    }
-                    else {
-                        // Do abort //
-                        
-                        if(!item_transaction_send_decision(false, client->user, server)) {
-                            // @Norelease: Handle com error. This proc should probably not
-                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        // Check if we can commit //
+                        if(can_commit) {
+                            can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room, room->entities, room->num_entities);
                         }
-                    }
+
+                        if(can_commit)
+                        {
+                            // Do commit //
+                        
+                            if(!item_transaction_send_decision(true, client->user, server)) {
+                                // @Norelease: Handle com error. This proc should probably not
+                                //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                            }
+
+                            do_place_item_entity_at_tp(&item, tp, room);
+                        }
+                        else {
+                            // Do abort //
+                        
+                            if(!item_transaction_send_decision(false, client->user, server)) {
+                                // @Norelease: Handle com error. This proc should probably not
+                                //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                            }
+                        }
                     
+                    }
                 }
-            }
-            else {
+                else {
                 
-                Entity *e = find_player_entity(client->user, room);
-                if(e) {
-                    auto p1 = tp_from_index(p.tile_ix);
+                    Entity *e = find_player_entity(client->user, room);
+                    if(e) {
+                        auto p1 = tp_from_index(p.tile_ix);
                     
-                    Player_Action action = {0};
-                    action.type = PLAYER_ACT_WALK;
-                    action.walk.p1 = p1;
+                        Player_Action action = {0};
+                        action.type = PLAYER_ACT_WALK;
+                        action.walk.p1 = p1;
 
-                    if(enqueue_player_action(e, &action, room, server)) {
+                        if(enqueue_player_action(e, &action, room, server)) {
 
+                        }
                     }
                 }
-            }
-            
+            }            
         } break;
 
         case RSB_ENTITY_ACTION: {
@@ -1103,6 +1131,15 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 }
             }
             
+        } break;
+
+
+        case RSB_CHAT: {
+            auto *p = &header.chat;
+            
+            Fail_If_True(client->user == NO_USER);
+            
+            add_chat_message(client->user, p->message_text, room);
         } break;
             
         default: {
@@ -1233,7 +1270,21 @@ DWORD room_server_main_loop(void *server_)
             // TODO @Norelease: Only send tiles/entities that changed.
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
-                RCB_Packet(client, ROOM_CHANGED, 0, room_size, room->tiles, room->num_entities, room->entities);
+
+                int first_chat_ix = room->num_chat_messages;
+                for(int i = 0; i < room->num_chat_messages; i++)
+                {
+                    auto *chat = &room->chat_messages[i];
+                    if (chat->t >= client->room_t_on_connect) {
+                        first_chat_ix = i;
+                        break;
+                    }
+                }
+                int num_chat_messages = room->num_chat_messages - first_chat_ix;
+                Assert(num_chat_messages >= 0);
+                
+                RCB_Packet(client, ROOM_UPDATE, 0, room_size, room->tiles, room->num_entities, room->entities,
+                           num_chat_messages, room->chat_messages + first_chat_ix);
                 if(client == NULL) c--;
             }
         }

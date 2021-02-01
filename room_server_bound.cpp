@@ -8,8 +8,8 @@ enum RSB_Packet_Type
     RSB_GOODBYE = 2,
 
     RSB_CLICK_TILE = 3,
-
     RSB_ENTITY_ACTION = 4,
+    RSB_CHAT = 5
 };
 
 // Room Server Bound Packet Header
@@ -34,6 +34,10 @@ struct RSB_Packet_Header
             Entity_ID entity;
             Entity_Action action;
         } entity_action;
+
+        struct {
+            String message_text;
+        } chat;
     };
 };
 
@@ -85,6 +89,11 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
             auto *p = &_header->entity_action;
             Read_To_Ptr(Entity_ID,     &p->entity, node);
             Read_To_Ptr(Entity_Action, &p->action, node);
+        } break;
+
+        case RSB_CHAT: {
+            auto *p = &_header->chat;
+            Read_To_Ptr(String, &p->message_text, node);
         } break;
     }
     
@@ -153,5 +162,17 @@ bool enqueue_RSB_ENTITY_ACTION_packet(Network_Node *node, Entity_ID entity, Enti
 }
 
 
+bool enqueue_RSB_CHAT_packet(Network_Node *node, String message_text)
+{    
+    begin_outbound_packet(node);
+    {
+        Write(RSB_Packet_Type, RSB_CHAT, node);
+        //--
+
+        Write(String, message_text, node);
+    }
+    end_outbound_packet(node);
+    return true;
+}
 
 #endif // ROOM_SERVER_BOUND_INCLUDED

@@ -32,9 +32,11 @@ struct Network_Loop
     }                                                               \
 
 
-bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, ALLOC_NETWORK> *action_queue,
-                         Room *room, double t, bool *_server_said_goodbye)
+bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_NETWORK> *action_queue,
+                         double t, bool *_server_said_goodbye)
 {
+    auto *room = &client->game.room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
+    
     // WRITE //
     // @Robustness: Since the room can be updated many times
     //              after the action is queued and before
@@ -44,12 +46,12 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
     //              Should we, instead of having an action queue,
     //              look at the state of the room/game here, to
     //              figure out what packets need to be sent?
-    lock_mutex(mutex);
+    lock_mutex(client->mutex);
     {
         for(int i = 0; i < action_queue->n; i++)
         {
             auto &action = action_queue->e[i];
-            switch(action.type) {
+            switch(action.type) { // @Jai: #complete
                 case C_RS_ACT_CLICK_TILE: {
                     auto &ct = action.click_tile;
                     Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place);
@@ -59,10 +61,24 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                     auto &ea = action.entity_action;
                     Enqueue(RSB_ENTITY_ACTION, node, ea.entity, ea.action);
                 } break;
+
+                case C_RS_ACT_CHAT: {                    
+                    auto &chat  = action.chat;
+
+                    auto *user = current_user(client);                    
+                    Assert(user);
+                    if(!user) break;
+
+                    auto *draft = &user->chat_draft;
+                    String message_text = { draft->e, draft->n };
+                    
+                    Enqueue(RSB_CHAT, node, message_text);
+                    draft->n = 0;
+                } break;
             }
         }
     }
-    unlock_mutex(mutex);
+    unlock_mutex(client->mutex);
     Fail_If_True(!send_outbound_packets(node));
 
     
@@ -97,7 +113,7 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                     Read_To_Ptr(Entity, &entities[i], node);
                 }
 
-                lock_mutex(mutex);
+                lock_mutex(client->mutex);
                 {
                     room->t = p->time;
                     room->time_offset = room->t - t;
@@ -109,7 +125,7 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                     
                     room->static_geometry_up_to_date = false;
                 }
-                unlock_mutex(mutex);
+                unlock_mutex(client->mutex);
             
             } break;
         
@@ -125,8 +141,20 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                 for(int i = 0; i < p->num_entities; i++) {
                     Read_To_Ptr(Entity, &s_entities[i], node);
                 }
-            
-                lock_mutex(mutex);
+
+                Fail_If_True(p->num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
+                Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
+                for(int i = 0; i < p->num_chat_messages; i++) {
+                    auto *c = &chat_messages[i];
+                    
+                    
+                    Read_To_Ptr(Chat_Message, c, node);
+
+                    // Copy the message text. (Otherwise it points to the network node receive buffer)
+                    c->text = copy_of(&c->text, ALLOC_APP);
+                }
+                
+                lock_mutex(client->mutex);
                 {
                     remove_preview_entities(room);
 
@@ -158,11 +186,23 @@ bool talk_to_room_server(Network_Node *node, Mutex &mutex, Array<C_RS_Action, AL
                         i--;
                     }
 
+                    // Chat messages
+                    static_assert(sizeof(room->chat_messages) == sizeof(chat_messages));
+                    for(int i = 0; i < p->num_chat_messages; i++)
+                    {
+                        if(i < room->num_chat_messages)
+                            clear(&room->chat_messages[i].text, ALLOC_APP);
+
+                        room->chat_messages[i] = chat_messages[i];
+                    }
+                    room->num_chat_messages = p->num_chat_messages;
+
+                    // Tiles
                     if(p->tile1 - p->tile0 > 0) {
                         room->static_geometry_up_to_date = false;
                     }
                 }
-                unlock_mutex(mutex);
+                unlock_mutex(client->mutex);
             } break;
             
             default: {
@@ -227,6 +267,8 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->money     = p->money;
                     static_assert(sizeof(inventory) == sizeof(user->inventory));
                     memcpy(user->inventory, inventory, sizeof(inventory));
+
+                    user->initialized = true;
                 }
                 unlock_mutex(mutex);
             } break;
@@ -434,13 +476,11 @@ DWORD network_loop(void *loop_)
                !did_connect_to_room_this_loop)
             {
                 double t = platform_milliseconds() / 1000.0;
-                
+
+                // NOTE: talk_to_room_server might lock client->mutex.
                 bool server_said_goodbye;
-                bool talk = talk_to_room_server(&rs_connection.node, client->mutex,
-                                                &room_action_queue,
-                                                &client->game.room, /* IMPORTANT: Passing a pointer to the room here only works because we only have one room, and it will always be at the same place in memory. */
-                                                t,
-                                                &server_said_goodbye);
+                bool talk = talk_to_room_server(&rs_connection.node, client,
+                                                &room_action_queue, t, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
                 {
                     //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
@@ -464,7 +504,6 @@ DWORD network_loop(void *loop_)
                 }
             }
             // // //
-            
         }
         // //////////////////// //
         
@@ -481,6 +520,10 @@ DWORD network_loop(void *loop_)
             client->server_connections.room = rs_connection;
             client->server_connections.user = us_connection;
 
+            if(did_connect_to_user_this_loop) {
+                clear_and_reset(&client->user, ALLOC_APP);
+            }
+            
             if(did_connect_to_room_this_loop) {
                 reset(&client->game.room);
             }

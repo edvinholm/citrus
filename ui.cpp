@@ -215,7 +215,7 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
 
 void clear_ui_element(UI_Element *e)
 {
-    switch(e->type) {
+    switch(e->type) { // @Jai: #complete
         case DROPDOWN: clear(&e->dropdown); break;
 
             // Maybe IMPORTANT to keep default case here as an assert
@@ -229,6 +229,7 @@ void clear_ui_element(UI_Element *e)
         case UI_TEXT:
 
         case UI_INVENTORY_SLOT:
+        case UI_CHAT: 
 
         case WORLD_VIEW:
             break;
@@ -591,6 +592,20 @@ UI_Click_State ui_inventory_slot(UI_Context ctx, Item *item, bool enabled = true
     return slot->click_state;
 }
 
+void ui_chat(UI_Context ctx, String text)
+{
+    U(ctx);
+    
+    auto id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, UI_CHAT, ctx.manager);
+
+    Rect a = area(ctx.layout);
+
+    auto *chat = &e->chat;
+    ui_set(e, &chat->a, a);
+    ui_set(e, &chat->text, text, ctx.manager);
+}
+
 void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
 {
     Assert(e->type == BUTTON);
@@ -659,7 +674,7 @@ Body_Text create_textfield_body_text(String text, Rect inner_a, Font *fonts)
 }
 
 
-String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_text_did_change)
+String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_text_did_change, bool enabled = true)
 {
     // IMPORTANT: Don't use the carets before we've clamped them to the text length. (We do that further down in this proc) -EH, 2020-11-13
     
@@ -672,7 +687,8 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     auto id = ctx.get_id();
     UI_Element *e = find_or_create_ui_element(id, TEXTFIELD, ui);
     auto *tf = &e->textfield;
-    tf->a    = area(ctx.layout);
+    ui_set(e, &tf->a,       area(ctx.layout));
+    ui_set(e, &tf->enabled, enabled);
 
 
     // TEXT //
@@ -1711,7 +1727,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
 
         bool mouse_over = false;
         
-        switch(e->type) {
+        switch(e->type) { // @Jai: #complete
             case PANEL:      mouse_over = point_inside_rect(mouse.p, e->panel.a);          break;
             case WINDOW:     mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
             case BUTTON:     mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
@@ -1721,6 +1737,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             case WORLD_VIEW: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
 
             case UI_INVENTORY_SLOT: mouse_over = point_inside_rect(mouse.p, e->inventory_slot.a); break;
+            case UI_CHAT:           mouse_over = point_inside_rect(mouse.p, e->chat.a); break;
 
             case UI_TEXT:
                 break;
@@ -1768,7 +1785,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
     {
         UI_Element *e = &ui->elements[i];
         
-        switch(e->type) {
+        switch(e->type) { // @Jai: #complete
             case WINDOW:    update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
             case BUTTON:    update_button(e, input, hovered_element);    break;
             case TEXTFIELD: {
@@ -1786,6 +1803,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
 
             case PANEL:
             case UI_TEXT:
+            case UI_CHAT:
                 break;
                 
             default: Assert(false); break;

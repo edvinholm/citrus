@@ -564,6 +564,23 @@ bool write_Room_ID(Room_ID room_id, Network_Node *node)
 }
 
 
+// Chat //
+bool read_Chat_Message(Chat_Message *_message, Network_Node *node)
+{
+    Read_To_Ptr(World_Time, &_message->t,    node);
+    Read_To_Ptr(User_ID,    &_message->user, node);
+    Read_To_Ptr(String,     &_message->text, node);
+    return true;
+}
+
+bool write_Chat_Message(Chat_Message message, Network_Node *node)
+{
+    Write(World_Time, message.t,    node);
+    Write(User_ID,    message.user, node);
+    Write(String,     message.text, node);
+    return true;
+}
+
 
 // Entity //
 // @Norelease TODO: Check that it is a valid type.

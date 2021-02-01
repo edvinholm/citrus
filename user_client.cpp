@@ -55,7 +55,7 @@ bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type 
     Fail_If_True(header.hello.connect_status != USER_CONNECT__CONNECTED);
 
     platform_set_socket_read_timeout(&node->socket, 1000);
-    
+
     return true;
 }
 
