@@ -148,8 +148,8 @@ struct S__Entity
             User_ID user_id;
 
             World_Time walk_t0;
-            v3 walk_p0;
-            v3 walk_p1;
+            u16 walk_path_length; // IMPORTANT: This must always be >= 2.
+            v3  walk_path[8]; // @Norelease: 8 is not enough. Should this be stored on the entity? How much is enough?
 
             u8 action_queue_length;
             Player_Action action_queue[16];

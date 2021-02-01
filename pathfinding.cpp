@@ -43,5 +43,4 @@ void generate_walk_map(Room *room, Walk_Mask *_map)
             }
         }
     }
-
 }

@@ -406,8 +406,10 @@ void add_new_room_clients(Room_Server *server)
 
                 auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
-                player_e->walk_p0 = p;
-                player_e->walk_p1 = p;
+                
+                player_e->walk_path_length = 2;
+                player_e->walk_path[0] = p;
+                player_e->walk_path[1] = p;
                 
                 Assert(room->num_entities < MAX_ENTITIES_PER_ROOM); // @Norelease: @Temporary: We should not add the entity here anyway (see comment above)
                 room->entities[room->num_entities++] = e;
@@ -620,21 +622,46 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     return false;
 }
 
-// NOTE: Returns starting position.
-v3 player_walk_to(v3 p1, Entity *e, Room *room)
+void player_set_walk_path(v3 *path, u16 length, Entity *e, Room *room)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+    
+    Assert(length <= ARRLEN(player_e->walk_path));
+    Assert(sizeof(*path) == sizeof(*player_e->walk_path));
+
+    player_e->walk_t0 = room->t;
+    player_e->walk_path_length = length;
+    memcpy(player_e->walk_path, path, sizeof(*path) * length);
+    
+    room->did_change = true;
+}
+
+double player_walk_path_duration(v3 *path, u16 length)
+{
+    double t = 0;
+    for(int i = 1; i < length; i++)
+        t += magnitude(path[i] - path[i-1]) / player_walk_speed;
+    
+    return t;
+}
+
+// NOTE: Returns the duration of the walk path.
+double player_walk_to(v3 p1, Entity *e, Room *room, v3 *_p0 = NULL)
 {
     Assert(e->type == ENTITY_PLAYER);
     auto *player_e = &e->player_e;
 
     v3 p0 = entity_position(e, room->t);
-    
-    player_e->walk_t0 = room->t;
-    player_e->walk_p0 = p0;
-    player_e->walk_p1 = p1;
+    v3 path[] = {
+        p0, p1, p0, p1
+    };
 
-    room->did_change = true;
+    player_set_walk_path(path, ARRLEN(path), e, room);
 
-    return p0;
+    if(_p0) *_p0 = p0;
+
+    return player_walk_path_duration(path, ARRLEN(path));
 }
 
 bool perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
@@ -750,8 +777,8 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
     switch(action->type) {
         case PLAYER_ACT_WALK: {
             v3 p1 = action->walk.p1;
-            v3 p0 = player_walk_to(p1, e, room);
-            next_update_t = (room->t + magnitude(p1 - p0) / player_walk_speed);
+            double dur = player_walk_to(p1, e, room);
+            next_update_t = room->t + dur;
         } break;
         
         case PLAYER_ACT_ENTITY: {
@@ -764,8 +791,8 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
                 return false;
             
             v3 p1 = entity_position(target_entity, room->t);
-            v3 p0 = player_walk_to(p1, e, room);
-            next_update_t = (room->t + magnitude(p1 - p0) / player_walk_speed);
+            double dur = player_walk_to(p1, e, room);
+            next_update_t = (room->t + dur);
         } break;
 
         default: {

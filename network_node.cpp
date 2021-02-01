@@ -755,10 +755,18 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
         case ENTITY_PLAYER: {
             auto *x = &_entity->player_e;
             Read_To_Ptr(User_ID, &x->user_id, node);
+
+            // WALK PATH //
+            Read_To_Ptr(World_Time, &x->walk_t0,          node);
+
+            Read_To_Ptr(u16,        &x->walk_path_length, node);
+            Fail_If_True(x->walk_path_length > ARRLEN(x->walk_path));
+            Fail_If_True(x->walk_path_length < 2);
             
-            Read_To_Ptr(v3,         &x->walk_p0, node);
-            Read_To_Ptr(v3,         &x->walk_p1, node);
-            Read_To_Ptr(World_Time, &x->walk_t0, node);
+            for(int i = 0; i < x->walk_path_length; i++) {
+                Read_To_Ptr(v3, &x->walk_path[i], node);
+            }
+            //--
 
             Read_To_Ptr(u8, &x->action_queue_length, node);
             Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
@@ -813,10 +821,14 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             auto *x = &entity->player_e;
             Write(User_ID, x->user_id, node);
 
-            Write(v3,         x->walk_p0, node);
-            Write(v3,         x->walk_p1, node);
-            Write(World_Time, x->walk_t0, node);
-
+            Fail_If_True(x->walk_path_length < 2);
+            
+            Write(World_Time, x->walk_t0,          node);
+            Write(u16,        x->walk_path_length, node);
+            for(int i = 0; i < x->walk_path_length; i++) {
+                Write(v3, x->walk_path[i], node);
+            }
+            
             Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
             Write(u8, x->action_queue_length, node);
             for(int i = 0; i < x->action_queue_length; i++) {

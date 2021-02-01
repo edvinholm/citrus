@@ -63,15 +63,35 @@ v3 entity_position(S__Entity *e, double world_t)
         } break;
             
         case ENTITY_PLAYER:
-        {   
-            auto p0 = e->player_e.walk_p0;
-            auto p1 = e->player_e.walk_p1;
-            auto t0 = e->player_e.walk_t0;
+        {
+            Assert(e->player_e.walk_path_length >= 2);
 
-            if (is_zero(magnitude(p1 - p0))) return p1; // Prevent dividing by zero.
+            auto *player_e = &e->player_e;
 
-            double x = player_walk_speed * ((world_t - t0) / magnitude(p1 - p0));
-            return lerp(p0, p1, clamp(x));
+            // Find current path section
+            double tt = e->player_e.walk_t0;
+            for(int i = 1; i < player_e->walk_path_length; i++) {
+
+                v3 p0 = player_e->walk_path[i-1];
+                v3 p1 = player_e->walk_path[i];
+                
+                double dist = magnitude(p1 - p0);
+                double dur = dist / player_walk_speed;
+
+                double t0 = tt;
+                double t1 = t0 + dur;
+                if(world_t < t1) {
+                    
+                    if(is_zero(dur)) return p1;
+                    
+                    double x = (world_t - t0) / dur;
+                    return lerp(p0, p1, clamp(x));
+                }
+
+                tt = t1;
+            }
+
+            return player_e->walk_path[player_e->walk_path_length-1];
             
         } break;
 
