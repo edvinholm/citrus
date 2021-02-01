@@ -33,5 +33,7 @@ using namespace Server_User;
 
 #include "net_server.cpp"
 
+#include "pathfinding.cpp"
+
 #include "room_server.cpp"
 #include "user_server.cpp"
