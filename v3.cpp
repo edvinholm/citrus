@@ -168,6 +168,33 @@ void operator += (v3 &v, v3 u)
 }
 
 
+
+v3 compmul(v3 a, v3 b) {
+    return { a.x * b.x, a.y * b.y, a.z * b.z };
+}
+
+v3 compdiv(v3 a, v3 b) {
+    return { a.x / b.x, a.y / b.y, a.z / b.z };
+}
+
+v3 compmin(v3 a, v3 b) {
+    return { min(a.x, b.x), min(a.y, b.y), min(a.z, b.z) };
+}
+
+v3 compmax(v3 a, v3 b) {
+    return { max(a.x, b.x), max(a.y, b.y), max(a.z, b.z) };
+}
+
+v3 compfloor(v3 u) {
+    return { floorf(u.x), floorf(u.y), floorf(u.z) };
+}
+
+v3 compceil(v3 u) {
+    return { ceilf(u.x), ceilf(u.y), ceilf(u.z) };
+}
+
+
+
 inline
 float magnitude(v3 v)
 {
@@ -182,13 +209,4 @@ v3 normalize(v3 v)
     if(mag <= 0.0f) return V3_ZERO;
     return v * (1.0f/magnitude(v));
 }
-
-
-inline
-v3s floor_vector(v3 v)
-{
-    return V3S(floor(v.x), floor(v.y), floor(v.z));
-}
-
-
 

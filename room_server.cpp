@@ -27,7 +27,9 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
     Log(__VA_ARGS__)
 
 void create_dummy_entities(Room *room)
-{    
+{
+    return;
+    
     v3 pp = { 0, 0 };
     for(int i = 0; i < 4; i++)
     {
@@ -100,6 +102,7 @@ void create_dummy_rooms(Room_Server *server)
         
         array_add(server->clients, empty_client_array);
     }
+
 }
 
 inline
@@ -324,6 +327,9 @@ bool initialize_room_client(RS_Client *client, Room *room)
     return true;
 }
 
+
+void player_set_walk_path(v3 *path, u16 length, Entity *e, Room *room);
+
 void add_new_room_clients(Room_Server *server)
 {
     auto *queue = &server->client_queue;
@@ -406,10 +412,9 @@ void add_new_room_clients(Room_Server *server)
 
                 auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
-                
-                player_e->walk_path_length = 2;
-                player_e->walk_path[0] = p;
-                player_e->walk_path[1] = p;
+
+                v3 path[] = { p, p };
+                player_set_walk_path(path, 2, &e, room);
                 
                 Assert(room->num_entities < MAX_ENTITIES_PER_ROOM); // @Norelease: @Temporary: We should not add the entity here anyway (see comment above)
                 room->entities[room->num_entities++] = e;
@@ -564,7 +569,128 @@ Entity *find_player_entity(User_ID user_id, Room *room)
     return NULL;
 }
 
-void do_place_item_entity_at_tp(Item *item, v3 tp, Room *room)
+
+void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server);
+
+
+void player_set_walk_path(v3 *path, u16 length, Entity *e, Room *room)
+{
+    const auto allocator = ALLOC_MALLOC;
+    
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+
+    if(player_e->walk_path != NULL)
+        dealloc(player_e->walk_path, allocator);
+
+    // @Speed: Reuse memory!
+    size_t size = sizeof(*path) * length;
+    player_e->walk_path = (v3 *)alloc(size, allocator);
+    
+    player_e->walk_t0 = room->t;
+    player_e->walk_path_length = length;
+    memcpy(player_e->walk_path, path, size);
+    
+    room->did_change = true;
+}
+
+double player_walk_path_duration(v3 *path, u16 length)
+{
+    double t = 0;
+    for(int i = 1; i < length; i++)
+        t += magnitude(path[i] - path[i-1]) / player_walk_speed;
+    
+    return t;
+}
+
+void player_stop_walking(Entity *e, Room *room)
+{
+    v3 p      = compfloor(entity_position(e, room->t));
+    v3 path[] = { p, p };
+    player_set_walk_path(path, ARRLEN(path), e, room);
+
+    
+}
+
+
+bool player_walk_to(v3 p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 = NULL)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+
+    v3 p0 = entity_position(e, room->t);
+
+    Array<v3, ALLOC_TMP> path = {0};
+    
+    v3s start_tile = { (s32)roundf(p0.x), (s32)roundf(p0.y), (s32)roundf(p0.z) };
+    v3s end_tile = { (s32)roundf(p1.x), (s32)roundf(p1.y), (s32)roundf(p1.z) };
+
+    if(start_tile == end_tile)
+    {
+        player_stop_walking(e, room);
+        
+        if(_p0)  *_p0 = p0;
+        if(_dur) *_dur = 0;
+        
+        return true;
+    }
+    
+    if(!find_path(start_tile, end_tile, room->walk_map, &path))
+    {
+        player_stop_walking(e, room);
+        
+        if(_p0)  *_p0  = p0;
+        if(_dur) *_dur = 0;
+        
+        return false;
+    }
+
+    Assert(path.n >= 2);
+    
+    player_set_walk_path(path.e, path.n, e, room); 
+    if(_p0)  *_p0 = p0;
+    if(_dur) *_dur = player_walk_path_duration(path.e, path.n);
+    
+    return true;
+}
+
+void update_walk_map_and_paths(Room *room, Room_Server *server)
+{
+    // UPDATE WALK MAP //
+    generate_walk_map(room, player_entity_volume, room->walk_map);
+
+    // UPDATE WALK PATHS //
+    for(int i = 0; i < room->num_entities; i++) {
+        auto *e = room->entities + i;
+        if(e->type != ENTITY_PLAYER) continue;
+
+        auto *player_e = &e->player_e;
+        Assert(player_e->walk_path_length >= 2);
+
+        v3 p1 = player_e->walk_path[player_e->walk_path_length-1];
+        double dur;
+        if(player_walk_to(p1, e, room, &dur))
+        {
+            // @Norelease.    
+            // @Hack: We don't know if the walk path has to do with the current action.
+            if(player_e->action_queue_length > 0)
+                player_e->action_queue[0].next_update_t = room->t + dur;
+        }
+        else
+        {
+            // @Norelease.
+            // @Hack: We don't know if the walk path has to do with the current action.
+            //        We also don't know if the action can be cancelled at this time.
+            if(player_e->action_queue_length > 0)
+                dequeue_player_action(0, e, room, server);
+        }
+
+        room->did_change = true;
+    }
+}
+
+
+void do_place_item_entity_at_tp(Item *item, v3 tp, Room *room, Room_Server *server)
 {
     v3 p = item_entity_p_from_tp(tp, item);
                             
@@ -573,6 +699,8 @@ void do_place_item_entity_at_tp(Item *item, v3 tp, Room *room)
     e.id   = 1 + room->next_entity_id_minus_one++;
                         
     room->entities[room->num_entities++] = e;
+
+    update_walk_map_and_paths(room, server);
 }
 
 bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *server)
@@ -622,47 +750,6 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     return false;
 }
 
-void player_set_walk_path(v3 *path, u16 length, Entity *e, Room *room)
-{
-    Assert(e->type == ENTITY_PLAYER);
-    auto *player_e = &e->player_e;
-    
-    Assert(length <= ARRLEN(player_e->walk_path));
-    Assert(sizeof(*path) == sizeof(*player_e->walk_path));
-
-    player_e->walk_t0 = room->t;
-    player_e->walk_path_length = length;
-    memcpy(player_e->walk_path, path, sizeof(*path) * length);
-    
-    room->did_change = true;
-}
-
-double player_walk_path_duration(v3 *path, u16 length)
-{
-    double t = 0;
-    for(int i = 1; i < length; i++)
-        t += magnitude(path[i] - path[i-1]) / player_walk_speed;
-    
-    return t;
-}
-
-// NOTE: Returns the duration of the walk path.
-double player_walk_to(v3 p1, Entity *e, Room *room, v3 *_p0 = NULL)
-{
-    Assert(e->type == ENTITY_PLAYER);
-    auto *player_e = &e->player_e;
-
-    v3 p0 = entity_position(e, room->t);
-    v3 path[] = {
-        p0, p1, p0, p1
-    };
-
-    player_set_walk_path(path, ARRLEN(path), e, room);
-
-    if(_p0) *_p0 = p0;
-
-    return player_walk_path_duration(path, ARRLEN(path));
-}
 
 bool perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action action, Room *room, Room_Server *server)
 {
@@ -761,8 +848,6 @@ bool update_player_action(Player_Action *action, Entity *player_entity, Room *ro
     return false;
 }
 
-void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server);
-
 // NOTE: Returns false if the action can't start.
 bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *server)
 {
@@ -775,9 +860,13 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
     double next_update_t = 0;
 
     switch(action->type) {
-        case PLAYER_ACT_WALK: {
+        case PLAYER_ACT_WALK:
+        {
             v3 p1 = action->walk.p1;
-            double dur = player_walk_to(p1, e, room);
+            
+            double dur;
+            if(!player_walk_to(p1, e, room, &dur)) return false;
+            
             next_update_t = room->t + dur;
         } break;
         
@@ -791,7 +880,10 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
                 return false;
             
             v3 p1 = entity_position(target_entity, room->t);
-            double dur = player_walk_to(p1, e, room);
+                        
+            double dur;
+            if(!player_walk_to(p1, e, room, &dur)) return false;
+
             next_update_t = (room->t + dur);
         } break;
 
@@ -902,7 +994,7 @@ void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy
         
                 if(can_place_item_entity_at_tp(&plant, tp, room->t, room, room->entities, room->num_entities))
                 {
-                    do_place_item_entity_at_tp(&plant, tp, room);
+                    do_place_item_entity_at_tp(&plant, tp, room, server);
                 }
                 machine->stop_t = room->t;
                 room->did_change = true;
@@ -1091,7 +1183,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                                 //             return on error, but instead retry until it succeeds (See comment for the proc.)
                             }
 
-                            do_place_item_entity_at_tp(&item, tp, room);
+                            do_place_item_entity_at_tp(&item, tp, room, server);
                         }
                         else {
                             // Do abort //
@@ -1203,6 +1295,13 @@ DWORD room_server_main_loop(void *server_)
     RS_Log("Running.\n");
     
     create_dummy_rooms(server);
+
+    // INIT ROOMS //
+    for(int i = 0; i < server->rooms.n; i++)
+    {
+        update_walk_map_and_paths(&server->rooms[i], server);
+    }
+    
 
     // START LISTENING LOOP //
     Thread listening_loop_thread;

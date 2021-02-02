@@ -757,11 +757,12 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             Read_To_Ptr(User_ID, &x->user_id, node);
 
             // WALK PATH //
-            Read_To_Ptr(World_Time, &x->walk_t0,          node);
+            Read_To_Ptr(World_Time, &x->walk_t0, node);
 
-            Read_To_Ptr(u16,        &x->walk_path_length, node);
-            Fail_If_True(x->walk_path_length > ARRLEN(x->walk_path));
+            Read_To_Ptr(u16, &x->walk_path_length, node);
             Fail_If_True(x->walk_path_length < 2);
+
+            x->walk_path = (v3 *)tmp_alloc(sizeof(*x->walk_path) * x->walk_path_length);
             
             for(int i = 0; i < x->walk_path_length; i++) {
                 Read_To_Ptr(v3, &x->walk_path[i], node);

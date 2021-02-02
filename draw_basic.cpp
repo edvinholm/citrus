@@ -13,7 +13,7 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *t
     if(do_dynamic_draw_now) gpu_draw(GPU_TRIANGLES, n);
 }
 
-inline
+
 void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 {
     auto *buffer = current_vertex_buffer(gfx);
@@ -23,7 +23,7 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 
 
 //NOTE: _uvs should be (at least) 6*2 floats long (12 floats or 6 v2:s)
-inline
+
 void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
 {
     _uvs[0] = { uv0.x, uv0.y };
@@ -269,7 +269,7 @@ void draw_circle(v2 center, float radius, int num_slices, Graphics *gfx)
 // @Speed
 // @Speed
 // @Speed
-inline
+
 void draw_quad(v3 p0, v3 d1, v3 d2, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
 {
     v3 b = p0 + d1;
@@ -278,6 +278,14 @@ void draw_quad(v3 p0, v3 d1, v3 d2, v4 color, Graphics *gfx, v2 *uvs = NULL, Tex
     draw_quad_abs(p0, b, c, d, color, gfx, uvs, tex);
 }
 
+// NOTE: n is the normal.
+void draw_line(v3 a, v3 b, v3 n, float w, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
+{
+    v3 ortho = normalize(cross(b - a, n));
+    v3 p0 = a - ortho * w * 0.5f;
+    
+    draw_quad(p0, ortho * w, (b - a), color, gfx, uvs, tex);
+}
 
 #if 0
 // @Incomplete!! Can't pass null as tex to triangles()
@@ -303,7 +311,7 @@ void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)
 
     triangles(v, uvs, colors, 0, 3, gfx);
 }
-inline
+
 void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 {
     draw_triangle(V3(p0), V3(p1), V3(p2), gfx, uvs);
@@ -365,13 +373,13 @@ void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID textu
     triangles(v, uvs, c, tex, 6, gfx);
 }
 
-inline
+
 void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     draw_rect({p0, (p1 - p0)}, color, gfx, uvs, texture);
 }
 
-inline
+
 void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     draw_rect({p0, s}, color, gfx, uvs, texture);

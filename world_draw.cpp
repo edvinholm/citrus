@@ -33,6 +33,13 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 default: Assert(false); break;
             }
 
+#if DEBUG
+            if(tweak_bool(TWEAK_COLOR_TILES_BY_POSITION)) {
+                v4 foo = { (float)x / room_size_x, (float)y / room_size_y, 0, 1 };
+                if(tile != TILE_WATER) color = &foo;
+            }
+#endif
+      
             if(tile == TILE_WATER) {
                 draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
 
@@ -175,6 +182,20 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
             base_color = { 0.93, 0.52, 0.33, 1.0 };
         } else {
             base_color = { 0.93, 0.72, 0.52, 1.0 };
+        }
+
+        if(tweak_bool(TWEAK_SHOW_PLAYER_PATHS))
+        {
+            v4 path_color = { 0.08, 0.53, 0.90, 1 };
+                
+            for(int i = 0; i < player_e->walk_path_length; i++)
+            {
+                v3 p = player_e->walk_path[i];
+                
+                if(i > 0)  draw_line(player_e->walk_path[i-1], p, V3_Z, 0.2f, path_color, gfx);
+                
+                draw_quad(p - V3_XY * 0.25f, V3_X * 0.7f, V3_Y * 0.7f, path_color, gfx);
+            }
         }
     }
     

@@ -26,16 +26,37 @@ void update_entity_item(S__Entity *e, double world_t)
     }
 }
 
-v3 item_entity_p_from_tp(v3 tp, Item *item)
+
+v3 volume_p_from_tp(v3 tp, v3s volume)
 {
     v3 p = tp;
     
-    v3s volume = item_types[item->type].volume;
     if(volume.x % 2 != 0) p.x += 0.5f;
     if(volume.y % 2 != 0) p.y += 0.5f;
 
     return p;
 }
+
+v3 item_entity_p_from_tp(v3 tp, Item *item)
+{
+    return volume_p_from_tp(tp, item_types[item->type].volume);
+}
+
+v3 volume_tp_from_p(v3 p, v3s volume)
+{
+    v3 tp = p;
+    
+    if(volume.x % 2 != 0) p.x -= 0.5f;
+    if(volume.y % 2 != 0) p.y -= 0.5f;
+
+    return tp;
+}
+
+v3 item_entity_tp_from_p(v3 p, Item *item)
+{
+    return volume_tp_from_p(p, item_types[item->type].volume);
+}
+
 
 S__Entity create_item_entity(Item *item, v3 p, double world_t)
 {
@@ -118,7 +139,7 @@ AABB entity_aabb(S__Entity *e, double world_t)
         } break;
 
         case ENTITY_PLAYER: {
-            bbox.s = { 2, 2, 4 };
+            bbox.s = V3(player_entity_volume);
         } break;
 
         default: Assert(false); break;

@@ -840,9 +840,24 @@ int client_entry_point(int num_args, char **arguments)
         
         lock_mutex(client.mutex);
         {
+
+            // MAYBE RELOAD TWEAKS //
 #if OS_WINDOWS
-            maybe_reload_tweaks(client.developer.user_id, &sb);
+            {
+                bool old_color_tiles_by_position = tweak_bool(TWEAK_COLOR_TILES_BY_POSITION);
+                {
+                    maybe_reload_tweaks(client.developer.user_id, &sb);
+                }
+                bool new_color_tiles_by_position = tweak_bool(TWEAK_COLOR_TILES_BY_POSITION);
+
+#if DEBUG
+                if(new_color_tiles_by_position != old_color_tiles_by_position) {
+                    client.game.room.static_geometry_up_to_date = false;
+                }
 #endif
+            }
+#endif
+            // ------------------ //
             
             client.main_window_a = window_a;
 

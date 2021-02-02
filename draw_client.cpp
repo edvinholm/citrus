@@ -616,7 +616,7 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room 
             draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
         }
         else {
-            draw_quad(tp + V3_Z * 0.001f, V3_X, V3_Y, { 1, 0, 0, 1 }, gfx);
+            draw_quad(tp + V3(-1, -1, 0.001f), V3_X * 2.0f, V3_Y * 2.0f, { 1, 0, 0, 1 }, gfx);
         }
     }
 }

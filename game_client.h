@@ -28,10 +28,18 @@ namespace Client_Game
         
         bool static_geometry_up_to_date;
     };
-    void reset(Room *room) {
-        reset(static_cast<S__Room *>(room));
+    
+    void clear_and_reset(Room *room) {
+        clear(static_cast<S__Room *>(room));
+
+        for(int i = 0; i < room->entities.n; i++) {
+            clear(&room->entities[i]);
+        }
+        
         room->entities.n = 0;
         room->static_geometry_up_to_date = false;
+
+        Zero(*room);
     }
 
     struct Game

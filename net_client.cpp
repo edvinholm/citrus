@@ -144,14 +144,10 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
 
                 Fail_If_True(p->num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
                 Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
-                for(int i = 0; i < p->num_chat_messages; i++) {
+                for(int i = 0; i < p->num_chat_messages; i++)
+                {
                     auto *c = &chat_messages[i];
-                    
-                    
                     Read_To_Ptr(Chat_Message, c, node);
-
-                    // Copy the message text. (Otherwise it points to the network node receive buffer)
-                    c->text = copy_of(&c->text, ALLOC_APP);
                 }
                 
                 lock_mutex(client->mutex);
@@ -172,7 +168,24 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                         
                         auto *e = find_or_add_entity(s_entities[i].id, room);
                         auto *s_e = static_cast<S__Entity *>(e);
+
+                        if(s_entities[i].type == ENTITY_PLAYER)
+                        {
+                            if(e->player_e.walk_path != NULL)
+                                dealloc(e->player_e.walk_path, ALLOC_MALLOC);
+                        }
+                        
                         *s_e = s_entities[i];
+   
+                        if(s_entities[i].type == ENTITY_PLAYER)
+                        {
+                            // Copy path because it's temporary memory.
+                            size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
+                            v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
+                            memcpy(path_copy, e->player_e.walk_path, path_size);
+
+							e->player_e.walk_path = path_copy;
+						}
                         
                         e->exists_on_server = true;
                     }
@@ -182,6 +195,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                         auto *e = &room->entities[i];
                         if(e->exists_on_server) continue;
 
+                        clear(e);
                         array_unordered_remove(room->entities, i);
                         i--;
                     }
@@ -190,10 +204,14 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     static_assert(sizeof(room->chat_messages) == sizeof(chat_messages));
                     for(int i = 0; i < p->num_chat_messages; i++)
                     {
+                        auto *c = &chat_messages[i];
+                        
                         if(i < room->num_chat_messages)
                             clear(&room->chat_messages[i].text, ALLOC_APP);
 
-                        room->chat_messages[i] = chat_messages[i];
+                        // Copy the message text. (Otherwise it points to the network node receive buffer)
+                        c->text = copy_of(&c->text, ALLOC_APP);
+                        room->chat_messages[i] = *c;
                     }
                     room->num_chat_messages = p->num_chat_messages;
 
@@ -525,7 +543,7 @@ DWORD network_loop(void *loop_)
             }
             
             if(did_connect_to_room_this_loop) {
-                reset(&client->game.room);
+                clear_and_reset(&client->game.room);
             }
         }
         unlock_mutex(client->mutex);

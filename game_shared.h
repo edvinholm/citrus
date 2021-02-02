@@ -91,8 +91,13 @@ enum Entity_Type
 typedef u64 Entity_ID;
 const Entity_ID NO_ENTITY = 0;
 
+// PLAYER STUFF //
+v3s player_entity_volume = { 2, 2, 4 };
+
 const double player_walk_speed = 4.2f;
 static_assert(player_walk_speed > 0);
+// ------------ //
+
 
 
 enum Player_Action_Type
@@ -148,8 +153,8 @@ struct S__Entity
             User_ID user_id;
 
             World_Time walk_t0;
-            u16 walk_path_length; // IMPORTANT: This must always be >= 2.
-            v3  walk_path[8]; // @Norelease: 8 is not enough. Should this be stored on the entity? How much is enough?
+            u16 walk_path_length; // IMPORTANT: walk_path_length must always be >= 2.
+            v3 *walk_path;
 
             u8 action_queue_length;
             Player_Action action_queue[16];
@@ -157,6 +162,12 @@ struct S__Entity
         } player_e;
     };
 };
+void clear(S__Entity *e)
+{
+    if(e->type != ENTITY_PLAYER) return;
+
+    dealloc(e->player_e.walk_path, ALLOC_MALLOC);
+}
   
 
 // Must fit in an s8.
@@ -181,9 +192,9 @@ struct Chat_Message {
 };
 
 
-const u64 room_size_x = 32;
-const u64 room_size_y = 32;
-const u64 room_size   = room_size_x * room_size_y;
+const s32 room_size_x = 32;
+const s32 room_size_y = 32;
+const s32 room_size   = room_size_x * room_size_y;
 
 typedef s32 Room_ID; // Only positive numbers are allowed room IDs.
 
@@ -196,6 +207,6 @@ struct S__Room
     int num_chat_messages;
     Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
 };
-void reset(S__Room *room) {
-    memset(room->tiles, 0, sizeof(room->tiles));
+void clear(S__Room *room) {
+    
 }
