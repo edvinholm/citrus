@@ -113,6 +113,23 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Read_To_Ptr(Entity, &entities[i], node);
                 }
 
+				for (int i = 0; i < entities.n; i++) {
+					auto *e = &entities[i];
+
+					if (e->type == ENTITY_PLAYER)
+					{
+						// @Volatile
+						// Copy path because it's temporary memory.
+						
+						size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
+						v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
+						memcpy(path_copy, e->player_e.walk_path, path_size);
+
+						e->player_e.walk_path = path_copy;
+					}
+
+				}
+
                 lock_mutex(client->mutex);
                 {
                     room->t = p->time;
@@ -120,6 +137,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     
                     Assert(sizeof(Tile) == 1);
                     memcpy(room->tiles, p->tiles, room_size_x * room_size_y);
+
+					Assert(room->entities.n == 0);
 
                     array_set(room->entities, entities);
                     
@@ -179,6 +198,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
    
                         if(s_entities[i].type == ENTITY_PLAYER)
                         {
+							// @Volatile
                             // Copy path because it's temporary memory.
                             size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
                             v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
