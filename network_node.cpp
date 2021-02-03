@@ -504,14 +504,17 @@ bool write_Item_Type_ID(Item_Type_ID type_id, Network_Node *node)
 
 bool read_Item_ID(Item_ID *_id, Network_Node *node)
 {
-    Read(u64, id, node);
-    *_id = (Item_Type_ID)id;
+    Read(u64, origin, node);
+    Read(u64, number, node);
+    _id->origin = origin;
+    _id->number = number;
     return true;
 }
 
 bool write_Item_ID(Item_ID id, Network_Node *node)
 {
-    Write(u64, id, node);
+    Write(u64, id.origin, node);
+    Write(u64, id.number, node);
     return true;
 }
 

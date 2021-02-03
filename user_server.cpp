@@ -24,6 +24,19 @@ const char *LOG_TAG_US_LIST = "-US-LIST-"; // Listening loop
     Log(__VA_ARGS__)
 
 
+Item_ID reserve_item_id(User_Server *server)
+{
+    u32 server_id = server->server_id;
+    u32 internal_origin = 0;
+    u64 number = server->next_item_number++;
+
+    u64 origin = server_id;
+    origin <<= 32;
+    origin |= internal_origin;
+
+    return { origin, number };
+}
+
 
 void create_dummy_users(User_Server *server, Allocator_ID allocator)
 {
@@ -41,21 +54,20 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
     Array<US_Client, ALLOC_APP> empty_client_array = {0};
 
     User_ID next_user_id = 1;
-    Item_ID next_item_id = 1;
     
     for(int i = 0; i < ARRLEN(usernames); i++) {
         User user = {0};
-        user.id = next_user_id++; 
+        user.id       = next_user_id++; 
         user.username = copy_cstring_to_string(usernames[i], allocator);
-        user.color = { random_float(),  random_float(),  random_float(), 1 };
-        user.money = random_int(-100, 1000);
+        user.color    = { random_float(),  random_float(),  random_float(), 1 };
+        user.money    = random_int(-100, 1000);
 
         Assert(user.id != NO_USER);
 
         for(int j = 0; j < ARRLEN(user.inventory); j++)
         {
             Item item = {0};
-            item.id   = next_item_id++;
+            item.id   = reserve_item_id(server);
             item.type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM-1);
             user.inventory[j] = item;
         }

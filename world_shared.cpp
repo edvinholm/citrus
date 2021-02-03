@@ -123,6 +123,22 @@ v3 entity_position(S__Entity *e, double world_t)
     return V3_ZERO;
 }
 
+v3 entity_action_position(S__Entity *e, double world_t)
+{
+    v3 p  = entity_position(e, world_t);
+    
+    if(e->type != ENTITY_ITEM) {
+        Assert(false);
+        return p;
+    }
+
+    v3s volume = item_types[e->item_e.item.type].volume;
+    
+    p.y -= volume.y * 0.5f + 1;
+    
+    return p;
+}
+
 AABB entity_aabb(S__Entity *e, double world_t)
 {
     AABB bbox = {0};

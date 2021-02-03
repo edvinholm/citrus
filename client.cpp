@@ -224,6 +224,13 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                 String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
                 ui_text(P(ctx), volume_str);
             }
+
+#if DEBUG
+            { _TOP_CUT_(20);
+                String id_str = concat_tmp("ID: ", item->id.origin, ":", item->id.number, ctx.manager->string_builder);
+                ui_text(P(ctx), id_str);
+            }
+#endif
         }
 
         switch(item->type) {

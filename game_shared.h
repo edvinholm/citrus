@@ -59,8 +59,21 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
-typedef u64 Item_ID;
-const Item_ID NO_ITEM = 0;
+struct Item_ID
+{
+    u64 origin; // First 32 bits is the ID of the server that created the item.
+                // Last  32 bits can be used by the origin server to identify an internal origin. For example, a room server could set this to some representation of which room and where in that room the item was created.
+    u64 number;
+};
+bool operator == (const Item_ID &a, const Item_ID &b) {
+    return (a.origin == b.origin &&
+            a.number == b.number);
+}
+bool operator != (const Item_ID &a, const Item_ID &b) {
+    return !(a == b);
+}
+
+const Item_ID NO_ITEM = { 0, 0 };
 
 struct Item {
     Item_ID id;

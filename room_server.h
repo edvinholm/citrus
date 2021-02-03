@@ -43,10 +43,14 @@ struct RS_User_Server_Connection
 };
 
 struct Room_Server
-{    
+{
+    u32 server_id;
+    
     Atomic<bool> should_exit; // @Speed: Semaphore?
 
     Listening_Loop listening_loop;
+
+    u64 next_item_number;
 
     Array<Room_ID, ALLOC_GAME> room_ids;
     Array<Room, ALLOC_GAME> rooms;
@@ -57,11 +61,13 @@ struct Room_Server
     Array<RS_User_Server_Connection, ALLOC_APP> user_server_connections;
 };
 
-void init_room_server(Room_Server *server)
+void init_room_server(Room_Server *server, u32 server_id)
 {
     init_atomic(&server->should_exit);
 
     init_room_client_queue(&server->client_queue);
+
+    server->server_id = server_id;
 }
 
 // NOTE: Does not dealloc memory etc. This is just to release os handles etc.

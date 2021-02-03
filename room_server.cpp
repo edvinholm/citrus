@@ -26,7 +26,20 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 #define RS_LIST_No_T(...)                     \
     Log(__VA_ARGS__)
 
-void create_dummy_entities(Room *room)
+Item_ID reserve_item_id(Room_Server *server)
+{
+    u32 server_id = server->server_id;
+    u32 internal_origin = 0;
+    u64 number = server->next_item_number++;
+
+    u64 origin = server_id;
+    origin <<= 32;
+    origin |= internal_origin;
+
+    return { origin, number };
+}
+
+void create_dummy_entities(Room *room, Room_Server *server)
 {
     return;
     
@@ -37,7 +50,7 @@ void create_dummy_entities(Room *room)
         Item_Type *item_type = item_types + item_type_id;
         
         Item item = {0};
-        item.id = random_int(999, 9999);// NOTE: We don't assign a unique ID to the item here, but this is just @Temporary stuff so it doesn't matter.
+        item.id = reserve_item_id(server);// NOTE: We don't assign a unique ID to the item here, but this is just @Temporary stuff so it doesn't matter.
         item.type = item_type_id; 
 
         Entity e = {0};
@@ -64,7 +77,7 @@ void create_dummy_rooms(Room_Server *server)
         room.t = get_time();
         room.randomize_cooldown = random_float() * 3.0;
 
-        create_dummy_entities(&room);
+        create_dummy_entities(&room, server);
 
 #if 0
         for(int t = 0; t < room_size_x * room_size_y; t++) {
@@ -733,6 +746,9 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
             // REMOVE ENTITY //
             *e = room->entities[room->num_entities-1];
             room->num_entities--;
+
+            update_walk_map_and_paths(room, server);
+                
             room->did_change = true;
             
             return true;
@@ -769,7 +785,7 @@ bool perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action
             
             action_performed = pick_up_item_entity(as_user, e, room, server);
             if(action_performed) {   
-                RS_Log("User %llu picked up entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
+                RS_Log("User %llu picked up entity %llu (Item %llu:%llu).\n", as_user, e->id, e->item_e.item.id.origin, e->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
             }
         } break;
 
@@ -780,7 +796,7 @@ bool perform_entity_action_if_possible(User_ID as_user, Entity *e, Entity_Action
             // @Temporary @Norelease
             action_performed = pick_up_item_entity(as_user, e, room, server);
             if(action_performed) {   
-                RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu).\n", as_user, e->id, e->item_e.item.id);
+                RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu:%llu).\n", as_user, e->id, e->item_e.item.id.origin, e->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
             }
         } break;
 
@@ -873,16 +889,21 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
         case PLAYER_ACT_ENTITY: {
             auto *x = &action->entity;
             auto *target_entity = find_entity(x->target, room);
-            if(!target_entity) return false;
+            if (!target_entity) {
+                return false;
+            }
 
             Assert(player_e->user_id != NO_USER);
-            if(!entity_action_predicted_possible(x->action, target_entity, player_e->user_id, room->t, NULL))
+            if (!entity_action_predicted_possible(x->action, target_entity, player_e->user_id, room->t, NULL)) {
                 return false;
+            }
             
-            v3 p1 = entity_position(target_entity, room->t);
-                        
+            v3 p1 = entity_action_position(target_entity, room->t);
+
             double dur;
-            if(!player_walk_to(p1, e, room, &dur)) return false;
+            if (!player_walk_to(p1, e, room, &dur)) {
+                return false;
+            }
 
             next_update_t = (room->t + dur);
         } break;
@@ -959,8 +980,6 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
 
     if(first_in_queue) {
         if(!begin_performing_first_player_action(e, room, server)) {
-            RS_Log("Failed to start performing the action we just enqueued....\n");
-            Assert(false);
             dequeue_player_action(0, e, room, server);
             return false;
         }
@@ -987,7 +1006,7 @@ void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy
             if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
             {
                 Item plant = {0};
-                plant.id = random_int(200, 300); // @Norelease: Make unique
+                plant.id   = reserve_item_id(server); // @Norelease: Make unique
                 plant.type = ITEM_PLANT;
 
                 v3 tp = entity_position(e, room->t) - V3_Y * 2;

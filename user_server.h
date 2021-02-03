@@ -37,12 +37,16 @@ void deinit_user_client_queue(US_Client_Queue *queue)
 
 
 struct User_Server
-{    
+{
+    u32 server_id;
+    
     Atomic<bool> should_exit; // @Speed: Semaphore?
 
     Array<User, ALLOC_US> users;
 
     Listening_Loop listening_loop;
+    
+    u64 next_item_number;
     
     Array<Array<US_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
     US_Client_Queue client_queue;
@@ -50,11 +54,13 @@ struct User_Server
 
 
 
-void init_user_server(User_Server *server)
+void init_user_server(User_Server *server, u32 server_id)
 {
     init_atomic(&server->should_exit);
     
     init_user_client_queue(&server->client_queue);
+
+    server->server_id = server_id;
 }
 
 // NOTE: Does not dealloc memory etc. This is just to release os handles etc.
