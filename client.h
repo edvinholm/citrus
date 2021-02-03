@@ -11,11 +11,24 @@ String bottom_panel_tab_labels[] = {
 };
 static_assert(ARRLEN(bottom_panel_tab_labels) == BP_TAB_NONE_OR_NUM);
 
+struct Market_UI
+{
+    Item_Type_ID selected_item_type;
+};
+
+void reset(Market_UI *mui)
+{
+    mui->selected_item_type = ITEM_NONE_OR_NUM;
+}
+
 struct Client_UI
 {
     bool room_window_open;
     bool user_window_open;
+    bool market_window_open;
 
+    Market_UI market;
+    
 #if DEVELOPER
     bool dev_window_open;
 #endif

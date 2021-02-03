@@ -1,5 +1,8 @@
 
 #include "network_node.cpp"
+
+#include "user_server_bound.h"
+
 #include "user_server_bidirectional.cpp"
 #include "user_server_bound.cpp"
 #include "user_client_bound.cpp"

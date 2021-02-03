@@ -196,6 +196,27 @@ DWORD user_server_listening_loop(void *user_server_)
     return 0;
 }
 
+
+US_Market_Server_Connection *find_or_add_connection_to_market_server(User_ID user_id, User_Server *server)
+{
+    const Allocator_ID allocator = ALLOC_NETWORK;
+
+    for(int i = 0; i < server->market_server_connections.n; i++)
+    {
+        auto *connection = &server->market_server_connections[i];
+        if(connection->user_id == user_id) return connection;
+    }
+
+    Network_Node node = { 0 };
+    if(!connect_to_market_server(user_id, &node, MS_CLIENT_US)) return NULL;
+
+    US_Market_Server_Connection new_connection = {0};
+    new_connection.user_id = user_id;
+    new_connection.node = node;
+    return array_add(server->market_server_connections, new_connection);
+}
+
+
 void commit_transaction(US_Transaction t, User *user)
 {
     switch(t.type) {
@@ -366,6 +387,15 @@ bool start_user_server_listening_loop(User_Server *server, Thread *_thread)
 void disconnect_user_client(US_Client *client)
 {
     auto client_copy = *client;
+
+    // REMEMBER: This is special, so don't do anything fancy here that can put us in an infinite disconnection loop.
+    if(!send_UCB_GOODBYE_packet_now(&client->node)) {
+        US_Log("Failed to write UCB Goodbye.\n");
+    }
+    
+    if(!platform_close_socket(&client->node.socket)) {
+        US_Log("Failed to close user client socket.\n");
+    }
     
     bool found_user = false;
     
@@ -385,15 +415,6 @@ void disconnect_user_client(US_Client *client)
         }
     }
     Assert(found_user);
-
-    // REMEMBER: This is special, so don't do anything fancy here that can put us in an infinite disconnection loop.
-    if(!send_UCB_GOODBYE_packet_now(&client->node)) {
-        US_Log("Failed to write UCB Goodbye.\n");
-    }
-    
-    if(!platform_close_socket(&client->node.socket)) {
-        US_Log("Failed to close user client socket.\n");
-    }
 
     // IMPORTANT that we clear the copy here. Otherwise we would clear the client that is placed where our client was in the array.
     clear(&client_copy);
@@ -487,6 +508,20 @@ void add_new_user_clients(User_Server *server)
                 if(!client) {
                     US_Log("Unable to init user client.\n"); // initialize_user_client() disconnects client for us on error.
                 }
+
+                // @Norelease!! @Temporary
+                auto *ms_con = find_or_add_connection_to_market_server(user->id, server);
+                if(ms_con) {
+                    US_Log("Connected to market as user %llu.\n", ms_con->user_id);
+                    if(send_MSB_PLACE_ORDER_packet_now(&ms_con->node, ITEM_PLANT, 420, false)) {
+                        US_Log("Successfully sent MSB_PLACE_ORDER packet.\n");
+                    } else {
+                        US_Log("Failed to send MSB_PLACE_ORDER packet.\n");
+                    }
+                } else {
+                    US_Log("NOT connected to market as user %llu.\n", user->id);
+                }
+                //-----------------
             }
         }
 
@@ -580,7 +615,7 @@ DWORD user_server_main_loop(void *server_) {
                     
                     if(header.type == USB_GOODBYE) {
                         // TODO @Norelease: Better logging, with more client info etc.
-                        RS_Log("Client (socket = %lld) sent goodbye message.\n", client->node.socket.handle);
+                        US_Log("Client (socket = %lld) sent goodbye message.\n", client->node.socket.handle);
                         do_disconnect = true;
                     }
                     else if(!read_and_handle_usb_packet(client, header, user, &current_transaction_exists, &current_transaction)) {

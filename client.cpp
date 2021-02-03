@@ -105,6 +105,50 @@ void user_window(UI_Context ctx, Client *client)
     }
 }
 
+void market_window(UI_Context ctx, Input_Manager *input, Market_UI *mui, Client *client)
+{
+    U(ctx);
+
+    _WINDOW_(P(ctx), STRING("MARKET"));
+
+    { _BOTTOM_CUT_(40);
+        for(int i = 0; i < ITEM_NONE_OR_NUM; i++)
+        {
+            Item_Type_ID type_id = (Item_Type_ID)i;
+            auto *type = &item_types[type_id];
+            bool selected = (mui->selected_item_type == type_id);
+            
+            { _LEFT_SQUARE_CUT_();
+                if(button(PC(ctx, i), type->name, true, selected) & CLICKED_ENABLED) {
+                    // @Norelease: This should be set when we get a MCB_UPDATE with a watched_item_type.
+                    //             Here, we should enqueue an action to request to set watched_item_type.
+                    mui->selected_item_type = type_id;
+                }
+            }
+            cut_left(window_default_padding, ctx.layout);
+        }
+
+        { _RIGHT_CUT_(200);
+            _GRID_(2, 1, window_default_padding);
+
+            { _CELL_();
+                button(P(ctx), STRING("BUY"));
+            }
+            
+            { _CELL_();
+                button(P(ctx), STRING("SELL"));
+            }
+        }
+        cut_right(window_default_padding, ctx.layout);
+
+        { _RIGHT_CUT_(100);
+            // TODO: Number textfield.
+            bool text_did_change;
+            textfield_tmp(STRING("¤299"), input, P(ctx), &text_did_change);            
+        }
+    }
+}
+
 User_ID current_user_id(Client *client)
 {
     if(client->server_connections.user.status != USER_SERVER_CONNECTED) return NO_USER;
@@ -252,20 +296,19 @@ void room_window(UI_Context ctx, Client *client)
 {
     U(ctx);
 
-    float room_button_h = 64;
+    float room_button_h = 40;
 
     // @Temporary
     String_Builder sb = {0};
     
-    const int num_rooms = 15;
+    const int num_rooms = 14;
 
     Room_ID requested_room = (client->server_connections.room_connect_requested) ? client->server_connections.requested_room : -1;
     Room_ID current_room   = client->server_connections.room.current_room;
 
-    // TODO @Cleanup: :PushPop Window
     { _WINDOW_(P(ctx), STRING("ROOM"));
-        { _TOP_CUT_(room_button_h);
-            _GRID_(num_rooms, 1, window_default_padding);
+        { _TOP_CUT_(room_button_h*2 + window_default_padding);
+            _GRID_(num_rooms/2, 2, window_default_padding);
             for(int r = 0; r < num_rooms; r++)
             {
                 _CELL_();
@@ -344,7 +387,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     { _LEFT_CUT_(menu_bar_button_s);
 
         { _AREA_COPY_();
-        
+
             { _TOP_SLIDE_(menu_bar_button_s);
                 if(button(P(ctx), STRING("ROOM"), true, cui->room_window_open) & CLICKED_ENABLED) {
                     cui->room_window_open = !cui->room_window_open;
@@ -354,6 +397,15 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             { _TOP_SLIDE_(menu_bar_button_s);
                 if(button(P(ctx), STRING("USER"), true, cui->user_window_open) & CLICKED_ENABLED) {
                     cui->user_window_open = !cui->user_window_open;
+                }
+            }
+            
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button(P(ctx), STRING("MARK"), true, cui->market_window_open) & CLICKED_ENABLED) {
+                    cui->market_window_open = !cui->market_window_open;
+                    if(cui->market_window_open) {
+                        reset(&cui->market);
+                    }
                 }
             }
 
@@ -383,14 +435,23 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 #endif
 
 
+    // ROOM WINDOW //
     if(cui->room_window_open)
-    { _TOP_(window_border_width + window_title_height + window_default_padding + 64 + window_default_padding + window_border_width);
+    { _TOP_(window_border_width + window_title_height + window_default_padding + 40 + window_default_padding + 40 + window_default_padding + window_border_width);
+        _LEFT_(min(area(ctx.layout).w, 480));
         room_window(P(ctx), client);
     }
 
+    // USER WINDOW //
     if(cui->user_window_open)
     { _RIGHT_CUT_(320);
         user_window(P(ctx), client);
+    }
+
+    // MARKET WINDOW//
+    if(cui->market_window_open)
+    { _CENTER_(640, 480);
+        market_window(P(ctx), input, &cui->market, client);
     }
 
     

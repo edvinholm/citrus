@@ -1,4 +1,6 @@
 
+#include "user_server_bound.h"
+
 struct User_Server;
 
 struct US_Client
@@ -36,6 +38,12 @@ void deinit_user_client_queue(US_Client_Queue *queue)
 }
 
 
+struct US_Market_Server_Connection
+{
+    User_ID user_id;
+    Network_Node node;
+};
+
 struct User_Server
 {
     u32 server_id;
@@ -50,6 +58,8 @@ struct User_Server
     
     Array<Array<US_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
     US_Client_Queue client_queue;
+
+    Array<US_Market_Server_Connection, ALLOC_APP> market_server_connections;
 };
 
 

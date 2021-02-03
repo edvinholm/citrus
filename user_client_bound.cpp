@@ -2,8 +2,6 @@
 #ifndef USER_CLIENT_BOUND_INCLUDED
 #define USER_CLIENT_BOUND_INCLUDED
 
-
-
 // IMPORTANT: Must fit in a u64
 enum User_Connect_Status
 {
@@ -19,8 +17,7 @@ enum UCB_Packet_Type
     UCB_USER_INIT = 3,
     UCB_USER_UPDATE = 4,
 
-    UCB_TRANSACTION_MESSAGE = 5,
-    UCB_ITEM_INFO = 6
+    UCB_TRANSACTION_MESSAGE = 5
 };
 
 struct UCB_Transaction_Commit_Vote_Payload

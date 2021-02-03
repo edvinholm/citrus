@@ -15,13 +15,20 @@ void stop_user_server(User_Server *server, Thread *thread, s32 timeout_ms)
     platform_join_thread(*thread, timeout_ms);
 }
 
+void stop_market_server(Market_Server *server, Thread *thread, s32 timeout_ms)
+{
+    set(&server->should_exit, true);
+    platform_join_thread(*thread, timeout_ms);
+}
+
 int server_entry_point(int num_args, char **arguments)
 {
     Debug_Print("I am a server.\n");
 
     Server server = {0};
-    Room_Server *room_server = &server.room_server;
-    User_Server *user_server = &server.user_server;
+    Room_Server   *room_server   = &server.room_server;
+    User_Server   *user_server   = &server.user_server;
+    Market_Server *market_server = &server.market_server;
         
     if(!platform_init_socket_use()) { Debug_Print("platform_init_socket_use() failed.\n"); return 1; }
     defer(platform_deinit_socket_use(););
@@ -45,6 +52,15 @@ int server_entry_point(int num_args, char **arguments)
         return 1;
     }
     defer(stop_user_server(user_server, &user_server_thread, 10*1000););
+
+    // INIT MARKET SERVER //
+    init_market_server(market_server, next_server_index++);
+    Thread market_server_thread;
+    if(!platform_create_thread(&market_server_main_loop, market_server, &market_server_thread)) {
+        Debug_Print("Failed to create market server thread.\n");
+        return 1;
+    }
+    defer(stop_market_server(market_server, &market_server_thread, 10*1000););
 
     
     // TODO @Temporary @Norelease: Wait for termination signal

@@ -13,6 +13,7 @@ enum Allocator_ID
 
     ALLOC_RS,
     ALLOC_US,
+    ALLOC_MS,
  
     ALLOC_NONE_OR_NUM
 };
@@ -47,8 +48,10 @@ void dealloc(void *ptr, Allocator_ID allocator
 #define network_alloc(Size)  alloc(Size, ALLOC_NETWORK)
 #define dev_alloc(Size)      alloc(Size, ALLOC_DEV)
 #define platform_alloc(Size) alloc(Size, ALLOC_PLATFORM)
+
 #define us_alloc(Size) alloc(Size, ALLOC_US)
 #define rs_alloc(Size) alloc(Size, ALLOC_RS)
+#define ms_alloc(Size) alloc(Size, ALLOC_MS)
 
 #define game_dealloc(Ptr)      dealloc(Ptr, ALLOC_GAME)
 #define app_dealloc(Ptr)       dealloc(Ptr, ALLOC_APP)
@@ -57,7 +60,9 @@ void dealloc(void *ptr, Allocator_ID allocator
 #define network_dealloc(Size)  dealloc(Size, ALLOC_NETWORK)
 #define dev_dealloc(Size)      dealloc(Size, ALLOC_DEV)
 #define platform_dealloc(Size) dealloc(Size, ALLOC_PLATFORM)
-#define us_dealloc(Size)      dealloc(Size, ALLOC_US)
+
+#define us_dealloc(Size) dealloc(Size, ALLOC_US)
 #define rs_dealloc(Size) dealloc(Size, ALLOC_RS)
+#define ms_dealloc(Size) dealloc(Size, ALLOC_MS)
 
 
