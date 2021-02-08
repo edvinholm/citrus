@@ -33,6 +33,12 @@ struct MCB_Packet_Header
         } market_init;
 
         struct {
+            Item_Type_ID watched_article;
+
+            // NOTE: price history only valid if watched_article != ITEM_NONE_OR_NUM
+            u16 price_history_length;
+            Money price_history[10]; // @Norelease: @Robustness: Make sure this length is the same as Market_Article::price_history
+            
         } market_update;
 
     };
@@ -112,19 +118,27 @@ bool enqueue_MCB_MARKET_INIT_packet(Network_Node *node)
     {
         Write(MCB_Packet_Type, MCB_MARKET_INIT, node);
         //--
-        
     }
     end_outbound_packet(node);
     return true;
 }
 
-bool enqueue_MCB_MARKET_UPDATE_packet(Network_Node *node)
+bool enqueue_MCB_MARKET_UPDATE_packet(Network_Node *node, Item_Type_ID watched_article, Money *price_history, u16 price_history_length)
 {
     begin_outbound_packet(node);
     {
         Write(MCB_Packet_Type, MCB_MARKET_UPDATE, node);
         //--
-        
+
+        Write(Item_Type_ID, watched_article, node);
+        if(watched_article != ITEM_NONE_OR_NUM)
+        {
+            Write(u16, price_history_length, node);
+                         
+            for(int i = 0; i < price_history_length; i++) {
+                Write(Money, price_history[i], node);
+            }
+        }
     }
     end_outbound_packet(node);
     return true;
@@ -155,6 +169,17 @@ bool read_MCB_Packet_Header(MCB_Packet_Header *_header, Network_Node *node)
 
         case MCB_MARKET_UPDATE: {
             auto *p = &_header->market_update;
+            
+            Read_To_Ptr(Item_Type_ID, &p->watched_article, node);
+            if(p->watched_article != ITEM_NONE_OR_NUM)
+            {
+                Read_To_Ptr(u16, &p->price_history_length, node);
+                Fail_If_True(p->price_history_length > ARRLEN(p->price_history));
+                
+                for(int i = 0; i < p->price_history_length; i++) {
+                    Read_To_Ptr(Money, &p->price_history[i], node);
+                }
+            }
         } break;
 
         default: Assert(false); return false;

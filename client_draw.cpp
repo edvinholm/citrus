@@ -297,10 +297,13 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     auto &txt = e->text;
     auto a = txt.a;
 
-    // @Temporary @Cleanup @Robustness: :PushPop color
     String text = get_ui_string(txt.text, ui);
     Rect clip_rect = a;
-    draw_body_text(text, FS_14, FONT_BODY, a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect);
+
+    draw_body_text(text, txt.font_size, txt.font, a,
+                   {0.1, 0.1, 0.1, 1}, gfx, txt.h_align,
+                   &clip_rect, NULL,
+                   txt.v_align);
 }
 
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
@@ -371,6 +374,10 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     }
     
     _draw_button_label(label, slot.a, gfx);
+
+    if(slot.slot_flags & INV_SLOT_RESERVED) {
+        draw_rect(bottom_right_of(shrunken(slot.a, 2), 10, 10), { 1, 1, 1, 1 }, gfx);
+    }
 }
 
 void draw_chat(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -382,7 +389,7 @@ void draw_chat(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     
     String text = get_ui_string(chat->text, ui);
     draw_rect(chat->a, { 1, 1, 1, 1 }, gfx);
-    draw_body_text(text, FS_14, FONT_BODY, shrunken(chat->a, 2), {0.1, 0.1, 0.1, 1}, gfx, false);
+    draw_body_text(text, FS_14, FONT_BODY, shrunken(chat->a, 2), {0.1, 0.1, 0.1, 1}, gfx);
 }
 
 void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
@@ -504,7 +511,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
     }
 #endif
 
-    draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, false, &clip_rect, &bt);
+    draw_body_text(text, FS_16, FONT_INPUT, text_a, {0.1, 0.1, 0.1, 1}, gfx, HA_LEFT, &clip_rect, &bt);
 
     if(tf->scrollbar_visible)
     {
@@ -583,6 +590,80 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     auto *dd = &e->dropdown;
     
     draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
+}
+
+// NOTE: This does not support crossing the x-axis. Might look weird if crossing happens mid-section.
+//                                                  Also, we don't clip the vertices of the sections that are on *the line*.
+void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    _OPAQUE_UI_();
+
+    Assert(e->type == GRAPH);
+    auto *graph = &e->graph;
+    auto a = graph->a;
+
+    // BACKGROUND //
+    draw_rect(a, { 1, 1, 1, 1 }, gfx);
+
+    // GRAPH //
+    v4 fill_color = { 0.21, 0.14, 0.82, 1 };
+    v4 line_color = { 0.15, 0.81, 0.78, 1 };
+
+    String values_str = get_ui_string(graph->data, ui);
+    Assert(values_str.length % sizeof(float) == 0);
+    
+    auto num_values = values_str.length / sizeof(float);
+    float *values = (float *)values_str.data;
+
+    Assert(graph->y_max > graph->y_min); // Make sure max > min, and avoid division by zero.
+    float y_minmax_delta = graph->y_max - graph->y_min;
+    
+    float y_factor = a.h / y_minmax_delta;
+    float y_offset = -graph->y_min * y_factor;
+    
+    float fill_z = eat_z_for_2d(gfx);
+    float line_z = eat_z_for_2d(gfx);
+    
+    v3 origin = { a.x, a.y + a.h - y_offset, fill_z };
+    float section_w = a.w / (num_values-1);
+    
+    for(int i = 0; i < num_values; i++)
+    {
+        float y1 = values[i];
+        float y0;
+        
+        if(i == 0) {
+            if(num_values > 0) continue;
+            else {
+                y0 = y1;
+                i += 1;
+            }
+        }
+        else y0 = values[i-1];
+
+        v3 p0 = origin + V3_X * (i-1) * section_w;
+        v3 p1 = p0 + V3_X * section_w;
+        v3 p2 = p0 - V3_Y * (y0 * y_factor);
+        v3 p3 = p1 - V3_Y * (y1 * y_factor);
+
+        // clip
+        if(p0.y > a.y + a.h) p0.y = a.y + a.h;
+        if(p1.y > a.y + a.h) p1.y = a.y + a.h;
+        
+        v3 p[6] = {
+            p0, p1, p2,
+            p2, p1, p3
+        };
+
+        draw_polygon<ARRLEN(p)>(p, fill_color, gfx);
+
+        v3 line_p0 = p2;
+        v3 line_p1 = p3;
+        line_p0.z = line_z;
+        line_p1.z = line_z;
+        draw_line(line_p0, line_p1, V3_Z, 4, line_color, gfx);
+    }
+    // ///// //
     
 }
 
@@ -756,12 +837,14 @@ DWORD render_loop(void *loop_)
                         case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
                         case SLIDER:   draw_slider(e, &gfx);      break;
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
+
+                        case GRAPH: draw_graph(e, ui, &gfx); break;
                             
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
 
                         case WORLD_VIEW: {
-                            auto *room = &client->game.room;
+                            auto *room = &client->room;
 
                             if(world_view_exists) {
                                 Assert(false);
@@ -769,6 +852,16 @@ DWORD render_loop(void *loop_)
                             }
 
                             m4x4 projection = draw_world_view(e, room, t, &gfx, current_user(client));
+
+                            auto &graphics = gfx; // @Hack @Stupid @Cleanup
+                            
+                            if(!client->connections.room.connected &&
+                               !client->connections.room_connect_requested)
+                            {
+                                auto *gfx = &graphics;
+                                _TRANSLUCENT_UI_();
+                                draw_rect(e->world_view.a, { 0, 0, 0, 0.5f }, gfx);
+                            }
                             
                             world_view_exists = true;
                             world_view = e->world_view;

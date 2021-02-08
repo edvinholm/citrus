@@ -328,7 +328,7 @@ Rect area_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_c
     return codepoint_area(cp, a.p, bt->font_size, &fonts[bt->font], bt->glyph_scale, &unused);
 }
 
-void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL)
+void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, H_Align h_align = HA_LEFT, Rect *clip_rect = NULL)
 {
     Font *font = &gfx->fonts[bt->font];
     Texture_ID font_texture = gfx->glyph_maps[bt->font].texture;
@@ -355,8 +355,10 @@ void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, bool lines_cen
     // DRAW LINES //
     for(int l = 0; l < bt->lines.n; l++)
     {
-        if(lines_centered) {            
+        if(h_align == HA_CENTER) {            
             pp.x += bt->w / 2.0f - body_text_line_width(l, bt, gfx) / 2.0f;
+        } else if(h_align == HA_RIGHT) {
+            pp.x += bt->w - body_text_line_width(l, bt, gfx);
         }
         
         // Find line start and end for line_index = l //
@@ -616,7 +618,7 @@ float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
 
 
 // NOTE: clip_rect is a pointer just so we can set it to NULL.
-void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 color, Graphics *gfx, bool lines_centered = false, Rect *clip_rect = NULL,
+void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 color, Graphics *gfx, H_Align h_align = HA_LEFT, Rect *clip_rect = NULL,
                     Body_Text *_bt = NULL, V_Align v_align = VA_TOP, float start_x = 0)
 {
     Body_Text body_text = create_body_text(text, a, font_size, font, gfx->fonts, start_x);
@@ -627,7 +629,7 @@ void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 c
     else if(v_align == VA_CENTER)
         p.y += a.h * 0.5f - body_text_height(&body_text) * 0.5f;
     
-    draw_body_text(&body_text, p, color, gfx, lines_centered, clip_rect); //TODO @Robustness: @Incomplete: lines_centered should be taken into account in create_body_text
+    draw_body_text(&body_text, p, color, gfx, h_align, clip_rect); //TODO @Robustness: @Incomplete: h_align should be taken into account in create_body_text
 
     if(_bt) *_bt = body_text;
 }

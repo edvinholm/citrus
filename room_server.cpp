@@ -26,6 +26,8 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 #define RS_LIST_No_T(...)                     \
     Log(__VA_ARGS__)
 
+
+// NOTE: There is one version of this for the user server, and one for the room server.
 Item_ID reserve_item_id(Room_Server *server)
 {
     u32 server_id = server->server_id;
@@ -37,6 +39,18 @@ Item_ID reserve_item_id(Room_Server *server)
     origin |= internal_origin;
 
     return { origin, number };
+}
+
+// NOTE: There is one version of this for the user server, and one for the room server.
+Item create_item(Item_Type_ID type, User_ID owner, Room_Server *server)
+{
+    Item item = {0};
+    
+    item.id    = reserve_item_id(server);
+    item.type  = type;
+    item.owner = owner;
+    
+    return item;
 }
 
 void create_dummy_entities(Room *room, Room_Server *server)
@@ -421,12 +435,14 @@ void add_new_room_clients(Room_Server *server)
                 e.id     = 1 + room->next_entity_id_minus_one++;
                 e.type   = ENTITY_PLAYER;
                 
-                v3 p = { (float)random_int(1, room_size_x-1), (float)random_int(1, room_size_y-1), 0 };
+                v3s p;
+                do    p = { random_int(1, room_size_x-1), random_int(1, room_size_y-1), 0 };
+                while(room->walk_map[p.y * room_size_x + p.x] & UNWALKABLE);
 
                 auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
 
-                v3 path[] = { p, p };
+                v3 path[] = { V3(p), V3(p) };
                 player_set_walk_path(path, 2, &e, room);
                 
                 Assert(room->num_entities < MAX_ENTITIES_PER_ROOM); // @Norelease: @Temporary: We should not add the entity here anyway (see comment above)
@@ -453,7 +469,7 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
     }
 
     Network_Node node = { 0 };
-    if(!connect_to_user_server(user_id, &node, US_CLIENT_RS)) return NULL;
+    if(!connect_to_user_server(user_id, &node, US_CLIENT_RS, server->server_id)) return NULL;
 
     RS_User_Server_Connection new_connection = {0};
     new_connection.user_id = user_id;
@@ -462,46 +478,46 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
 }
 
 
+
 // TODO @Norelease: Make this real.
-// NOTE: Return value is true if the user server voted to commit.
-// TODO: @Norelease: When we fail here, we just return false. We should not. We should retry until we succeed.
+// TODO: @Norelease: When we fail here (due to com errors), we just return false. We should not. We should retry until we succeed.
 //                   After a number of failed retries, send a report about that.
 //                   If the room server can't talk to the user server, there is no idea
 //                   that it keeps running anyway.. (????)
-//       If the return value is false, either the transaction was aborted because of an abort vote,
-//          or there was a communication error.
-bool user_server_transaction_prepare(User_ID user, US_Transaction transaction, Room_Server *server, UCB_Packet_Header *_response_header)
+bool rs_us_inbound_item_transaction_prepare(User_ID user, Item_ID item_id, Room_Server *server, Item *_item)
 {
-    //@Norelease: If we fail, disconnect from user server and try to reconnect.
-    //           Keep trying until we can connect.
-    //           We should not keep trying to connect to the same actual server,
-    //           but do the user-id to server lookup every time.
+    // CREATE THE TRANSACTION //
+    US_Transaction_Operation operation = {0};
+    operation.type = US_T_ITEM_TRANSFER;
+    operation.item_transfer.is_server_bound = false;
+    operation.item_transfer.client_bound.item_id = item_id;
+    
+    US_Transaction transaction = {0};
+    transaction.num_operations = 1;
+    transaction.operations[0] = operation;
+    // ////////////////////// //
+
+    // @Norelease: If we fail, disconnect from user server and try to reconnect.
+    //             Keep trying until we can connect.
+    //             We should not keep trying to connect to the same actual server,
+    //             but do the user-id to server lookup every time.
 
     RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user, server);
     if(us_con == NULL) return false;
-
-    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, TRANSACTION_PREPARE, &transaction);
     
-    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, &us_con->node, _response_header)) return false;
-    Assert(_response_header->type == UCB_TRANSACTION_MESSAGE);
-    
-    return true;
-}
-
-bool inbound_item_transaction_prepare(User_ID user, Item_ID item_id, Room_Server *server, Item *_item)
-{
-    US_Transaction transaction = {0};
-    transaction.type = US_T_ITEM;
-    transaction.item_details.is_server_bound = false;
-    transaction.item_details.client_bound.item_id = item_id;
-
     UCB_Packet_Header response_header;
-    Fail_If_True(!user_server_transaction_prepare(user, transaction, server, &response_header));
+    Fail_If_True(!user_server_transaction_prepare(transaction, &us_con->node, &response_header));
     
     Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
 
-    if(response_header.transaction_message.message == TRANSACTION_VOTE_COMMIT) {
-        *_item = response_header.transaction_message.commit_vote_payload.item;
+    auto *t_message = &response_header.transaction_message;
+    if(t_message->message == TRANSACTION_VOTE_COMMIT)
+    {
+        auto *cvp = &response_header.transaction_message.commit_vote_payload;
+        
+        Fail_If_True(cvp->num_operations != 1);
+        *_item = cvp->operation_payloads[0].item_transfer.item;
+        
         return true;
     }
 
@@ -511,15 +527,34 @@ bool inbound_item_transaction_prepare(User_ID user, Item_ID item_id, Room_Server
 }
 
 
-bool outbound_item_transaction_prepare(User_ID user, Item *item, Room_Server *server)
+// TODO @Norelease: Make this real.
+// TODO: @Norelease: When we fail here (due to com errors), we just return false. We should not. We should retry until we succeed.
+//                   After a number of failed retries, send a report about that.
+//                   If the room server can't talk to the user server, there is no idea
+//                   that it keeps running anyway.. (????)
+bool rs_us_outbound_item_transaction_prepare(User_ID user, Item *item, Room_Server *server)
 {
+    // CREATE THE TRANSACTION //
+    US_Transaction_Operation operation = {0};
+    operation.type = US_T_ITEM_TRANSFER;
+    operation.item_transfer.is_server_bound = true;
+    operation.item_transfer.server_bound.item = *item;
+    
     US_Transaction transaction = {0};
-    transaction.type = US_T_ITEM;
-    transaction.item_details.is_server_bound = true;
-    transaction.item_details.server_bound.item = *item;
+    transaction.num_operations = 1;
+    transaction.operations[0] = operation;
+    // ////////////////////// //
 
+    // @Norelease: If we fail, disconnect from user server and try to reconnect.
+    //             Keep trying until we can connect.
+    //             We should not keep trying to connect to the same actual server,
+    //             but do the user-id to server lookup every time.
+
+    RS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user, server);
+    if(us_con == NULL) return false;
+    
     UCB_Packet_Header response_header;
-    Fail_If_True(!user_server_transaction_prepare(user, transaction, server, &response_header));
+    Fail_If_True(!user_server_transaction_prepare(transaction, &us_con->node, &response_header));
     
     Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
 
@@ -538,7 +573,7 @@ bool outbound_item_transaction_prepare(User_ID user, Item *item, Room_Server *se
 //                   After a number of failed retries, send a report about that.
 //                   If the room server can't talk to the user server, there is no idea
 //                   that it keeps running anyway.. (????)
-bool item_transaction_send_decision(bool commit, User_ID user_id, Room_Server *server)
+bool rs_us_transaction_send_decision(bool commit, User_ID user_id, Room_Server *server)
 {
     //@Norelease: If we fail, disconnect from user server and try to reconnect.
     //           Keep trying until we can connect.
@@ -550,9 +585,9 @@ bool item_transaction_send_decision(bool commit, User_ID user_id, Room_Server *s
         RS_Log("Unable to connect to User Server for User ID = %llu.\n", user_id);
         return false;
     }
-    
-    auto message = (commit) ? TRANSACTION_COMMAND_COMMIT : TRANSACTION_COMMAND_ABORT;
-    Send_Now(USB_TRANSACTION_MESSAGE, &us_con->node, message, NULL);
+
+    Fail_If_True(!user_server_transaction_send_decision(commit, &us_con->node));
+                 
     return true;
 }
 
@@ -725,7 +760,7 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     
     bool can_commit = true;
     
-    if(can_commit && !outbound_item_transaction_prepare(as_user, &e->item_e.item, server)) {
+    if(can_commit && !rs_us_outbound_item_transaction_prepare(as_user, &e->item_e.item, server)) {
         can_commit = false;
     }
 
@@ -738,7 +773,7 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     {
         // Do commit //
                         
-        if(!item_transaction_send_decision(true, as_user, server)) {
+        if(!rs_us_transaction_send_decision(true, as_user, server)) {
             // @Norelease: Handle com error. This proc should probably not
             //             return on error, but instead retry until it succeeds (See comment for the proc.)
         }
@@ -757,7 +792,7 @@ bool pick_up_item_entity(User_ID as_user, Entity *e, Room *room, Room_Server *se
     else {
         // Do abort //
                         
-        if(!item_transaction_send_decision(false, as_user, server)) {
+        if(!rs_us_transaction_send_decision(false, as_user, server)) {
             // @Norelease: Handle com error. This proc should probably not
             //             return on error, but instead retry until it succeeds (See comment for the proc.)
         }
@@ -996,8 +1031,9 @@ void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy
 
     switch(e->type) {
         case ENTITY_ITEM: {
-            
-            if(e->item_e.item.type != ITEM_MACHINE) return;
+
+            auto *item = &e->item_e.item;
+            if(item->type != ITEM_MACHINE) return;
 
             auto *machine = &e->item_e.machine;
             if(machine->stop_t >= machine->start_t) return; // Machine is not running.
@@ -1005,9 +1041,7 @@ void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy
             double time_since_start = room->t - machine->start_t;
             if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
             {
-                Item plant = {0};
-                plant.id   = reserve_item_id(server); // @Norelease: Make unique
-                plant.type = ITEM_PLANT;
+                Item plant = create_item(ITEM_PLANT, item->owner, server);
 
                 v3 tp = entity_position(e, room->t) - V3_Y * 2;
         
@@ -1184,7 +1218,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
                         // Get item, ask User Server if it can commit //
                         Item item;
-                        if(can_commit && !inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
+                        if(can_commit && !rs_us_inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
                             can_commit = false;
                         }
 
@@ -1197,7 +1231,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                         {
                             // Do commit //
                         
-                            if(!item_transaction_send_decision(true, client->user, server)) {
+                            if(!rs_us_transaction_send_decision(true, client->user, server)) {
                                 // @Norelease: Handle com error. This proc should probably not
                                 //             return on error, but instead retry until it succeeds (See comment for the proc.)
                             }
@@ -1207,7 +1241,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                         else {
                             // Do abort //
                         
-                            if(!item_transaction_send_decision(false, client->user, server)) {
+                            if(!rs_us_transaction_send_decision(false, client->user, server)) {
                                 // @Norelease: Handle com error. This proc should probably not
                                 //             return on error, but instead retry until it succeeds (See comment for the proc.)
                             }

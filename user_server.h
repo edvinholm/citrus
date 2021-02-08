@@ -6,10 +6,16 @@ struct User_Server;
 struct US_Client
 {
     US_Client_Type type;
-    
+
     Network_Node node;
 
     User_ID user_id;
+    
+    bool current_transaction_exists;
+    US_Transaction current_transaction;
+
+    u32 server_id; // Only valid if type != US_CLIENT_PLAYER.
+    
     User_Server *server;
 };
 
@@ -38,12 +44,6 @@ void deinit_user_client_queue(US_Client_Queue *queue)
 }
 
 
-struct US_Market_Server_Connection
-{
-    User_ID user_id;
-    Network_Node node;
-};
-
 struct User_Server
 {
     u32 server_id;
@@ -58,8 +58,6 @@ struct User_Server
     
     Array<Array<US_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
     US_Client_Queue client_queue;
-
-    Array<US_Market_Server_Connection, ALLOC_APP> market_server_connections;
 };
 
 

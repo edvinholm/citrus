@@ -76,23 +76,68 @@ String allocate_string(strlength length, Allocator_ID allocator)
     return string((char *)data, length);
 }
 
-String string_from_long(s32 Integer, Allocator_ID allocator)
+String s64_to_string(s64 i, Allocator_ID allocator)
 {
-    bool negative = false;
     strlength length = 0;
-    if(Integer < 0) {
-        negative = true;
-        length++;
-    }
-    strlength NDigits = (Integer == 0) ? 1 : floor(log10(abs(Integer))) + 1;
-    length += NDigits;
-    String result = allocate_string(length, allocator);
     
+    bool negative = (i < 0);
+    if(negative) length++;
+
+    s64 abs_i = abs(i);
+    
+    strlength num_digits;
+    if(abs_i > 0) num_digits = floor(log10(abs_i)) + 1;
+    else          num_digits = 1;
+
+    length += num_digits;
+
+    Assert(length > 0);
+    String result = allocate_string(length, allocator);
+
     if(negative) result.data[0] = '-';
-    for(strlength D = 0; D < NDigits; D++)
+
+    for(strlength c = result.length-1; c >= result.length - num_digits; c--)
     {
-        result.data[length-1-D] = (Integer % 10) + 48;
-        Integer /= 10;
+        Assert(c < result.length);
+        Assert(c >= 0);
+        
+        result.data[c] = (abs_i % 10) + '0';
+        abs_i /= 10;
+    }
+    
+    return result;
+}
+
+// @Robustness: This does not check for overflow.
+// NOTE: _is_negative is necessary to know if a minus was found if the number is zero. "-0" or "-" will result in the function returning 0.
+s64 string_to_s64(String str, bool *_is_negative)
+{
+    s64 result = 0;
+    
+    u8 *at  = str.data;
+    u8 *end = str.data + str.length;
+
+    bool found_minus = false;
+    while(at < end)
+    {
+        u8 ch = *at;
+        if(ch >= '0' && ch <= '9') {
+            result *= 10;
+            result += (ch - '0');
+        }
+        else if(ch == '-' && !found_minus) {
+            result *= -1;
+            found_minus = true;
+        }
+        
+        at++;
+    }
+
+    if(found_minus) {
+        result *= -1;
+        *_is_negative = true;
+    } else {
+        *_is_negative = false;
     }
     
     return result;

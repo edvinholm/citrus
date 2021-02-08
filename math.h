@@ -1,6 +1,6 @@
 
-const double PI = 3.14159265359;
-const double PIx2 = 2.0 * 3.14159265359;
+const double PI  = 3.14159265359;
+const double TAU = 2.0 * 3.14159265359;
 
 
 enum horizontal_alignment

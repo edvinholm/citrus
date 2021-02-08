@@ -51,7 +51,7 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chair") },
+    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chairg") },
     { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") }, 
     { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0}, STRING("Table") },
     { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0}, STRING("Plant") },
@@ -78,6 +78,7 @@ const Item_ID NO_ITEM = { 0, 0 };
 struct Item {
     Item_ID id;
     Item_Type_ID type;
+    User_ID owner;
 
     union {
         struct {

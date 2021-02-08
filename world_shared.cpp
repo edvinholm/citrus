@@ -221,13 +221,15 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
             auto *item_e = &e->item_e;
             auto *item   = &e->item_e.item;
 
+            if(item->owner != performer_user_id) return false;
+
             if(item->type == ITEM_MACHINE) {
                 auto *machine = &item_e->machine;
                 if(machine->start_t > machine->stop_t) return false;
             }
     
             if(user) {
-                if(!inventory_has_available_space_for_item(item, user)) return false;
+                if(!inventory_has_available_space_for_item_type(item->type, user)) return false;
             }
 
             return true;
@@ -245,7 +247,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, User_I
 
             if(user) {
                 // @Temporary: @Norelease Should check if harvested item(s) fits in inventory, not if the plant itself fits.
-                if(!inventory_has_available_space_for_item(&e->item_e.item, user)) return false;
+                if(!inventory_has_available_space_for_item_type(e->item_e.item.type, user)) return false;
             }
             
             return true;

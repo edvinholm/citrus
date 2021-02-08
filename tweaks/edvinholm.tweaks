@@ -10,3 +10,8 @@
 # color_tiles_by_position true
 
 show_player_paths true
+
+
+
+startup_user 1
+startup_room 1

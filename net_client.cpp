@@ -33,9 +33,9 @@ struct Network_Loop
 
 
 bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_NETWORK> *action_queue,
-                         double t, bool *_server_said_goodbye)
+                         bool *_server_said_goodbye)
 {
-    auto *room = &client->game.room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
+    auto *room = &client->room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
     
     // WRITE //
     // @Robustness: Since the room can be updated many times
@@ -96,7 +96,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
         {
             case RCB_GOODBYE: {
                 // Kicked from the server :(
-                Debug_Print("The server said goodbye.\n");
+                Debug_Print("The room server said goodbye.\n");
                 *_server_said_goodbye = true;
             } break;
 
@@ -113,32 +113,35 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Read_To_Ptr(Entity, &entities[i], node);
                 }
 
-				for (int i = 0; i < entities.n; i++) {
-					auto *e = &entities[i];
+                for (int i = 0; i < entities.n; i++) {
+                    auto *e = &entities[i];
 
-					if (e->type == ENTITY_PLAYER)
-					{
-						// @Volatile
-						// Copy path because it's temporary memory.
-						
-						size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
-						v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
-						memcpy(path_copy, e->player_e.walk_path, path_size);
+                    if (e->type == ENTITY_PLAYER)
+                    {
+                        // @Volatile
+                        // Copy path because it's temporary memory.
+                        
+                        size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
+                        v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
+                        memcpy(path_copy, e->player_e.walk_path, path_size);
 
-						e->player_e.walk_path = path_copy;
-					}
+                        e->player_e.walk_path = path_copy;
+                    }
 
-				}
+                }
 
                 lock_mutex(client->mutex);
                 {
+                    double t = platform_get_time();
+                    
                     room->t = p->time;
                     room->time_offset = room->t - t;
+                    Debug_Print("Room time offset: %f\n", room->time_offset);
                     
                     Assert(sizeof(Tile) == 1);
                     memcpy(room->tiles, p->tiles, room_size_x * room_size_y);
 
-					Assert(room->entities.n == 0);
+                    Assert(room->entities.n == 0);
 
                     array_set(room->entities, entities);
                     
@@ -198,14 +201,14 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
    
                         if(s_entities[i].type == ENTITY_PLAYER)
                         {
-							// @Volatile
+                            // @Volatile
                             // Copy path because it's temporary memory.
                             size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
                             v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
                             memcpy(path_copy, e->player_e.walk_path, path_size);
 
-							e->player_e.walk_path = path_copy;
-						}
+                            e->player_e.walk_path = path_copy;
+                        }
                         
                         e->exists_on_server = true;
                     }
@@ -283,16 +286,16 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
         {
             case UCB_GOODBYE: {
                 // Kicked from the server :(
-                Debug_Print("The server said goodbye.\n");
+                Debug_Print("The user server said goodbye.\n");
                 *_server_said_goodbye = true;
             } break;
 
             case UCB_USER_INIT: {
                 auto *p = &header.user_init;
 
-                Item inventory[ARRLEN(user->inventory)];
+                Inventory_Slot inventory[ARRLEN(user->inventory)];
                 for(int i = 0; i < ARRLEN(inventory); i++) {
-                    Read_To_Ptr(Item, inventory + i, node);
+                    Read_To_Ptr(Inventory_Slot, inventory + i, node);
                 }
                 
                 lock_mutex(mutex);
@@ -302,7 +305,10 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->id        = p->id;
                     user->username  = copy_of(&p->username, ALLOC_APP);
                     user->color     = p->color;
+                    
                     user->money     = p->money;
+                    user->reserved_money = p->reserved_money;
+                    
                     static_assert(sizeof(inventory) == sizeof(user->inventory));
                     memcpy(user->inventory, inventory, sizeof(inventory));
 
@@ -314,9 +320,9 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
             case UCB_USER_UPDATE: {
                 auto *p = &header.user_update;
                 
-                Item inventory[ARRLEN(user->inventory)];
+                Inventory_Slot inventory[ARRLEN(user->inventory)];
                 for(int i = 0; i < ARRLEN(inventory); i++) {
-                    Read_To_Ptr(Item, inventory + i, node);
+                    Read_To_Ptr(Inventory_Slot, inventory + i, node);
                 }
 
                 static_assert(sizeof(inventory) == sizeof(user->inventory));
@@ -328,7 +334,10 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                     user->id        = p->id;
                     user->username  = copy_of(&p->username, ALLOC_APP);
                     user->color     = p->color;
+                    
                     user->money     = p->money;
+                    user->reserved_money = p->reserved_money;
+                    
                     static_assert(sizeof(inventory) == sizeof(user->inventory));
                     memcpy(user->inventory, inventory, sizeof(inventory));
                 }
@@ -338,8 +347,105 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
         };
         
     }
+    
+    return true;
+}
 
-    if(*_server_said_goodbye) return true;
+bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action, ALLOC_NETWORK> *action_queue,
+                           bool *_server_said_goodbye)
+{
+    // WRITE //
+    lock_mutex(client->mutex); // @Speed: We might not need to lock the mutex here, but can do it only for the actions that need it, inside the loop. Because the passed action_queue is a copy of the shared one (2021-02-08).
+    {
+        for(int i = 0; i < action_queue->n; i++)
+        {
+            auto *action = &(*action_queue)[i];
+            switch(action->type) { // @Jai: #complete
+                
+                case C_MS_PLACE_ORDER: {
+                    auto *x = &action->place_order;
+                    
+                    Item_Type_ID item_type_to_buy = ITEM_NONE_OR_NUM;
+                    Item_ID      item_id_to_sell = NO_ITEM;
+
+                    if(x->is_buy_order) {
+                        item_type_to_buy = x->buy.item_type;
+                    } else {
+                        item_id_to_sell = x->sell.item_id;
+                    }
+                    
+                    Enqueue(MSB_PLACE_ORDER, node, x->price, x->is_buy_order, item_id_to_sell, item_type_to_buy);
+                } break;
+
+                case C_MS_SET_WATCHED_ARTICLE: {
+                    auto *x = &action->set_watched_article;
+                    Enqueue(MSB_SET_WATCHED_ARTICLE, node, x->article);
+                } break;
+                    
+            }
+        }
+    }
+    unlock_mutex(client->mutex);
+    Fail_If_True(!send_outbound_packets(node));
+
+    
+    // READ //
+    while(true) {
+        
+        bool error;
+        MCB_Packet_Header header;
+        if(!receive_next_mcb_packet(node, &header, &error)) {
+            if(error) return false;
+            break;
+        }
+
+        switch(header.type)
+        {
+            case MCB_GOODBYE: {
+                // Kicked from the server :(
+                Debug_Print("The market server said goodbye.\n");
+                *_server_said_goodbye = true;
+            } break;
+
+            case MCB_MARKET_INIT: {
+                auto *p = &header.market_init;
+                
+                lock_mutex(client->mutex);
+                {
+                    auto *market = &client->market;
+                    
+                    market->initialized = true;
+                }
+                unlock_mutex(client->mutex);
+            } break;
+
+            case MCB_MARKET_UPDATE: {
+                auto *p = &header.market_update;
+
+                lock_mutex(client->mutex);
+                {
+                    auto *market = &client->market;
+                    
+                    market->watched_article = p->watched_article;
+                    
+                    if(market->watched_article != ITEM_NONE_OR_NUM)
+                    {
+                        Assert(p->price_history_length <= ARRLEN(market->price_history_for_watched_article));
+
+                        for(int i = 0; i < p->price_history_length; i++) {
+                            market->price_history_for_watched_article[i] = p->price_history[i];
+                        }
+                        market->price_history_length_for_watched_article = p->price_history_length;
+                    }
+                    
+                    market->waiting_for_watched_article_to_be_set = false;
+                }
+                unlock_mutex(client->mutex);
+                
+            } break;
+        };
+        
+    }
     
     return true;
 }
@@ -353,11 +459,13 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
 //                  Should probably be a higher level logic thing, not in this proc.
 bool client__disconnect_from_user_server(User_Server_Connection *us_con, bool say_goodbye = true)
 {
+    Assert(us_con->connected);
+ 
     Debug_Print("Disconnecting from user server...\n");
     bool result = disconnect_from_user_server(&us_con->node, say_goodbye);
 
     us_con->current_user = NO_USER;
-    us_con->status = USER_SERVER_DISCONNECTED;
+    us_con->connected = false;
 
     return result;
 }
@@ -365,15 +473,32 @@ bool client__disconnect_from_user_server(User_Server_Connection *us_con, bool sa
 // @Cleanup: @Jai: Make this a proc local to network_loop()
 bool client__disconnect_from_room_server(Room_Server_Connection *rs_con, bool say_goodbye = true)
 {
+    Assert(rs_con->connected);
+    
     Debug_Print("Disconnecting from room server...\n");
 
     bool result = disconnect_from_room_server(&rs_con->node, say_goodbye);
     
     rs_con->current_room = 0;
-    rs_con->status = ROOM_SERVER_DISCONNECTED;
+    rs_con->connected = false;
 
     return result;
 }
+
+// @Cleanup: @Jai: Make this a proc local to network_loop()
+bool client__disconnect_from_market_server(Market_Server_Connection *ms_con, bool say_goodbye = true)
+{
+    Assert(ms_con->connected == true);
+    
+    Debug_Print("Disconnecting from market server...\n");
+    bool result = disconnect_from_market_server(&ms_con->node, say_goodbye);
+
+    ms_con->current_user = NO_USER;
+    ms_con->connected = false;
+
+    return result;
+}
+
 
 
 DWORD network_loop(void *loop_)
@@ -382,16 +507,18 @@ DWORD network_loop(void *loop_)
 
     Client *client = loop->client;
 
-    Room_Server_Connection rs_connection;
-    User_Server_Connection us_connection;
+    Room_Server_Connection   rs_connection;
+    User_Server_Connection   us_connection;
+    Market_Server_Connection ms_connection;
 
     // START INITIALIZATION //
     lock_mutex(client->mutex);
     {
         Assert(loop->state == Network_Loop::INITIALIZING);
         
-        rs_connection = client->server_connections.room;
-        us_connection = client->server_connections.user;
+        rs_connection = client->connections.room;
+        us_connection = client->connections.user;
+        ms_connection = client->connections.market;
         
         // INITIALIZATION DONE //
         loop->state = Network_Loop::RUNNING;
@@ -411,9 +538,15 @@ DWORD network_loop(void *loop_)
     User_ID requested_user;
     //
     
+    // MARKET SERVER
+    bool market_connect_requested;
+    Array<C_MS_Action, allocator> market_action_queue;
+    //
+    
     while(true) {
-        bool did_connect_to_room_this_loop = false;
-        bool did_connect_to_user_this_loop = false;
+        bool did_connect_to_room_this_loop   = false;
+        bool did_connect_to_user_this_loop   = false;
+        bool did_connect_to_market_this_loop = false;
         
         lock_mutex(client->mutex);
         {
@@ -423,20 +556,27 @@ DWORD network_loop(void *loop_)
             }
 
             // ROOM SERVER //
-            room_connect_requested = client->server_connections.room_connect_requested;
-            requested_room         = client->server_connections.requested_room;
-            array_set(room_action_queue, client->server_connections.room_action_queue);
-            client->server_connections.room_action_queue.n = 0;
+            room_connect_requested = client->connections.room_connect_requested;
+            requested_room         = client->connections.requested_room;
+            array_set(room_action_queue, client->connections.room_action_queue);
+            client->connections.room_action_queue.n = 0;
             // // //
 
             // USER SERVER // // @Cleanup @Boilerplate
-            user_connect_requested = client->server_connections.user_connect_requested;
-            requested_user = client->server_connections.requested_user;
+            user_connect_requested = client->connections.user_connect_requested;
+            requested_user = client->connections.requested_user;
+            // // //
+            
+            // MARKET SERVER // // @Cleanup @Boilerplate
+            market_connect_requested = client->connections.market_connect_requested;
+            array_set(market_action_queue, client->connections.market_action_queue);
+            client->connections.market_action_queue.n = 0;
             // // //
             
             // Make sure no-one else has written to these structs -- Network Loop is the only one that is allowed to.
-            Assert(equal(&client->server_connections.room, &rs_connection));
-            Assert(totally_equal(&client->server_connections.user, &us_connection));
+            Assert(equal(&client->connections.room, &rs_connection));
+            Assert(totally_equal(&client->connections.user,   &us_connection));
+            Assert(totally_equal(&client->connections.market, &ms_connection));
             // --
         }
         unlock_mutex(client->mutex);
@@ -446,25 +586,23 @@ DWORD network_loop(void *loop_)
             // CONNECT TO ROOM SERVER //
             if(room_connect_requested) {
 
-                if(us_connection.status != USER_SERVER_CONNECTED) {
+                if(!us_connection.connected) {
                     Debug_Print("Can't connect to room server before connected to user server.\n");
                 }
                 else
                 {                
-                    if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+                    if(rs_connection.connected) {
                         // DISCONNECT FROM CURRENT SERVER //
-                        if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed.\n"); }
-                        else {
-                            Debug_Print("Disconnected from room server successfully.\n");
-                        }
+                        if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed. (%s:%d)\n", __FILE__, __LINE__); }
+                        else Debug_Print("Disconnected from room server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
 
-                    Assert(rs_connection.status == ROOM_SERVER_DISCONNECTED);
+                    Assert(!rs_connection.connected);
 
                     User_ID user_id = us_connection.current_user;
                     
                     if(connect_to_room_server(requested_room, user_id, &rs_connection.node)) {
-                        rs_connection.status = ROOM_SERVER_CONNECTED;
+                        rs_connection.connected = true;
                         rs_connection.current_room = requested_room;
                     
                         rs_connection.last_connect_attempt_failed = false;
@@ -472,7 +610,7 @@ DWORD network_loop(void *loop_)
                     }
                     else
                     {
-                        rs_connection.status = ROOM_SERVER_DISCONNECTED;
+                        rs_connection.connected = false;
                         rs_connection.last_connect_attempt_failed = true;
                     }
                 }
@@ -482,18 +620,27 @@ DWORD network_loop(void *loop_)
             // CONNECT TO USER SERVER // // @Cleanup @Boilerplate
             if(user_connect_requested) {
 
-                if(us_connection.status == USER_SERVER_CONNECTED) {
-                    // DISCONNECT FROM CURRENT SERVER //
-                    if(!client__disconnect_from_user_server(&us_connection)) { Debug_Print("Disconnecting from user server failed.\n"); }
-                    else {
-                        Debug_Print("Disconnected from user server successfully.\n");
+                if(us_connection.connected) {
+                    // DISCONNECT FROM USER SERVER //
+                    if(!client__disconnect_from_user_server(&us_connection)) { Debug_Print("Disconnecting from user server failed. (%s:%d)\n", __FILE__, __LINE__); }
+                    else Debug_Print("Disconnected from user server successfully.\n");
+
+                    // DISCONNECT FROM ROOM AND MARKET SERVERS, because they depend on the current user ID. //
+                    if(rs_connection.connected) {
+                        if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed. (%s:%d)\n", __FILE__, __LINE__); }
+                        else Debug_Print("Disconnected from room server successfully. (%s:%d)\n", __FILE__, __LINE__);
+                    }
+
+                    if(ms_connection.connected) {
+                        if(!client__disconnect_from_market_server(&ms_connection)) { Debug_Print("Disconnecting from market server failed. (%s:%d)\n", __FILE__, __LINE__); }
+                        else Debug_Print("Disconnected from market server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
                 }
 
-                Assert(us_connection.status == USER_SERVER_DISCONNECTED);
+                Assert(!us_connection.connected);
                 
-                if(connect_to_user_server(requested_user, &us_connection.node, US_CLIENT_PLAYER)) {
-                    us_connection.status = USER_SERVER_CONNECTED;
+                if(connect_to_user_server(requested_user, &us_connection.node, US_CLIENT_PLAYER, 0)) {
+                    us_connection.connected = true;
                     us_connection.current_user = requested_user;
                     
                     us_connection.last_connect_attempt_failed = false;
@@ -503,22 +650,57 @@ DWORD network_loop(void *loop_)
                 }
                 else
                 {
-                    us_connection.status = USER_SERVER_DISCONNECTED;
+                    us_connection.connected = false;
                     us_connection.last_connect_attempt_failed = true;
                 }
             }
             // // //
+                        
+            // CONNECT TO MARKET SERVER // // @Cleanup @Boilerplate
+            if(market_connect_requested) {
+                if(!us_connection.connected) {
+                    Debug_Print("Can't connect to market server before connected to user server.\n");
+                }
+                else
+                {                
+                    if(ms_connection.connected) {
+                        // DISCONNECT FROM CURRENT SERVER //
+                        if(!client__disconnect_from_market_server(&ms_connection)) { Debug_Print("Disconnecting from market server failed. (%s:%d)\n", __FILE__, __LINE__); }
+                        else Debug_Print("Disconnected from market server successfully. (%s:%d)\n", __FILE__, __LINE__);
+                    }
+
+                    Assert(!ms_connection.connected);
+                    
+                    User_ID user_id = us_connection.current_user;
+                
+                    if(connect_to_market_server(user_id, &ms_connection.node, MS_CLIENT_PLAYER)) {
+                        ms_connection.connected = true;
+                        ms_connection.current_user = user_id;
+                    
+                        ms_connection.last_connect_attempt_failed = false;
+                        did_connect_to_market_this_loop = true;
+
+                        Debug_Print("Connected to market server for user ID = \"%llu\".\n", user_id);
+                    }
+                    else
+                    {
+                        ms_connection.connected = false;
+                        ms_connection.last_connect_attempt_failed = true;
+                    }
+                }
+            }
+            // // //
+
+            
 
             // TALK TO ROOM SERVER //
-            if(rs_connection.status == ROOM_SERVER_CONNECTED &&
+            if(rs_connection.connected &&
                !did_connect_to_room_this_loop)
             {
-                double t = platform_milliseconds() / 1000.0;
-
                 // NOTE: talk_to_room_server might lock client->mutex.
                 bool server_said_goodbye;
                 bool talk = talk_to_room_server(&rs_connection.node, client,
-                                                &room_action_queue, t, &server_said_goodbye);
+                                                &room_action_queue, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
                 {
                     //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
@@ -529,7 +711,7 @@ DWORD network_loop(void *loop_)
             // // //
 
             // TALK TO USER SERVER // // @Cleanup @Boilerplate
-            if(us_connection.status == USER_SERVER_CONNECTED &&
+            if(us_connection.connected &&
                !did_connect_to_user_this_loop)
             {
                 bool server_said_goodbye;
@@ -539,6 +721,21 @@ DWORD network_loop(void *loop_)
                     //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
                     bool say_goodbye = !server_said_goodbye;
                     client__disconnect_from_user_server(&us_connection, say_goodbye);
+                }
+            }
+            // // //
+
+            // TALK TO MARKET SERVER // // @Cleanup @Boilerplate
+            if(ms_connection.connected &&
+               !did_connect_to_market_this_loop)
+            {
+                bool server_said_goodbye;
+                bool talk = talk_to_market_server(&ms_connection.node, client, &market_action_queue, &server_said_goodbye);
+                if(!talk || server_said_goodbye)
+                {
+                    //TODO @Norelease Notify Main Loop about if something failed or if server said goodbye.
+                    bool say_goodbye = !server_said_goodbye;
+                    client__disconnect_from_market_server(&ms_connection, say_goodbye);
                 }
             }
             // // //
@@ -552,19 +749,17 @@ DWORD network_loop(void *loop_)
             // IMPORTANT that we do this 'if' here. Otherwise the main loop can set this var to true
             //           between the time we saw it was false and now. And then we would ignore the request.
             //           (It is not allowed to request a connection if one is already requested)
-            if(room_connect_requested) client->server_connections.room_connect_requested = false;
-            if(user_connect_requested) client->server_connections.user_connect_requested = false;
+            if(room_connect_requested)   client->connections.room_connect_requested   = false;
+            if(user_connect_requested)   client->connections.user_connect_requested   = false;
+            if(market_connect_requested) client->connections.market_connect_requested = false;
 
-            client->server_connections.room = rs_connection;
-            client->server_connections.user = us_connection;
+            client->connections.room   = rs_connection;
+            client->connections.user   = us_connection;
+            client->connections.market = ms_connection;
 
-            if(did_connect_to_user_this_loop) {
-                clear_and_reset(&client->user, ALLOC_APP);
-            }
-            
-            if(did_connect_to_room_this_loop) {
-                clear_and_reset(&client->game.room);
-            }
+            if(did_connect_to_user_this_loop)   clear_and_reset(&client->user, ALLOC_APP);
+            if(did_connect_to_room_this_loop)   clear_and_reset(&client->room);
+            if(did_connect_to_market_this_loop) clear_and_reset(&client->market);
         }
         unlock_mutex(client->mutex);
 
@@ -578,7 +773,7 @@ DWORD network_loop(void *loop_)
     // DISCONNECT FROM ALL CONNECTED SERVERS //
 
     // Room Server
-    if(rs_connection.status == ROOM_SERVER_CONNECTED) {
+    if(rs_connection.connected) {
         if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed.\n"); }
         else {
             Debug_Print("Disconnected from room server successfully.\n");
@@ -586,7 +781,7 @@ DWORD network_loop(void *loop_)
     }
 
     // User Server
-    if(us_connection.status == USER_SERVER_CONNECTED) {
+    if(us_connection.connected) {
         if(!client__disconnect_from_user_server(&us_connection)) { Debug_Print("Disconnecting from user server failed.\n"); }
         else {
             Debug_Print("Disconnected from user server successfully.\n");

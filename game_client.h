@@ -5,7 +5,6 @@
 
 namespace Client_Game
 {
-    
     struct Entity: public S__Entity
     {
         bool is_preview; // We use an entity with this set to true while we wait for a ROOM_UPDATE after we've sent a request to place an item in the room.
@@ -41,9 +40,4 @@ namespace Client_Game
 
         Zero(*room);
     }
-
-    struct Game
-    {
-        Room room;
-    };
 };

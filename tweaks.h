@@ -22,9 +22,11 @@ enum Tweak_ID {
     // //
     TWEAK_SCROLL_TO_CARET_REPEAT_INTERVAL,
 
-    // DEBUG //
+    // DEVELOPER //
     TWEAK_SHOW_PLAYER_PATHS,
     TWEAK_COLOR_TILES_BY_POSITION,
+    TWEAK_STARTUP_USER,
+    TWEAK_STARTUP_ROOM,
     //
 
     TWEAK_NONE_OR_NUM
@@ -66,8 +68,10 @@ struct Tweaks
         { "scroll_to_caret_repeat_interval", TWEAK_TYPE_FLOAT, 1 },
 
         // DEBUG //
-        { "show_player_paths", TWEAK_TYPE_BOOL, 1 },
-        { "color_tiles_by_position", TWEAK_TYPE_BOOL, 1 }
+        { "show_player_paths",       TWEAK_TYPE_BOOL, 1 },
+        { "color_tiles_by_position", TWEAK_TYPE_BOOL, 1 },
+        { "startup_user",            TWEAK_TYPE_UINT, 1 },
+        { "startup_room",            TWEAK_TYPE_UINT, 1 }
         //
     };
     static_assert(ARRLEN(infos) == TWEAK_NONE_OR_NUM);

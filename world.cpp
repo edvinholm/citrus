@@ -1,13 +1,16 @@
 
 // INVENTORY //
 
-Item *get_selected_inventory_item(User *user)
+Item *get_selected_inventory_item(User *user, bool accept_reserved = false)
 {
     if(user->selected_inventory_item_plus_one == 0) return NULL;
-    Item *item = &user->inventory[user->selected_inventory_item_plus_one-1];
-    if(item->id == NO_ITEM) return NULL;
-    Assert(item->type != ITEM_NONE_OR_NUM);
-    return item;
+
+    Inventory_Slot *slot = &user->inventory[user->selected_inventory_item_plus_one-1];
+    if(!(slot->flags & INV_SLOT_FILLED)) return NULL;
+    if(!accept_reserved && (slot->flags & INV_SLOT_RESERVED)) return NULL;
+
+    Assert(slot->item.type != ITEM_NONE_OR_NUM);
+    return &slot->item;
 }
 
 void inventory_deselect(User *user)
@@ -22,18 +25,19 @@ void empty_inventory_slot_locally(int slot_ix, User *user)
 
     auto *slot = &user->inventory[slot_ix];
 
-    // @Boilerplate: User Server: commit_transaction().
-    Zero(*slot);
-    slot->id = NO_ITEM;
-    slot->type = ITEM_NONE_OR_NUM;
+    Assert(!(slot->flags & INV_SLOT_RESERVED)); // Right now, we have no situation when we would empty a reserved slot locally. -EH, 2021-02-04
+    
+    slot->flags &= ~(INV_SLOT_FILLED);
 }
 
 void inventory_remove_item_locally(Item_ID id, User *user)
 {
     for(int i = 0; i < ARRLEN(user->inventory); i++)
     {
-        auto *item = &user->inventory[i];
-        if(item->id == id) {
+        auto *slot = &user->inventory[i];
+        if(!(slot->flags & INV_SLOT_FILLED)) continue;
+        
+        if(slot->item.id == id) {
             empty_inventory_slot_locally(i, user);
             return;
         }
@@ -41,6 +45,7 @@ void inventory_remove_item_locally(Item_ID id, User *user)
 
     Assert(false);
 }
+
 
 bool select_next_inventory_item_of_type(Item_Type_ID type, User *user)
 {
@@ -53,11 +58,15 @@ bool select_next_inventory_item_of_type(Item_Type_ID type, User *user)
         if(slot_at == selected_slot) break;
         if(slot_at >= ARRLEN(user->inventory)) slot_at = 0;
 
-        if(inventory[slot_at].type == type) {
-            user->selected_inventory_item_plus_one = slot_at+1;
-            return true;
+        auto *slot = &inventory[slot_at];
+        if((slot->flags & INV_SLOT_FILLED) && !(slot->flags & INV_SLOT_RESERVED))
+        {
+            if(slot->item.type == type) {
+                user->selected_inventory_item_plus_one = slot_at + 1;
+                return true;
+            }
         }
-
+        
         slot_at++;
     }
 
@@ -129,10 +138,10 @@ m4x4 world_projection_matrix(Rect viewport, float z_offset/* = 0*/)
         0, 0, -0.01, z_offset,
         0, 0, 0, 1);
 
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, PIx2 * 0.125));
+    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, TAU * 0.125));
     world_projection = matmul(rotation, world_projection);
 
-    rotation = rotation_matrix(axis_rotation(V3_Z, PIx2 * -0.125));
+    rotation = rotation_matrix(axis_rotation(V3_Z, TAU * -0.125));
     world_projection = matmul(rotation, world_projection);
 
     float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);

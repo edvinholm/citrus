@@ -22,3 +22,6 @@ scroll_to_caret_repeat_interval 0.1  # In seconds
 
 show_player_paths false
 color_tiles_by_position false
+
+
+startup_user 0    # 0 means no user.

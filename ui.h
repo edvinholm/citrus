@@ -116,6 +116,8 @@ enum UI_Element_Type
     DROPDOWN,
     UI_TEXT,
 
+    GRAPH,
+
     UI_INVENTORY_SLOT,
     UI_CHAT,
 
@@ -168,7 +170,14 @@ struct UI_Window
 struct UI_Text
 {
     Rect a;
+    
     UI_String text;
+    
+    Font_Size font_size;
+    Font_ID   font;
+
+    H_Align h_align;
+    V_Align v_align;
 };
 
 struct UI_Button
@@ -182,6 +191,15 @@ struct UI_Button
     bool selected;
 };
 
+struct UI_Graph
+{
+    Rect a;
+    UI_String data; // This is an array of floats. So, length % sizeof(float) must be 0...
+
+    float y_min;
+    float y_max;
+};
+
 
 struct UI_Inventory_Slot
 {
@@ -190,6 +208,7 @@ struct UI_Inventory_Slot
     
     Item_Type_ID item_type;
     float fill;
+    Inventory_Slot_Flags slot_flags;
 
     bool enabled;
     bool selected;
@@ -281,6 +300,8 @@ struct UI_Element
         UI_Textfield textfield;
         UI_Slider    slider;
         UI_Dropdown  dropdown;
+
+        UI_Graph graph;
         
         UI_Inventory_Slot inventory_slot;
         UI_Chat chat;
@@ -309,6 +330,9 @@ struct UI_Textfield_State
     float last_resize_w; // When a resize was last detected (or the textfield was marked active), this is the width the text area had.
 
     bool text_did_change; // This loop
+
+    bool has_no_digits; // NOTE: This is for integer fields only.
+    bool is_negative;   // NOTE: This is for integer fields only.
 };
 
 struct UI_Manager

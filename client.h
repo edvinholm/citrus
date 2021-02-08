@@ -13,12 +13,14 @@ static_assert(ARRLEN(bottom_panel_tab_labels) == BP_TAB_NONE_OR_NUM);
 
 struct Market_UI
 {
-    Item_Type_ID selected_item_type;
+    struct {
+        Money price;
+    } order_draft;
 };
 
 void reset(Market_UI *mui)
 {
-    mui->selected_item_type = ITEM_NONE_OR_NUM;
+    
 }
 
 struct Client_UI
@@ -39,6 +41,30 @@ struct Client_UI
 void init_client_ui(Client_UI *cui)
 {
     cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
+    
+    cui->user_window_open = true;
+
+    // @Norelease: @Temporary, I think. 
+    cui->market.order_draft.price = 10;
+}
+
+// @Cleanup: Make an S__Market_Article maybe. To have as the watched article here.
+struct Market
+{
+    bool initialized;
+    bool waiting_for_watched_article_to_be_set;
+
+    Item_Type_ID watched_article;
+
+    // NOTE: price history is only valid if watched_article != ITEM_NONE_OR_NUM
+    u16 price_history_length_for_watched_article;
+    Money price_history_for_watched_article[10]; // @Norelease: @Robustness: This length must be the same as it is on the server.
+};
+
+void clear_and_reset(Market *market) {
+    Zero(*market);
+
+    market->watched_article = ITEM_NONE_OR_NUM;
 }
 
 struct Client
@@ -56,14 +82,15 @@ struct Client
     Font fonts[NUM_FONTS] = {0};
 
     // NETWORKING //
-    Server_Connections server_connections;
+    Server_Connections connections;
     // --
 
     Client_UI cui;
 
     // --
-    User user;
-    Game game;
+    User   user;
+    Room   room;
+    Market market;
     // --
     
     // @Norelease: Doing Developer stuff in release build...

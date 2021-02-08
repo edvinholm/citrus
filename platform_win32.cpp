@@ -941,7 +941,7 @@ bool platform_read_from_socket(u8 *_data, u64 length, Socket *sock)
 
 bool platform_set_socket_read_timeout(Socket *sock, DWORD milliseconds)
 {
-//    milliseconds = 99999999;
+    // milliseconds = 99999999;
     
     return (setsockopt(sock->handle, SOL_SOCKET, SO_RCVTIMEO, (const char *)&milliseconds, sizeof(milliseconds)) == 0);
 }

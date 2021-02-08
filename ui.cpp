@@ -228,6 +228,8 @@ void clear_ui_element(UI_Element *e)
         case SLIDER:
         case UI_TEXT:
 
+        case GRAPH:
+
         case UI_INVENTORY_SLOT:
         case UI_CHAT: 
 
@@ -531,15 +533,21 @@ void panel(UI_Context ctx)
     ui_set(e, &panel->a, area(ctx.layout));
 }
 
-void ui_text(UI_Context ctx, String text)
+void ui_text(UI_Context ctx, String text,
+             Font_Size font_size = FS_14, Font_ID font = FONT_BODY,
+             H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP)
 {
     U(ctx);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
 
     auto *txt = &e->text;
-    ui_set(e, &txt->a, area(ctx.layout));
-    ui_set(e, &txt->text, text, ctx.manager);
+    ui_set(e, &txt->a,         area(ctx.layout));
+    ui_set(e, &txt->text,      text, ctx.manager);
+    ui_set(e, &txt->font_size, font_size);
+    ui_set(e, &txt->font,      font);
+    ui_set(e, &txt->h_align,   h_align);
+    ui_set(e, &txt->v_align,   v_align);
 }
 
 
@@ -561,7 +569,25 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled 
     return btn->state;
 }
 
-UI_Click_State ui_inventory_slot(UI_Context ctx, Item *item, bool enabled = true, bool selected = false)
+void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float y_max = 1)
+{
+    U(ctx);
+    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), GRAPH, ctx.manager);
+
+    Rect a = area(ctx.layout);
+
+    String data = { (u8 *)values, sizeof(*values) * num_values };
+
+    auto *graph = &e->graph;
+    ui_set(e, &graph->a, a);
+    ui_set(e, &graph->data, data, ctx.manager);
+    ui_set(e, &graph->y_min, y_min);
+    ui_set(e, &graph->y_max, y_max);
+    
+}
+
+UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enabled = true, bool selected = false)
 {
     U(ctx);
     
@@ -573,7 +599,11 @@ UI_Click_State ui_inventory_slot(UI_Context ctx, Item *item, bool enabled = true
     Item_Type_ID item_type = ITEM_NONE_OR_NUM;
     float fill = 0;
     
-    if(item) {
+    if(slot->flags & INV_SLOT_FILLED) {
+
+        auto *item = &slot->item;
+        Assert(item->type != ITEM_NONE_OR_NUM);
+
         item_type = item->type;
         switch(item->type) {
             case ITEM_PLANT: {
@@ -582,14 +612,17 @@ UI_Click_State ui_inventory_slot(UI_Context ctx, Item *item, bool enabled = true
         }
     }
     
-    auto *slot = &e->inventory_slot;
-    ui_set(e, &slot->a, a);
-    ui_set(e, &slot->item_type, item_type);
-    ui_set(e, &slot->fill, fill);
-    ui_set(e, &slot->enabled,  enabled);
-    ui_set(e, &slot->selected, selected);
+    auto *s = &e->inventory_slot;
+    ui_set(e, &s->a, a);
     
-    return slot->click_state;
+    ui_set(e, &s->item_type,  item_type);
+    ui_set(e, &s->fill,       fill);
+    ui_set(e, &s->slot_flags, slot->flags);
+    
+    ui_set(e, &s->enabled,  enabled);
+    ui_set(e, &s->selected, selected);
+    
+    return s->click_state;
 }
 
 void ui_chat(UI_Context ctx, String text)
@@ -674,20 +707,17 @@ Body_Text create_textfield_body_text(String text, Rect inner_a, Font *fonts)
 }
 
 
-String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_text_did_change, bool enabled = true)
+String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui, Layout_Manager *layout, bool *_text_did_change, bool enabled = true, bool *_is_active = NULL)
 {
     // IMPORTANT: Don't use the carets before we've clamped them to the text length. (We do that further down in this proc) -EH, 2020-11-13
     
-    U(ctx);
+    if(_is_active) *_is_active = false;
 
     const bool multiline = true; // @Temporary
 
-    UI_Manager *ui = ctx.manager;
-
-    auto id = ctx.get_id();
     UI_Element *e = find_or_create_ui_element(id, TEXTFIELD, ui);
     auto *tf = &e->textfield;
-    ui_set(e, &tf->a,       area(ctx.layout));
+    ui_set(e, &tf->a,       area(layout));
     ui_set(e, &tf->enabled, enabled);
 
 
@@ -702,6 +732,7 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     // ////////////////////////////////////// //
     // THE TEXTFIELD IS ACTIVE IF WE GET HERE //
     // ////////////////////////////////////// //
+    if(_is_active) *_is_active = true;
     
     Rect inner_a = textfield_inner_rect(tf);
 
@@ -858,7 +889,80 @@ String textfield_tmp(String text, Input_Manager *input, UI_Context ctx, bool *_t
     return get_ui_string(tf->text, ui);
 }
 
+// @Cleanup: Should not pass the Input_Manager here (I think), when we do the
+//           update_ui_element(Input_Frame) thing....
+String textfield_tmp(UI_Context ctx, String text, Input_Manager *input, bool *_text_did_change, bool enabled = true, bool *_is_active = NULL)
+{
+    U(ctx);
 
+    return textfield_tmp(ctx.get_id(), text, input, ctx.manager, ctx.layout, _text_did_change, enabled, _is_active);
+}
+
+// @Norelease: Should limit text length so int doesn't overflow.
+// @Norelease: Should not move caret when entering non-digit characters.
+s64 textfield_s64(UI_Context ctx, int value, Input_Manager *input, bool enabled = true)
+{
+    U(ctx);
+    UI_ID id = ctx.get_id();
+    
+    UI_Manager *ui = ctx.manager;
+
+    String text = EMPTY_STRING;
+    bool special_text = false;
+    
+    if(ui->active_element == id) {
+        auto *tf_state = &ctx.manager->active_textfield_state;
+
+        special_text = true;
+        
+        if(tf_state->is_negative) {
+            if(tf_state->has_no_digits) text = STRING("-");
+            else if(value == 0)         text = STRING("-0");
+            else special_text = false;
+        } else {
+            if(tf_state->has_no_digits) text = EMPTY_STRING;
+            else special_text = false;
+        }
+    }
+
+    if(!special_text) text = s64_to_string(value, ALLOC_TMP);
+
+    bool text_did_change;
+    bool is_active;
+    text = textfield_tmp(id, text, input, ui, ctx.layout, &text_did_change, enabled, &is_active);
+    
+    if(text_did_change) {
+        
+        bool value_is_negative;
+        value = string_to_s64(text, &value_is_negative);
+
+        if(is_active) {
+            auto *tf_state = &ctx.manager->active_textfield_state;
+
+            strlength min_length_if_has_digits = (value_is_negative) ? 2 : 1;
+            tf_state->has_no_digits = (text.length < min_length_if_has_digits);
+
+            tf_state->is_negative = value_is_negative;
+        }
+    }
+
+    return value;
+}
+
+template<Allocator_ID A>
+void textfield(UI_Context ctx, Array<u8, A> *text, Input_Manager *input, bool enabled = true)
+{
+    U(ctx);
+
+    UI_ID id = ctx.get_id();
+
+    String str = { text->e, text->n };
+    bool text_did_change;
+    str = textfield_tmp(id, str, input, ctx.manager, ctx.layout, &text_did_change, enabled);
+    if(text_did_change) {
+        array_set(*text, str.data, str.length);
+    }
+}
 
 
 // NOTE: Only one direction can be passed -- dir is not used as a bitmask.
@@ -1736,6 +1840,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             case DROPDOWN:   mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
             case WORLD_VIEW: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
 
+            case GRAPH:      mouse_over = point_inside_rect(mouse.p, e->graph.a);         break;
+                
             case UI_INVENTORY_SLOT: mouse_over = point_inside_rect(mouse.p, e->inventory_slot.a); break;
             case UI_CHAT:           mouse_over = point_inside_rect(mouse.p, e->chat.a); break;
 
@@ -1801,6 +1907,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
 
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 
+            case GRAPH:
             case PANEL:
             case UI_TEXT:
             case UI_CHAT:

@@ -2,19 +2,64 @@
 
 void request_connection_to_room(Room_ID id, Client *client)
 {
-    Assert(client->server_connections.room_connect_requested == false);
+    Assert(client->connections.room_connect_requested == false);
     
-    client->server_connections.requested_room = id;
-    client->server_connections.room_connect_requested = true;
+    client->connections.requested_room = id;
+    client->connections.room_connect_requested = true;
 }
 
 void request_connection_to_user(User_ID user_id, Client *client)
 {
-    Assert(client->server_connections.user_connect_requested == false);
+    Assert(client->connections.user_connect_requested == false);
 
-    client->server_connections.requested_user = user_id;
-    client->server_connections.user_connect_requested = true;
+    client->connections.requested_user = user_id;
+    client->connections.user_connect_requested = true;
 }
+
+void request_connection_to_market(Client *client)
+{
+    Assert(client->connections.market_connect_requested == false);
+
+    client->connections.market_connect_requested = true;
+}
+
+
+
+User_ID current_user_id(Client *client)
+{
+    if(!client->connections.user.connected) return NO_USER;
+    if(!client->user.initialized) return NO_USER;
+
+    Assert(client->user.id == client->connections.user.current_user);
+    return client->user.id;
+}
+
+User *current_user(Client *client)
+{
+    if(current_user_id(client) == NO_USER) return NULL;
+    return &client->user;
+}
+
+bool action_of_type_in_queue(C_MS_Action_Type type, Client *client)
+{
+    auto &queue = client->connections.market_action_queue;
+    for(int i = 0; i < queue.n; i++) {
+        if(queue[i].type == type) return true;
+    }
+
+    return false;
+}
+
+bool action_of_type_in_queue(C_RS_Action_Type type, Client *client)
+{
+    auto &queue = client->connections.room_action_queue;
+    for(int i = 0; i < queue.n; i++) {
+        if(queue[i].type == type) return true;
+    }
+
+    return false;
+}
+
 
 void user_window(UI_Context ctx, Client *client)
 {
@@ -47,8 +92,8 @@ void user_window(UI_Context ctx, Client *client)
 
     auto *user = &client->user;
     
-    bool connected  = client->server_connections.user.status == USER_CONNECT__CONNECTED; // @Cleanup
-    bool connecting = client->server_connections.user_connect_requested;
+    bool connected  = client->connections.user.connected; // @Cleanup
+    bool connecting = client->connections.user_connect_requested;
 
     _WINDOW_(P(ctx), user->username, true, connected, user->color);
 
@@ -57,7 +102,8 @@ void user_window(UI_Context ctx, Client *client)
         cut_bottom(4, ctx.layout);
 
         { _BOTTOM_CUT_(72);
-            ui_text(P(ctx), concat_tmp("Money: ¤", user->money, ctx.manager->string_builder));
+            Money available = user->money - user->reserved_money;
+            ui_text(P(ctx), concat_tmp("MONEY [ Available: ¤", available, ", Total: ¤", user->money, " ]", ctx.manager->string_builder));
         }
 
         int cols = 8;
@@ -68,13 +114,14 @@ void user_window(UI_Context ctx, Client *client)
                 _CELL_();
 
                 auto cell_ix = r * cols + c;
-                Item *item = &user->inventory[cell_ix];
-                if(item->id == NO_ITEM) item = NULL;
-
-                bool enabled = item != NULL;
+                Inventory_Slot *slot = &user->inventory[cell_ix];
+                Item *item = NULL;
+                if(slot->flags & INV_SLOT_FILLED) item = &slot->item;
+                
+                bool enabled = (item != NULL) && !(slot->flags & INV_SLOT_RESERVED);
 
                 bool selected = (cell_ix == user->selected_inventory_item_plus_one - 1);
-                if(ui_inventory_slot(PC(ctx, cell_ix), item, enabled, selected) & CLICKED_ENABLED) {
+                if(ui_inventory_slot(PC(ctx, cell_ix), slot, enabled, selected) & CLICKED_ENABLED) {
                     // @Norelease @Robustness: Make this an item ID.
                     //   So if the gets removed or moved on the server, the item will be
                     //   deselected, and not replaced by another item that takes its slot
@@ -86,7 +133,7 @@ void user_window(UI_Context ctx, Client *client)
     }
     
     
-    auto *us_con = &client->server_connections.user;
+    auto *us_con = &client->connections.user;
     User_ID current_user = us_con->current_user;
 
     _GRID_(1, ARRLEN(usernames), 4);
@@ -105,74 +152,242 @@ void user_window(UI_Context ctx, Client *client)
     }
 }
 
-void market_window(UI_Context ctx, Input_Manager *input, Market_UI *mui, Client *client)
+void request_market_set_watched_article_action(Item_Type_ID article, Market *market, Client *client)
+{
+    C_MS_Action action = {0};
+    action.type = C_MS_SET_WATCHED_ARTICLE;
+    
+    action.set_watched_article.article = article;
+    
+    array_add(client->connections.market_action_queue, action);// @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
+
+    market->waiting_for_watched_article_to_be_set = true;
+}
+
+void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mui, Client *client)
 {
     U(ctx);
+    
+    User *user = current_user(client);
+    auto *market = &client->market;
+    
+    bool connecting = client->connections.market_connect_requested;
+    bool connected  = !connecting && client->connections.market.connected;
 
-    _WINDOW_(P(ctx), STRING("MARKET"));
+    String window_title;
+    if(connected)       window_title = STRING("MARKET [CONNECTED]");
+    else if(connecting) window_title = STRING("MARKET [CONNECTING]");
+    else                window_title = STRING("MARKET [DISCONNECTED]");
 
-    { _BOTTOM_CUT_(40);
+    
+    Item *inventory_item = NULL;
+    if(user) inventory_item = get_selected_inventory_item(user);
+
+    if(inventory_item != NULL) {
+        if(market->watched_article != inventory_item->type && 
+            !market->waiting_for_watched_article_to_be_set)
+        {
+            request_market_set_watched_article_action(inventory_item->type, market, client);
+        }
+    }
+
+    
+    bool controls_enabled = connected && !market->waiting_for_watched_article_to_be_set;
+    
+
+    _WINDOW_(P(ctx), window_title);
+
+
+
+    // ARTICLE LIST / SEARCH //
+    { _LEFT_CUT_(150);
+
+        bool list_controls_enabled = controls_enabled;
+
+        // SEARCH FIELD
+        { _TOP_CUT_(32);
+            bool text_did_change;
+            textfield_tmp(P(ctx), STRING("Foobar"), input, &text_did_change, list_controls_enabled); // @Norelease
+        }
+        cut_top(4, ctx.layout);
+
+        // @Norelease: Scroll area for the article list...
+        
+        // ITEM TYPES //
         for(int i = 0; i < ITEM_NONE_OR_NUM; i++)
         {
+            cut_top(2, ctx.layout);
+            
+            _TOP_SLIDE_(36);
+            
             Item_Type_ID type_id = (Item_Type_ID)i;
             auto *type = &item_types[type_id];
-            bool selected = (mui->selected_item_type == type_id);
+            bool selected = (market->watched_article == type_id);
             
-            { _LEFT_SQUARE_CUT_();
-                if(button(PC(ctx, i), type->name, true, selected) & CLICKED_ENABLED) {
-                    // @Norelease: This should be set when we get a MCB_UPDATE with a watched_item_type.
-                    //             Here, we should enqueue an action to request to set watched_item_type.
-                    mui->selected_item_type = type_id;
-                }
-            }
-            cut_left(window_default_padding, ctx.layout);
-        }
+            if(button(PC(ctx, i), type->name, list_controls_enabled, selected) & CLICKED_ENABLED) {
+                    
+                request_market_set_watched_article_action(type_id, market, client);
 
+                if(user) inventory_deselect(user);
+            }
+            
+        }
+    }
+    cut_left(window_default_padding, ctx.layout);
+    
+
+    // PLACE ORDER //
+    { _BOTTOM_CUT_(40);
+
+        // NOTE: We don't check that a C_MS_PLACE_ORDER is not queued here. Because
+        //       all data net_client needs is included in the action struct as of
+        //       2021-02-08. I don't know about user experience though, maybe you
+        //       don't want to be able to place a new order until you see that the
+        //       first one successfully was uploaded to the market server.... But
+        //       that's an issue for later. (@Norelease).
+        bool order_controls_enabled = controls_enabled; 
+
+        // PRICE, SELL, BUY //
         { _RIGHT_CUT_(200);
             _GRID_(2, 1, window_default_padding);
 
+            C_MS_Action action = {0};
+            action.type = C_MS_PLACE_ORDER;
+
+            auto *order  = &action.place_order;
+            order->price = mui->order_draft.price;
+
+            bool do_enqueue_action = false;
+
+            bool place_order_buttons_enabled = (order_controls_enabled &&
+                                                market->watched_article != ITEM_NONE_OR_NUM);
+
+            // BUY BUTTON //
             { _CELL_();
-                button(P(ctx), STRING("BUY"));
+
+                bool enabled = false;
+
+                if(user)
+                {
+                    Money available_money = user->money - user->reserved_money;
+                
+                    enabled = (place_order_buttons_enabled &&
+                               inventory_item == NULL &&
+                               available_money >= order->price &&
+                               inventory_has_available_space_for_item_type(market->watched_article, user));
+                }
+                
+                if(button(P(ctx), STRING("BUY"), enabled) & CLICKED_ENABLED) {
+                    order->is_buy_order = true;
+                    order->buy.item_type = market->watched_article;
+                    do_enqueue_action = true;
+                }
             }
-            
+
+            // SELL BUTTON //
             { _CELL_();
-                button(P(ctx), STRING("SELL"));
+                bool enabled = place_order_buttons_enabled && (inventory_item != NULL);
+                if(button(P(ctx), STRING("SELL"), enabled) & CLICKED_ENABLED) {
+                    order->is_buy_order = false;
+                    order->sell.item_id = inventory_item->id;
+                    do_enqueue_action = true;
+
+                    Assert(user);
+                    if(in_array(input->keys, VKEY_SHIFT))
+                        select_next_inventory_item_of_type(inventory_item->type, user);
+                }
+            }
+
+            if(do_enqueue_action) {
+// We changed this rule but I don't know yet if it was a good idea: Assert(!action_of_type_in_queue(C_MS_PLACE_ORDER, client)); @Cleanup
+                array_add(client->connections.market_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
             }
         }
         cut_right(window_default_padding, ctx.layout);
 
-        { _RIGHT_CUT_(100);
-            // TODO: Number textfield.
-            bool text_did_change;
-            textfield_tmp(STRING("¤299"), input, P(ctx), &text_did_change);            
+        
+        // PRICE TEXTFIELD //
+        { _RIGHT_CUT_(100);            
+            auto *price = &mui->order_draft.price;
+            *price = textfield_s64(P(ctx), *price, input, order_controls_enabled);
         }
     }
-}
 
-User_ID current_user_id(Client *client)
-{
-    if(client->server_connections.user.status != USER_SERVER_CONNECTED) return NO_USER;
-    if(!client->user.initialized) return NO_USER;
 
-    Assert(client->user.id == client->server_connections.user.current_user);
-    return client->user.id;
-}
+    // ARTICLE DETAILS //
+    if(connected && market->watched_article != ITEM_NONE_OR_NUM) {
 
-User *current_user(Client *client)
-{
-    if(current_user_id(client) == NO_USER) return NULL;
-    return &client->user;
-}
+        Assert(market->watched_article >= 0 && market->watched_article < ARRLEN(item_types));
+               
+        Item_Type *item_type = &item_types[market->watched_article];
 
-bool action_of_type_queued(C_RS_Action_Type type, Client *client)
-{
-    auto &queue = client->server_connections.room_action_queue;
-    for(int i = 0; i < queue.n; i++) {
-        if(queue[i].type == type) return true;
+        // HEADER
+        { _TOP_CUT_(48);
+
+            // Item Preview
+            { _LEFT_SQUARE_CUT_();
+                button(P(ctx)); // @Norelease: Item preview here.
+            }
+            cut_left(window_default_padding * 1.5f, ctx.layout);
+
+            // Current price
+            { _RIGHT_CUT_(96);
+                cut_bottom(2, ctx.layout); // To get it to line up with the name
+
+                Money price = (market->price_history_length_for_watched_article == 0) ? 0 : market->price_history_for_watched_article[market->price_history_length_for_watched_article-1];
+                String price_str = concat_tmp("¤", price, ctx.manager->string_builder);
+                ui_text(P(ctx), price_str, FS_28, FONT_BODY, HA_RIGHT, VA_BOTTOM);
+            }
+            cut_right(window_default_padding * 1.5f, ctx.layout);
+
+            // Name
+            ui_text(P(ctx), item_type->name, FS_36, FONT_TITLE, HA_LEFT, VA_BOTTOM);
+        }
+        cut_top(window_default_padding, ctx.layout);
+
+        // GRAPH
+        { _TOP_CUT_(300);
+            
+     
+            // @Cleanup
+            float values[ARRLEN(Market::price_history_for_watched_article)];
+            for(int i = 0; i < market->price_history_length_for_watched_article; i++) {
+                values[i] = (float)market->price_history_for_watched_article[i];
+            }
+            int num_values = market->price_history_length_for_watched_article;
+            
+            // @Cleanup
+            float min = FLT_MAX;
+            float max = 1;
+            for(int i = 0; i < market->price_history_length_for_watched_article; i++)
+            {
+                float price = (float)market->price_history_for_watched_article[i];
+                Assert(price >= 0);
+
+                if(price < min) min = price;
+                if(price > max) max = price;
+            }
+
+            if(min > max) {
+                Assert(market->price_history_length_for_watched_article == 0);
+                min = 0;
+            }
+            else if (floats_equal(min, max)) {
+                // Put the line in the middle.
+                min  = max * 0.5f;
+                max += min;
+            }
+
+            graph(P(ctx), values, num_values, min, max);
+        }
+
+        
+        
     }
-
-    return false;
+    // --
+    
 }
+
 
 String entity_action_label(Entity_Action action)
 {
@@ -249,7 +464,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                     act.entity = e->id;
                     act.action = entity_action;
 
-                    array_add(client->server_connections.room_action_queue, action);
+                    array_add(client->connections.room_action_queue, action);
                 }
             }
         }
@@ -267,6 +482,11 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                 v3s vol = type->volume;
                 String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
                 ui_text(P(ctx), volume_str);
+            }
+            
+            { _TOP_CUT_(20);
+                String owner_str = concat_tmp("Owner: ", item->owner, ctx.manager->string_builder);
+                ui_text(P(ctx), owner_str);
             }
 
 #if DEBUG
@@ -303,8 +523,8 @@ void room_window(UI_Context ctx, Client *client)
     
     const int num_rooms = 14;
 
-    Room_ID requested_room = (client->server_connections.room_connect_requested) ? client->server_connections.requested_room : -1;
-    Room_ID current_room   = client->server_connections.room.current_room;
+    Room_ID requested_room = (client->connections.room_connect_requested) ? client->connections.requested_room : -1;
+    Room_ID current_room   = client->connections.room.current_room;
 
     { _WINDOW_(P(ctx), STRING("ROOM"));
         { _TOP_CUT_(room_button_h*2 + window_default_padding);
@@ -340,15 +560,13 @@ void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
             bool enabled = true;
             bool text_did_change;
 
-            String text = { draft->e, draft->n };
-            text = textfield_tmp(text, input, P(ctx), &text_did_change, enabled);
-            array_set(*draft, text.data, text.length);
+            textfield(P(ctx), draft, input, enabled);
         }
         cut_left(4, ctx.layout);
 
         { _LEFT_SQUARE_CUT_();
 
-            bool enabled = (!action_of_type_queued(C_RS_ACT_CHAT, client) &&
+            bool enabled = (!action_of_type_in_queue(C_RS_ACT_CHAT, client) &&
                             draft->n > 0);
             
             if(button(P(ctx), STRING("SAY"), enabled) & CLICKED_ENABLED)
@@ -357,7 +575,7 @@ void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
                 action.type = C_RS_ACT_CHAT;
                 auto &chat = action.chat;
 
-                array_add(client->server_connections.room_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+                array_add(client->connections.room_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
             }
         }
     }
@@ -373,7 +591,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     Rect a = area(ctx.layout);
 
-    auto *room = &client->game.room;
+    auto *room = &client->room;
     auto world_t = world_time_for_room(room, t);
 
     Entity *player_entity = NULL;
@@ -451,7 +669,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     // MARKET WINDOW//
     if(cui->market_window_open)
     { _CENTER_(640, 480);
-        market_window(P(ctx), input, &cui->market, client);
+        market_window(P(ctx), t, input, &cui->market, client);
     }
 
     
@@ -615,7 +833,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     if(wv->clicked_tile_ix >= 0)
     {
         auto *user = &client->user;
-        auto *room = &client->game.room;
+        auto *room = &client->room;
         double world_t = world_time_for_room(room, t);
         Item *selected_item = get_selected_inventory_item(&client->user);
         
@@ -639,7 +857,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                 }
 
                 // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
-                array_add(client->server_connections.room_action_queue, action);
+                array_add(client->connections.room_action_queue, action);
 
                 if(selected_item) {
                     Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(wv->clicked_tile_ix), world_t);
@@ -671,7 +889,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
        wv->clicked_entity != NO_ENTITY)
     {
         // SELECT ENTITY //
-        client->game.room.selected_entity = wv->clicked_entity;
+        client->room.selected_entity = wv->clicked_entity;
     }
 }
 
@@ -779,19 +997,29 @@ void client_set_window_delegate(Window *window, Client *client)
     window->delegate = delegate;
 }
 
-// NOTE: *_game should already have been zeroed.
-void init_game(Game *_game)
-{
-
-}
-
 void update_client(Client *client, Input_Manager *input)
 {
+    User *user = current_user(client);
+    
     // ESCAPE KEY //
     if(in_array(input->keys_down, VKEY_ESCAPE)) {
         
         if(client->user.selected_inventory_item_plus_one > 0) {
             inventory_deselect(&client->user);
+        }
+    }
+
+    // MAKE SURE WE'RE CONNECTED TO MARKET //
+    // Maybe we only should try to connect to the market server
+    // if the window is open, but for now keep it clean and just
+    // be connected always. @Norelease
+    if(user) {
+        bool connected  = client->connections.market.connected;
+        bool connecting = client->connections.market_connect_requested;
+        
+        if(!connected && !connecting) {
+            // @Norelease: reconnect timeout!
+            request_connection_to_market(client);
         }
     }
 }
@@ -823,6 +1051,8 @@ int client_entry_point(int num_args, char **arguments)
     // INIT CLIENT //
     Client client = {0};
     create_mutex(client.mutex);
+    clear_and_reset(&client.market);
+    // /////////// //
     
     Layout_Manager *layout = &client.layout;
     UI_Manager     *ui = &client.ui;
@@ -842,10 +1072,6 @@ int client_entry_point(int num_args, char **arguments)
     platform_create_window(main_window, "Citrus", window_rect.w, window_rect.h, window_rect.x, window_rect.y);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
-    //--
-
-    // INIT GAME //
-    init_game(&client.game);
     //--
 
     // INIT CLIENT UI //
@@ -881,6 +1107,51 @@ int client_entry_point(int num_args, char **arguments)
 #if DEBUG || true // Debug stuff for keeping track of things like FPS and UPS.
     u64 last_second = 0;
 #endif
+
+
+
+#if DEVELOPER
+    // AUTO-CONNECT TO STARTUP USER/ROOM? //
+    auto startup_user = tweak_uint(TWEAK_STARTUP_USER);
+    if(startup_user > 0) {
+        
+        lock_mutex(client.mutex);
+        {
+            request_connection_to_user(startup_user, &client);
+        }
+        unlock_mutex(client.mutex);
+        
+        auto startup_room = tweak_uint(TWEAK_STARTUP_ROOM);
+        if(startup_room > 0) {
+
+            bool user_connect_successful;
+            
+            // Wait for connection to user
+            while(true) {
+
+                platform_sleep_milliseconds(1);
+                //--
+                
+                lock_mutex(client.mutex);
+                defer(unlock_mutex(client.mutex););
+                    
+                auto *cons = &client.connections;
+                if(!cons->user_connect_requested) {
+                    user_connect_successful = cons->user.connected;
+                    break;
+                }
+            }
+
+            if(user_connect_successful) 
+                request_connection_to_room(startup_room, &client);
+            else
+                Debug_Print("Not trying to connect to startup room, because connecting to startup user failed.\n");
+        }
+        
+    }
+    //--
+#endif
+    
    
     while(true)
     {
@@ -920,7 +1191,7 @@ int client_entry_point(int num_args, char **arguments)
 
 #if DEBUG
                 if(new_color_tiles_by_position != old_color_tiles_by_position) {
-                    client.game.room.static_geometry_up_to_date = false;
+                    client.room.static_geometry_up_to_date = false;
                 }
 #endif
             }
@@ -954,7 +1225,7 @@ int client_entry_point(int num_args, char **arguments)
 
             }
             double t = platform_get_time(); // @Robustness: This is safe to do, right?
-            end_ui_build(ui, &client.input, client.fonts, t, &client.game.room, &cursor);
+            end_ui_build(ui, &client.input, client.fonts, t, &client.room, &cursor);
             // //////// //
 
             reset_temporary_memory();

@@ -21,6 +21,22 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
     add_vertices(p, uv, c, tex, n, buffer);
 }
 
+template<u32 NUM_VERTICES>
+void draw_polygon(v3 *p, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+{        
+    v4 colors[NUM_VERTICES];
+    for(int i = 0; i < ARRLEN(colors); i++) colors[i] = color;
+
+    v2 default_uvs[NUM_VERTICES] = {0};
+    if(!uvs) uvs = default_uvs;
+
+    float textures[NUM_VERTICES];
+    float t = bound_slot_for_texture(texture, gfx);
+    for(int i = 0; i < ARRLEN(colors); i++) textures[i] = t;
+
+    triangles(p, uvs, colors, textures, NUM_VERTICES, gfx);
+}
+
 
 //NOTE: _uvs should be (at least) 6*2 floats long (12 floats or 6 v2:s)
 

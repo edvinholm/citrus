@@ -153,8 +153,8 @@ float euler_angle(Vector_Component axis, Quat q)
 inline
 float normalized_angle(double angle)
 {
-    int revolutions = angle / (double)PIx2;
-    angle -= revolutions * (double)PIx2;
+    int revolutions = angle / (double)TAU;
+    angle -= revolutions * (double)TAU;
     return angle;
 }
 

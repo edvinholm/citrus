@@ -5,8 +5,7 @@
 
 enum MS_Client_Type
 {
-    MS_CLIENT_PLAYER = 1,
-    MS_CLIENT_US = 2
+    MS_CLIENT_PLAYER = 1
 };
 
 

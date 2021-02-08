@@ -22,9 +22,32 @@ enum UCB_Packet_Type
 
 struct UCB_Transaction_Commit_Vote_Payload
 {
-    union {
-        Item item;
+    u8 num_operations; // NOTE: This is just so that we know how to read the header. Client should know what operations it requested.
+    US_Transaction_Operation_Type operation_types[MAX_US_TRANSACTION_OPERATIONS]; // NOTE: This is just so that we know how to read the header. Client should know what operations it requested.
+
+    struct Payload {
+        union {
+            struct {
+                Item item;  
+            } item_transfer;
+    
+            struct {
+                Item item;
+            } item_reserve;
+    
+            struct {
+            } item_unreserve;
+    
+            struct {
+                u32 slot_ix;  
+            } slot_reserve;
+    
+            struct {
+            } slot_unreserve;
+        };
     };
+
+    Payload operation_payloads[MAX_US_TRANSACTION_OPERATIONS];
 };
 
 struct UCB_Packet_Header
@@ -40,18 +63,21 @@ struct UCB_Packet_Header
             User_ID id;
             String username;
             v4 color;
+            
             Money money;
+            Money reserved_money;
         } user_init;
 
         struct {
             User_ID id;
             String username;
             v4 color;
+            
             Money money;
+            Money reserved_money;
         } user_update;
 
         struct {
-            US_Transaction_Type transaction_type;
             Transaction_Message message;
 
             union {
@@ -97,6 +123,108 @@ bool write_User_Connect_Status(User_Connect_Status status, Network_Node *node)
     return true;
 }
 
+
+bool read_UCB_Transaction_Commit_Vote_Payload(UCB_Transaction_Commit_Vote_Payload *_payload, Network_Node *node)
+{
+    Read_To_Ptr(u8, &_payload->num_operations, node);
+    Fail_If_True(_payload->num_operations <= 0);
+    Fail_If_True(_payload->num_operations > MAX_US_TRANSACTION_OPERATIONS);
+
+    Assert(_payload->num_operations <= ARRLEN(_payload->operation_types));
+    for(int i = 0; i < _payload->num_operations; i++) {
+        Read_To_Ptr(US_Transaction_Operation_Type, &_payload->operation_types[i], node);
+    }
+
+    for(int i = 0; i < _payload->num_operations; i++) {
+        auto *p = &_payload->operation_payloads[i];
+        
+        switch(_payload->operation_types[i]) // @Jai: #complete
+        {
+            case US_T_ITEM_TRANSFER: {
+                auto *x = &p->item_transfer;
+                Read_To_Ptr(Item, &x->item, node);
+            } break;
+
+                
+            case US_T_ITEM_RESERVE: {
+                auto *x = &p->item_reserve;
+                Read_To_Ptr(Item, &x->item, node);
+            } break;
+                
+            case US_T_ITEM_UNRESERVE: {
+                auto *x = &p->item_unreserve;
+                
+                // nothing here yet.
+            } break;
+
+                
+            case US_T_SLOT_RESERVE: {
+                auto *x = &p->slot_reserve;
+                Read_To_Ptr(u32, &x->slot_ix, node);
+            } break;
+                
+            case US_T_SLOT_UNRESERVE: {
+                auto *x = &p->slot_unreserve;
+                
+                // nothing here yet.
+            } break;
+        }
+    }
+
+    return true;
+}
+
+bool write_UCB_Transaction_Commit_Vote_Payload(UCB_Transaction_Commit_Vote_Payload *payload, Network_Node *node)
+{
+    Assert(payload->num_operations <= ARRLEN(payload->operation_types));
+    
+    Fail_If_True(payload->num_operations <= 0);
+    Fail_If_True(payload->num_operations > MAX_US_TRANSACTION_OPERATIONS);
+    Write(u8, payload->num_operations, node);
+
+    for(int i = 0; i < payload->num_operations; i++) {
+        Write(US_Transaction_Operation_Type, payload->operation_types[i], node);
+    }
+
+    for(int i = 0; i < payload->num_operations; i++) {
+        auto *p = &payload->operation_payloads[i];
+        
+        switch(payload->operation_types[i]) // @Jai: #complete
+        {
+            case US_T_ITEM_TRANSFER: {
+                auto *x = &p->item_transfer;
+                Write(Item, x->item, node);
+            } break;
+
+                
+            case US_T_ITEM_RESERVE: {
+                auto *x = &p->item_reserve;
+                Write(Item, x->item, node);
+            } break;
+                
+            case US_T_ITEM_UNRESERVE: {
+                auto *x = &p->item_unreserve;
+                
+                // nothing here yet.
+            } break;
+
+                
+            case US_T_SLOT_RESERVE: {
+                auto *x = &p->slot_reserve;
+                Write(u32, x->slot_ix, node);
+            } break;
+                
+            case US_T_SLOT_UNRESERVE: {
+                auto *x = &p->slot_unreserve;
+                
+                // nothing here yet.
+            } break;
+        }
+    }
+
+    return true;
+}
+
 bool enqueue_UCB_HELLO_packet(Network_Node *node, User_Connect_Status connect_status)
 {
     begin_outbound_packet(node);
@@ -135,7 +263,7 @@ bool send_UCB_GOODBYE_packet_now(Network_Node *node)
 }
 
 
-bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Item *inventory)
+bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Money reserved_money, Inventory_Slot *inventory)
 {
     begin_outbound_packet(node);
     {
@@ -145,16 +273,19 @@ bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String usernam
         Write(User_ID, id,       node);
         Write(String,  username, node);
         Write(v4,      color,    node);
+        
         Write(Money,   money,    node);
+        Write(Money,   reserved_money, node);
+        
         for(int i = 0; i < ARRLEN(S__User::inventory); i++) {
-            Write(Item, inventory[i], node);
+            Write(Inventory_Slot, inventory + i, node);
         }
     }
     end_outbound_packet(node);
     return true;
 }
 
-bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Item *inventory)
+bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Money reserved_money, Inventory_Slot *inventory)
 {
     begin_outbound_packet(node);
     {
@@ -164,9 +295,12 @@ bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String usern
         Write(User_ID, id,       node);
         Write(String,  username, node);
         Write(v4,      color,    node);
+        
         Write(Money,   money,    node);
+        Write(Money,   reserved_money, node);
+        
         for(int i = 0; i < ARRLEN(S__User::inventory); i++) {
-            Write(Item, inventory[i], node);
+            Write(Inventory_Slot, inventory + i, node);
         }
     }
     end_outbound_packet(node);
@@ -174,7 +308,6 @@ bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String usern
 }
 
 bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node,
-                                            US_Transaction_Type transaction_type,
                                             Transaction_Message message,
                                             UCB_Transaction_Commit_Vote_Payload *commit_vote_payload = NULL)
 {
@@ -183,18 +316,12 @@ bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node,
         Write(UCB_Packet_Type, UCB_TRANSACTION_MESSAGE, node);
         //--
 
-        Write(US_Transaction_Type, transaction_type, node);
         Write(Transaction_Message, message, node);
 
         if(message == TRANSACTION_VOTE_COMMIT)
         {
             Assert(commit_vote_payload);
-            switch(transaction_type)
-            {
-                case US_T_ITEM: {
-                    Write(Item, commit_vote_payload->item, node);
-                } break;
-            }
+            Write(UCB_Transaction_Commit_Vote_Payload, commit_vote_payload, node);
         }
     }
     end_outbound_packet(node);
@@ -225,7 +352,9 @@ bool read_UCB_Packet_Header(UCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(User_ID, &p->id,       node);
             Read_To_Ptr(String,  &p->username, node);
             Read_To_Ptr(v4,      &p->color,    node);
+            
             Read_To_Ptr(Money,   &p->money,    node);
+            Read_To_Ptr(Money,   &p->reserved_money, node);
         } break;
 
         case UCB_USER_UPDATE: {
@@ -233,22 +362,18 @@ bool read_UCB_Packet_Header(UCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(User_ID, &p->id,       node);
             Read_To_Ptr(String,  &p->username, node);
             Read_To_Ptr(v4,      &p->color,    node);
+            
             Read_To_Ptr(Money,   &p->money,    node);
+            Read_To_Ptr(Money,   &p->reserved_money, node);
         } break;
             
         case UCB_TRANSACTION_MESSAGE: {
             auto *p = &_header->transaction_message;
-            Read_To_Ptr(US_Transaction_Type, &p->transaction_type, node);
             Read_To_Ptr(Transaction_Message, &p->message, node);
 
             if(p->message == TRANSACTION_VOTE_COMMIT)
             {
-                switch(p->transaction_type)
-                {
-                    case US_T_ITEM: {
-                        Read_To_Ptr(Item, &p->commit_vote_payload.item, node);
-                    } break;
-                }
+                Read_To_Ptr(UCB_Transaction_Commit_Vote_Payload, &p->commit_vote_payload, node);
             }
         } break;
 

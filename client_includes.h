@@ -65,6 +65,7 @@
 #include "network.cpp"
 #include "room_client.cpp"
 #include "user_client.cpp"
+#include "market_client.cpp"
 
 #include "net_client.h"
 
@@ -76,6 +77,7 @@
 using namespace Client_Game;
 
 using namespace Client_User;
+
 
 #include "client.h"
 
@@ -100,4 +102,4 @@ using namespace Client_User;
 #include "body_text.cpp"
 
 #include "world_draw.cpp"
-#include "draw_client.cpp"
+#include "client_draw.cpp"

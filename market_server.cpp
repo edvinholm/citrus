@@ -28,6 +28,8 @@ void enqueue_client(MS_Client *client, MS_Client_Queue *queue)
 {
     lock_mutex(queue->mutex);
     {
+        client->id = queue->next_client_id++;
+        
         Assert(queue->num_clients <= ARRLEN(queue->clients));
                 
         // If the queue is full, wait..
@@ -113,6 +115,7 @@ DWORD market_server_listening_loop(void *market_server_)
         
         // ADD CLIENT TO QUEUE //
         MS_Client client = {0};
+        // NOTE: ID is set in enqueue_client  -EH, 2021-02-08.
         client.type     = hello->client_type;
         client.user_id  = hello->user;
         client.server   = server;
@@ -136,6 +139,26 @@ bool start_market_server_listening_loop(Market_Server *server, Thread *_thread)
 }
 
 
+void set_watched_article(MS_Client *client, Item_Type_ID article)
+{
+    auto *server = client->server;
+    
+    // Remove from current article.
+    if(client->watched_article != ITEM_NONE_OR_NUM) {
+        auto *article = &server->articles[client->watched_article];
+        ensure_not_in_array(article->watchers, client->id);
+    }
+
+    // Set
+    client->watched_article = article;
+    
+    // Add to new article.
+    if(client->watched_article != ITEM_NONE_OR_NUM) {
+        auto *article = &server->articles[client->watched_article];
+        ensure_in_array(article->watchers, client->id);
+    }
+}
+
 void disconnect_market_client(MS_Client *client)
 {
     auto client_copy = *client;
@@ -148,8 +171,12 @@ void disconnect_market_client(MS_Client *client)
     if(!platform_close_socket(&client->node.socket)) {
         MS_Log("Failed to close market client socket.\n");
     }
-
+    
     auto *server = client->server;
+
+    set_watched_article(client, ITEM_NONE_OR_NUM);
+
+    // Remove client
     auto client_index = client - server->clients.e;
     array_ordered_remove(server->clients, client_index);
 
@@ -217,6 +244,9 @@ void add_new_market_clients(Market_Server *server)
                 clear(client);
                 continue;
             }
+
+            
+            client->watched_article = ITEM_NONE_OR_NUM;
                  
             client = array_add(server->clients, *client);
             MS_Log("Added client (socket = %lld) to market server.\n", client->node.socket.handle);
@@ -235,18 +265,375 @@ void add_new_market_clients(Market_Server *server)
     unlock_mutex(queue->mutex);
 }
 
+MS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id, Market_Server *server)
+{
+    const Allocator_ID allocator = ALLOC_NETWORK;
+
+    for(int i = 0; i < server->user_server_connections.n; i++)
+    {
+        auto *connection = &server->user_server_connections[i];
+        if(connection->user_id == user_id) return connection;
+    }
+
+    Network_Node node = { 0 };
+    if(!connect_to_user_server(user_id, &node, US_CLIENT_MS, server->server_id)) return NULL;
+
+    MS_User_Server_Connection new_connection = {0};
+    new_connection.user_id = user_id;
+    new_connection.node = node;
+    return array_add(server->user_server_connections, new_connection);
+}
+
+// TODO @Norelease: Make this real.
+// TODO: @Norelease: When we fail here (due to com errors), we just return false. We should not. We should retry until we succeed.
+//                   After a number of failed retries, send a report about that.
+//                   If the market server can't talk to the user server, there is no idea
+//                   that it keeps running anyway.. (????)
+bool ms_us_transaction_prepare(User_ID user, US_Transaction transaction, Market_Server *server, UCB_Transaction_Commit_Vote_Payload *_commit_vote_payload)
+{
+    // @Norelease: If we fail, disconnect from user server and try to reconnect.
+    //             Keep trying until we can connect.
+    //             We should not keep trying to connect to the same actual server,
+    //             but do the user-id to server lookup every time.
+
+    MS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user, server);
+    if(us_con == NULL) return false;
+
+    UCB_Packet_Header response_header;
+    Fail_If_True(!user_server_transaction_prepare(transaction, &us_con->node, &response_header));
+
+    Assert(response_header.type == UCB_TRANSACTION_MESSAGE);
+    
+    auto *t_message = &response_header.transaction_message;
+    if(t_message->message == TRANSACTION_VOTE_COMMIT)
+    {
+        auto *cvp = &response_header.transaction_message.commit_vote_payload;
+        
+        Fail_If_True(cvp->num_operations != transaction.num_operations);
+        *_commit_vote_payload = *cvp;
+        
+        return true;
+    }
+
+    Assert(response_header.transaction_message.message == TRANSACTION_VOTE_ABORT);
+    
+    return false;
+}
+
+
+// TODO @Norelease: Make this real.
+// NOTE: Return value is true if there were no com errors.
+// TODO: @Norelease: When we fail here, we just return false. We should not. We should retry until we succeed.
+//                   After a number of failed retries, send a report about that.
+//                   If the market server can't talk to the user server, there is no idea
+//                   that it keeps running anyway.. (????)
+bool ms_us_transaction_send_decision(bool commit, User_ID user_id, Market_Server *server)
+{
+    //@Norelease: If we fail, disconnect from user server and try to reconnect.
+    //           Keep trying until we can connect.
+    //           We should not keep trying to connect to the same actual server,
+    //           but do the user-id to server lookup every time.
+    
+    MS_User_Server_Connection *us_con = find_or_add_connection_to_user_server(user_id, server);
+    if(us_con == NULL) {
+        MS_Log("Unable to connect to User Server for User ID = %llu.\n", user_id);
+        return false;
+    }
+
+    Fail_If_True(!user_server_transaction_send_decision(commit, &us_con->node));
+                 
+    return true;
+}
+
+
+bool reserve_slot_and_money_for_buy(User_ID user, Money money, Market_Server *server, u32 *_slot_ix)
+{
+    Assert(user != NO_USER);
+
+    
+    US_Transaction transaction = {0};
+
+    // slot reserve
+    {
+        US_Transaction_Operation op = {0};
+        op.type = US_T_SLOT_RESERVE;
+        
+        transaction.operations[transaction.num_operations++] = op;
+    }
+
+    if(money > 0) {
+        // money reserve
+        {
+            US_Transaction_Operation op = {0};
+            op.type = US_T_MONEY_RESERVE;
+            op.money_reserve.amount = money;
+            
+            transaction.operations[transaction.num_operations++] = op;
+        }
+    }
+    
+    bool can_commit = false;
+
+    UCB_Transaction_Commit_Vote_Payload cvp;
+    if(ms_us_transaction_prepare(user, transaction, server, &cvp)) {
+        MS_Log("Slot reservation success.\n");
+        *_slot_ix = cvp.operation_payloads[0].slot_reserve.slot_ix;
+        can_commit = true;
+    } else {
+        MS_Log("Slot reservation failure.\n");
+        can_commit = false;
+    }
+
+    // SEND DECISION //
+    if(ms_us_transaction_send_decision(can_commit, user, server)) {
+        MS_Log("Slot reservation decision send success.\n");
+    } else {
+        MS_Log("Slot reservation decision send failure. (Should not happen. (?))\n"); // @Norelease
+        can_commit = false;
+    }
+    // //// //////// //
+
+    return can_commit;
+}
+
+bool reserve_item_for_sale(User_ID user, Item_ID item_id, Market_Server *server, Item *_item)
+{
+    Assert(user != NO_USER);
+    
+    US_Transaction_Operation operation = {0};
+    operation.type = US_T_ITEM_RESERVE;
+    operation.item_reserve.item_id = item_id;
+    
+    US_Transaction transaction = {0};
+    transaction.num_operations = 1;
+    transaction.operations[0] = operation;
+
+    
+    bool can_commit = false;
+
+    UCB_Transaction_Commit_Vote_Payload cvp;
+    if(ms_us_transaction_prepare(user, transaction, server, &cvp)) {
+        MS_Log("Item reservation preparation success.\n");
+        *_item = cvp.operation_payloads[0].item_reserve.item;
+        can_commit = true;
+    } else {
+        MS_Log("Item reservation preparation failure. (Should not happen. (?))\n"); // @Norelease
+        can_commit = false;
+    }
+
+    // SEND DECISION //
+    if(ms_us_transaction_send_decision(can_commit, user, server)) {
+        MS_Log("Item reservation decision send success.\n");
+    } else {
+        MS_Log("Item reservation decision send failure.\n");
+        can_commit = false;
+    }
+    // //// //////// //
+
+    return can_commit;
+}
+
+bool exchange_item_and_money(User_ID item_receiver, User_ID money_receiver, Item_ID item_id, Money money, u32 item_receiver_slot_ix, Money item_receiver_reserved_money, Market_Server *server)
+{
+    bool can_commit = true;
+
+    // MONEY RECEIVER TRANSACTION //
+    US_Transaction mr_transaction = {0};
+
+    // item transfer
+    {
+        US_Transaction_Operation op = {0};
+        op.type = US_T_ITEM_TRANSFER;
+        op.item_transfer.is_server_bound = false;
+        op.item_transfer.client_bound.item_id = item_id;
+
+        mr_transaction.operations[mr_transaction.num_operations++] = op;
+    }
+
+    // money transfer
+    {
+        US_Transaction_Operation op = {0};
+        op.type = US_T_MONEY_TRANSFER;
+        op.money_unreserve.amount = +money;
+            
+        mr_transaction.operations[mr_transaction.num_operations++] = op;
+    }
+    // /////////////////////////// //
+    
+    UCB_Transaction_Commit_Vote_Payload mr_cvp;
+    if(can_commit && !ms_us_transaction_prepare(money_receiver, mr_transaction, server, &mr_cvp)) {
+        MS_Log("Item <-> Money exchange failed due to transaction prepare failure for MR transaction. (Should not happen, because should have reserved everything)\n"); // @Norelease: IF this happens, @ReportError, unreserve stuff and remove orders.
+        can_commit = false;
+    }
+
+    Item item = mr_cvp.operation_payloads[0].item_transfer.item;
+
+    if(can_commit) {
+        // ITEM RECEIVER TRANSACTION //
+        US_Transaction ir_transaction = {0};
+
+        // slot unreserve
+        {
+            US_Transaction_Operation op = {0};
+            op.type = US_T_SLOT_UNRESERVE;
+            op.slot_unreserve.slot_ix = item_receiver_slot_ix;
+            
+            ir_transaction.operations[ir_transaction.num_operations++] = op;
+        }
+
+        Assert(item_receiver_reserved_money >= money);
+        if(item_receiver_reserved_money - money > 0) {
+            // money unreserve
+            {
+                US_Transaction_Operation op = {0};
+                op.type = US_T_MONEY_UNRESERVE;
+                op.money_unreserve.amount = item_receiver_reserved_money - money; // The rest of the reserved money will be unreserved by the MONEY_TRANSFER operation.
+            
+                ir_transaction.operations[ir_transaction.num_operations++] = op;
+            }
+        }
+
+        // item transfer
+        {
+            US_Transaction_Operation op = {0};
+            op.type = US_T_ITEM_TRANSFER;
+            op.item_transfer.is_server_bound = true;
+            op.item_transfer.server_bound.item = item;
+            op.item_transfer.server_bound.slot_ix_plus_one = item_receiver_slot_ix + 1;
+
+            ir_transaction.operations[ir_transaction.num_operations++] = op;
+        }
+
+        // money transfer
+        {
+            US_Transaction_Operation op = {0};
+            op.type = US_T_MONEY_TRANSFER;
+            op.money_transfer.amount       = -money;
+            op.money_transfer.do_unreserve = (op.money_transfer.amount < 0); // Cannot unreserve 0.
+            
+            ir_transaction.operations[ir_transaction.num_operations++] = op;
+        }
+        // /////////////////////////// //
+
+        UCB_Transaction_Commit_Vote_Payload ir_cvp;
+        if(can_commit && !ms_us_transaction_prepare(item_receiver, ir_transaction, server, &ir_cvp)) {
+            MS_Log("Item <-> Money exchange failed due to transaction prepare failure for IR transaction. (Should not happen, because should have reserved everything)\n"); // @Norelease: IF this happens, @ReportError, unreserve stuff and remove orders.
+            can_commit = false;
+        }
+
+        if(!ms_us_transaction_send_decision(can_commit, item_receiver, server)) {
+            MS_Log("Item <-> Money: Failed to send transaction decision to IR. (This should not happen)\n");
+            can_commit = false;
+        }
+    }
+    
+    if(!ms_us_transaction_send_decision(can_commit, money_receiver, server)) {
+        MS_Log("Item <-> Money: Failed to send transaction decision to MR. (This should not happen)\n");
+        can_commit = false;
+    }
+    // --
+
+    return can_commit;
+}
+
+bool send_market_update_to_watcher(MS_Client *client, Item_Type_ID article_id, Market_Article *article)
+{
+    u16 price_history_length = 0;
+    Money *price_history = NULL;
+    if(article != NULL)
+    {
+        Assert(article_id != ITEM_NONE_OR_NUM);
+        price_history_length = article->price_history_length;
+        price_history        = article->price_history;
+    }
+
+    MS_Log("Set watched article for client %lld to %d\n", client->id, client->watched_article);
+
+    Assert(price_history != NULL || price_history_length == 0);
+            
+    MCB_Packet(MARKET_UPDATE, client, client->watched_article, price_history, price_history_length);
+
+    return true;
+}
+
 
 bool read_and_handle_msb_packet(MS_Client *client, MSB_Packet_Header header)
 {
     auto *node = &client->node;
+
+    Fail_If_True(client->user_id == NO_USER); // IMPORTANT: Put this in each packet type that needs a user, if you want to remove it from here.
     
     switch(header.type) {
         case MSB_PLACE_ORDER: {
-            auto &p = header.place_order;
+            auto *p = &header.place_order;
 
-            const char *sell_or_buy = (p.is_buy_order) ? "buy" : "sell";
-            String item_type_name = item_types[p.item_type].name;
-            MS_Log("User %lld wants to %s a %.*s for ¤%lld.\n", client->user_id, sell_or_buy, (int)item_type_name.length, item_type_name.data, p.price);
+            // @Norelease: Check that it is a legal order.
+            
+            Market_Order order = {0};
+            order.is_buy_order = p->is_buy_order;
+            order.price        = p->price;
+            order.user         = client->user_id;
+
+            auto *server = client->server;
+
+            if(order.is_buy_order) {
+                auto *x = &p->buy;
+
+                Assert(x->item_type >= 0 && x->item_type < ARRLEN(server->articles));
+                auto *article = &server->articles[x->item_type];
+                
+                String item_type_name = item_types[x->item_type].name;
+                MS_Log("User %lld wants to buy a %.*s for ¤%lld.\n", client->user_id, (int)item_type_name.length, item_type_name.data, p->price);
+
+                u32 slot_ix;
+                if(reserve_slot_and_money_for_buy(order.user, order.price, server, &slot_ix))
+                {
+                    order.buy.reserved_slot_ix = slot_ix;
+                    array_add(article->orders, order);
+                } else {
+                    MS_Log("Failed to reserve slot and money.\n");
+                }
+                
+            } else {
+                auto *x = &p->sell;
+
+                MS_Log("User %lld wants to sell item %lld:%lld for ¤%lld.\n", client->user_id, x->item_id.origin, x->item_id.number, p->price);
+
+                Item item;
+                if(reserve_item_for_sale(order.user, x->item_id, server, &item)) {
+                    MS_Log("Successfully reserved the item.\n");
+
+                    Assert(item.type >= 0 && item.type < ARRLEN(server->articles));
+                    auto *article = &server->articles[item.type];
+                    
+                    order.sell.item = item;
+                    array_add(article->orders, order);
+                    
+                    MS_Log("Order added to article %d.\n", item.type);
+                    
+                } else {
+                    MS_Log("Failed to reserve the item.\n");
+                }
+            }
+           
+        } break;
+
+        case MSB_SET_WATCHED_ARTICLE: {
+            auto *p = &header.set_watched_article;
+
+            auto *server = client->server;
+            
+            // @Norelease: Check that article exists.
+            set_watched_article(client, p->article);
+
+            Market_Article *article = NULL;
+            if(client->watched_article != ITEM_NONE_OR_NUM)
+            {
+                Assert(client->watched_article >= 0 && client->watched_article < ARRLEN(server->articles));
+                article = &server->articles[client->watched_article];
+            }
+
+            Fail_If_True(!send_market_update_to_watcher(client, client->watched_article, article));
             
         } break;
 
@@ -257,6 +644,109 @@ bool read_and_handle_msb_packet(MS_Client *client, MSB_Packet_Header header)
     }
 
     return true;
+}
+
+void add_article_price_to_history(Money price, Market_Article *article)
+{
+    Assert(article->price_history_length <= ARRLEN(article->price_history));
+    
+    if(article->price_history_length >= ARRLEN(article->price_history))
+    {
+        // Remove oldest if array full.
+        for(int i = 0; i < ARRLEN(article->price_history)-1; i++) {
+            article->price_history[i] = article->price_history[i+1];
+        }
+        article->price_history_length = ARRLEN(article->price_history)-1;
+    }
+
+    article->price_history[article->price_history_length++] = price;
+}
+
+void update_article(Market_Article *article, Market_Server *server)
+{
+    for(int i = 0; i < article->orders.n; i++)
+    {
+        auto *a = &article->orders[i];
+        Assert(a->price >= 0);
+        
+        Money a_money_delta = a->price;
+        if(a->is_buy_order) a_money_delta *= -1;
+
+        Money smallest_combined_money_delta = 1; // Money deltas > 0 means no deal, so setting this to 1 works.
+        int b_index = -1;
+        
+        for(int j = i+1; j < article->orders.n; j++) {
+            auto *order = &article->orders[j];
+
+            if(a->is_buy_order == order->is_buy_order) continue;
+            if(a->user == order->user) continue;
+
+            Assert(order->price >= 0);
+            Money money_delta = order->price;
+            if(order->is_buy_order) money_delta *= -1;
+
+            Money combined_money_delta = a_money_delta + money_delta;
+
+            if(combined_money_delta <= 0)
+            {
+                // It's a match!
+
+                if(combined_money_delta < smallest_combined_money_delta) {
+                    // It's the best match yet!
+                    smallest_combined_money_delta = combined_money_delta;
+                    b_index = j;
+                }
+            }
+        }
+
+        if(b_index >= 0) {
+            Assert(b_index > i);
+            Assert(b_index < article->orders.n);
+
+            auto *b = &article->orders[b_index];
+
+            Assert(a->is_buy_order != b->is_buy_order);
+            Assert(a->user != b->user);
+            
+            Assert(a->user != NO_USER);
+            Assert(b->user != NO_USER);
+
+            auto *buy_order  = (a->is_buy_order) ? a : b;
+            auto *sell_order = (a->is_buy_order) ? b : a;
+
+            Money price = min(a->price, b->price);
+            
+            if(exchange_item_and_money(buy_order->user, sell_order->user, sell_order->sell.item.id, price,
+                                       buy_order->buy.reserved_slot_ix, buy_order->price, server))
+            {
+                MS_Log("Item <-> Money exchange successful. Removing orders and updating article info...\n");
+
+                add_article_price_to_history(price, article);
+                
+                // Remove b.
+                array_ordered_remove(article->orders, b_index);
+                // REMEMBER: b_index is invalid now!!
+
+                // Remove a.
+                array_ordered_remove(article->orders, i);
+                i--;
+
+                article->did_change = true;
+            }
+        }
+    }
+}
+
+MS_Client *find_market_client(MS_Client_ID id, Market_Server *server)
+{
+    for(int i = 0; i < server->clients.n; i++) {
+        auto *client = &server->clients[i];
+        if(client->id != id) continue;
+
+        return client;
+    }
+
+    return NULL;
 }
 
 // REMEMBER to init_market_server before starting this.
@@ -342,16 +832,38 @@ DWORD market_server_main_loop(void *server_) {
                     
             }
         }
-        
-        // SEND UPDATES TO PLAYER CLIENTS //
-        for(int c = 0; c < server->clients.n; c++) {
-            auto *client = &server->clients[c];
-            if(client->type != MS_CLIENT_PLAYER) continue;
 
-            if(false /* @Norelease */) {
-                MCB_Packet(MARKET_UPDATE, client);
+
+        // UPDATE (MATCH ORDERS) //
+        for(int i = 0; i < ARRLEN(server->articles); i++)
+        {
+            Item_Type_ID article_id = (Item_Type_ID)i; 
+            
+            auto *article = &server->articles[article_id];
+            update_article(article, server);
+
+            if(!article->did_change) continue;
+
+            // @Norelease: We should write the packet we want to send to a buffer,
+            //             and then send the same thing to all the watchers.
+            
+            // SEND UPDATES TO WATCHERS // 
+            for(int j = 0; j < article->watchers.n; j++)
+            {
+                auto client_id = article->watchers[j];
+                auto *client = find_market_client(client_id, server);
+                if(!client) {
+                    Assert(false);
+                    continue; // @Norelease: Remove this watcher?
+                }
+
+                Fail_If_True(!send_market_update_to_watcher(client, article_id, article));
             }
+            
+            article->did_change = false;
         }
+        // ////// //
+        
 
         add_new_market_clients(server);
         platform_sleep_milliseconds(1);

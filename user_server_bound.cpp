@@ -25,6 +25,12 @@ struct USB_Packet_Header
         struct {
             User_ID user;
             US_Client_Type client_type;
+
+            union {
+                struct {
+                    u32 server_id;
+                } non_player;
+            };
         } hello;
         
         struct {
@@ -81,6 +87,10 @@ bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
             auto *p = &_header->hello;
             Read_To_Ptr(User_ID, &p->user, node);
             Read_To_Ptr(US_Client_Type, &p->client_type, node);
+
+            if(p->client_type != US_CLIENT_PLAYER) {
+                Read_To_Ptr(u32, &p->non_player.server_id, node);
+            }
         } break;
 
         case USB_TRANSACTION_MESSAGE: {
@@ -100,8 +110,11 @@ bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
 
 
 
-bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type client_type)
+// NOTE: Pass zero for server_id if client_type == US_CLIENT_PLAYER.
+bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type client_type, u32 server_id)
 {
+    Assert(client_type == US_CLIENT_PLAYER || server_id > 0);
+    
     begin_outbound_packet(node);
     {
         Write(USB_Packet_Type, USB_HELLO, node);
@@ -109,6 +122,10 @@ bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type c
 
         Write(User_ID, user, node);
         Write(US_Client_Type, client_type, node);
+        
+        if(client_type != US_CLIENT_PLAYER) {
+            Write(u32, server_id, node);
+        }
     }
     end_outbound_packet(node);
     return true;
@@ -148,7 +165,7 @@ bool enqueue_USB_TRANSACTION_MESSAGE_packet(Network_Node *node, Transaction_Mess
         Write(Transaction_Message, message,    node);
 
         if(message == TRANSACTION_PREPARE) {
-            Write(US_Transaction, *transaction, node);
+            Write(US_Transaction, transaction, node);
         }
     }
     end_outbound_packet(node);

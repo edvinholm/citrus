@@ -32,8 +32,30 @@ bool expect_type_of_next_ucb_packet(UCB_Packet_Type expected_type, Network_Node 
     return true;
 }
 
-bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type client_type)
+// NOTE: Return value is true if there was no communication errors.
+bool user_server_transaction_prepare(US_Transaction transaction, Network_Node *node, UCB_Packet_Header *_response_header)
 {
+    Send_Now(USB_TRANSACTION_MESSAGE, node, TRANSACTION_PREPARE, &transaction);
+
+    if(!expect_type_of_next_ucb_packet(UCB_TRANSACTION_MESSAGE, node, _response_header)) return false;
+    Assert(_response_header->type == UCB_TRANSACTION_MESSAGE);
+
+    return true;
+}
+
+// NOTE: Return value is true if there was no communication errors.
+bool user_server_transaction_send_decision(bool commit, Network_Node *node)
+{
+    auto message = (commit) ? TRANSACTION_COMMAND_COMMIT : TRANSACTION_COMMAND_ABORT;
+    Send_Now(USB_TRANSACTION_MESSAGE, node, message, NULL);
+    return true;
+}
+
+// NOTE: Pass zero for server_id if client_type == US_CLIENT_PLAYER.
+bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type client_type, u32 server_id)
+{
+    Assert(client_type == US_CLIENT_PLAYER || server_id > 0);
+    
     Socket socket;
     
     if(!platform_create_tcp_socket(&socket)) {
@@ -48,7 +70,7 @@ bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type 
 
     reset_network_node(node, socket);
 
-    Send_Now(USB_HELLO, node, user_id, client_type);
+    Send_Now(USB_HELLO, node, user_id, client_type, server_id);
     
     platform_set_socket_read_timeout(&node->socket, 5 * 1000);
 

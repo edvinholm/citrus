@@ -6,7 +6,8 @@
 enum US_Client_Type
 {
     US_CLIENT_PLAYER = 1,
-    US_CLIENT_RS = 2
+    US_CLIENT_RS = 2,
+    US_CLIENT_MS = 3
 };
 
 

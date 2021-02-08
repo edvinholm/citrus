@@ -520,8 +520,9 @@ bool write_Item_ID(Item_ID id, Network_Node *node)
 
 bool read_Item(Item *_item, Network_Node *node)
 {
-    Read_To_Ptr(Item_ID,      &_item->id,   node);
-    Read_To_Ptr(Item_Type_ID, &_item->type, node);
+    Read_To_Ptr(Item_ID,      &_item->id,    node);
+    Read_To_Ptr(Item_Type_ID, &_item->type,  node);
+    Read_To_Ptr(User_ID,      &_item->owner, node);
 
     switch(_item->type) {
         case ITEM_PLANT: {
@@ -535,8 +536,9 @@ bool read_Item(Item *_item, Network_Node *node)
 
 bool write_Item(Item item, Network_Node *node)
 {
-    Write(Item_ID,      item.id,   node);
-    Write(Item_Type_ID, item.type, node);
+    Write(Item_ID,      item.id,    node);
+    Write(Item_Type_ID, item.type,  node);
+    Write(User_ID,      item.owner, node);
 
     switch(item.type) {
         case ITEM_PLANT: {
@@ -548,8 +550,31 @@ bool write_Item(Item item, Network_Node *node)
     return true;
 }
 
+bool read_Inventory_Slot_Flags(Inventory_Slot_Flags *_flags, Network_Node *node)
+{
+    Read(u8, flags, node);
+    *_flags = (Inventory_Slot_Flags)flags;
+    return true;
+}
+bool write_Inventory_Slot_Flags(Inventory_Slot_Flags flags, Network_Node *node)
+{
+    Write(u8, flags, node);
+    return true;
+}
 
+bool read_Inventory_Slot(Inventory_Slot *_slot, Network_Node *node)
+{
+    Read_To_Ptr(Inventory_Slot_Flags, &_slot->flags, node);
+    Read_To_Ptr(Item, &_slot->item, node);
+    return true;
+}
 
+bool write_Inventory_Slot(Inventory_Slot *slot, Network_Node *node)
+{
+    Write(Inventory_Slot_Flags, slot->flags, node);
+    Write(Item, slot->item, node);
+    return true;
+}
 
 
 // Room //

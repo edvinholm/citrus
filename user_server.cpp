@@ -24,6 +24,7 @@ const char *LOG_TAG_US_LIST = "-US-LIST-"; // Listening loop
     Log(__VA_ARGS__)
 
 
+// NOTE: There is one version of this for the user server, and one for the room server.
 Item_ID reserve_item_id(User_Server *server)
 {
     u32 server_id = server->server_id;
@@ -35,6 +36,18 @@ Item_ID reserve_item_id(User_Server *server)
     origin |= internal_origin;
 
     return { origin, number };
+}
+
+// NOTE: There is one version of this for the user server, and one for the room server.
+Item create_item(Item_Type_ID type, User_ID owner, User_Server *server)
+{
+    Item item = {0};
+    
+    item.id    = reserve_item_id(server);
+    item.type  = type;
+    item.owner = owner;
+    
+    return item;
 }
 
 
@@ -66,10 +79,15 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
 
         for(int j = 0; j < ARRLEN(user.inventory); j++)
         {
-            Item item = {0};
-            item.id   = reserve_item_id(server);
-            item.type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM-1);
-            user.inventory[j] = item;
+            auto type = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM);
+
+            Inventory_Slot slot = {0};
+            if(type != ITEM_NONE_OR_NUM) {
+                slot.flags |= INV_SLOT_FILLED;
+                slot.item   = create_item(type, user.id, server);
+            }
+            
+            user.inventory[j] = slot;
         }
         
         array_add(server->users,   user);
@@ -184,6 +202,9 @@ DWORD user_server_listening_loop(void *user_server_)
         client.user_id  = hello->user;
         client.server   = server;
         client.node     = new_node;
+        if(hello->client_type != US_CLIENT_PLAYER) {
+            client.server_id = hello->non_player.server_id;
+        }
 
         US_LIST_Log("Requested user: %llu\n", client.user_id);
 
@@ -196,111 +217,485 @@ DWORD user_server_listening_loop(void *user_server_)
     return 0;
 }
 
-
-US_Market_Server_Connection *find_or_add_connection_to_market_server(User_ID user_id, User_Server *server)
+bool unreserve_money(User *user, u32 server_id, Money amount)
 {
-    const Allocator_ID allocator = ALLOC_NETWORK;
-
-    for(int i = 0; i < server->market_server_connections.n; i++)
+    for (int k = 0; k < user->money_reservations.n; k++) 
     {
-        auto *connection = &server->market_server_connections[i];
-        if(connection->user_id == user_id) return connection;
+        auto *reservation = &user->money_reservations[k];
+
+        if (reservation->server_id != server_id) continue;
+
+        Assert(reservation->amount >= amount);
+        reservation->amount -= amount;
+
+        Assert(reservation->amount >= 0);
+        if (reservation->amount <= 0) {
+            array_unordered_remove(user->money_reservations, k);
+        }
+
+        user->total_money_reserved -= amount;
+
+        return true;
     }
 
-    Network_Node node = { 0 };
-    if(!connect_to_market_server(user_id, &node, MS_CLIENT_US)) return NULL;
-
-    US_Market_Server_Connection new_connection = {0};
-    new_connection.user_id = user_id;
-    new_connection.node = node;
-    return array_add(server->market_server_connections, new_connection);
+    return false;
 }
 
 
-void commit_transaction(US_Transaction t, User *user)
+void commit_transaction(US_Transaction t, User *user, u32 server_id)
 {
-    switch(t.type) {
-        case US_T_ITEM: {
-            auto *x = &t.item_details;
+    Assert(server_id > 0);
+    
+    for(int i = 0; i < t.num_operations; i++)
+    {
+        Assert(i < ARRLEN(t.operations));
+        auto *op = &t.operations[i];
+
+        switch(op->type)  // @Jai: #complete
+        {
+            case US_T_ITEM_TRANSFER: {
+                auto *x = &op->item_transfer;
             
-            if(x->is_server_bound)
-            {
-                auto *sb = &x->server_bound;
+                if(x->is_server_bound)
+                {
+                    auto *sb = &x->server_bound;
+                    
+                    Inventory_Slot *slot = NULL;
+                    if(sb->slot_ix_plus_one > 0) {
+                        Assert(sb->slot_ix_plus_one > 0 && sb->slot_ix_plus_one <= ARRLEN(user->inventory));
+                        slot = &user->inventory[sb->slot_ix_plus_one-1];
+                    } else {
+                        slot = find_first_empty_inventory_slot(user);
+                    }
+
+                    if(slot) {
+
+                        auto slot_ix = (slot - user->inventory);
+                    
+                        Assert(!(slot->flags & INV_SLOT_FILLED));
+                        Assert(!(slot->flags & INV_SLOT_RESERVED) || user->inventory_reservations[slot_ix] == server_id);
+                    
+                        slot->item = sb->item;
+                        slot->flags |= INV_SLOT_FILLED;
+                    
+                        user->did_change = true;
+                    } else {
+                        Assert(false); // TODO @ReportError @Norelease
+                    }
+                }
+                else
+                {
+                    auto *cb = &x->client_bound;
+                    
+                    bool done = false;
                 
+                    for(int i = 0; i < ARRLEN(user->inventory); i++) {
+
+                        auto *slot = &user->inventory[i];
+                        if(!(slot->flags & INV_SLOT_FILLED)) continue;
+
+                        if(slot->item.id == cb->item_id)
+                        {
+                            Assert(!(slot->flags & INV_SLOT_RESERVED) || user->inventory_reservations[i] == server_id);
+
+                            slot->flags &= ~(INV_SLOT_FILLED | INV_SLOT_RESERVED);
+                            user->inventory_reservations[i] = 0;
+                        
+                            user->did_change = true;
+
+                            done = true;
+                            break;
+                        }
+                    }
+                    Assert(done); // TODO @ReportError @Norelease
+                }
+            
+            } break;
+
+            case US_T_ITEM_RESERVE: {
+                auto *x = &op->item_reserve;
+
+                bool done = false;
+                
+                for(int i = 0; i < ARRLEN(user->inventory); i++) {
+
+                    auto *slot = &user->inventory[i];
+                    if(!(slot->flags & INV_SLOT_FILLED)) continue;
+
+                    if(slot->item.id == x->item_id)
+                    {
+                        Assert(!(slot->flags & INV_SLOT_RESERVED));
+
+                        slot->flags |= INV_SLOT_RESERVED;
+                        
+                        Assert(user->inventory_reservations[i] == 0);
+                        user->inventory_reservations[i] = server_id;
+                        
+                        user->did_change = true;
+
+                        done = true;
+                        break;
+                    }
+                }
+                Assert(done); // TODO @ReportError @Norelease
+                
+            } break;
+
+            case US_T_ITEM_UNRESERVE: {
+                auto *x = &op->item_unreserve;
+
+                bool done = false;
+                
+                for(int i = 0; i < ARRLEN(user->inventory); i++) {
+
+                    auto *slot = &user->inventory[i];
+                    if(!(slot->flags & INV_SLOT_FILLED)) continue;
+
+                    if(slot->item.id == x->item_id)
+                    {
+                        Assert((slot->flags & INV_SLOT_RESERVED));
+
+                        slot->flags &= ~(INV_SLOT_RESERVED);
+                        
+                        Assert(user->inventory_reservations[i] != 0);
+                        user->inventory_reservations[i] = 0;
+                        
+                        user->did_change = true;
+
+                        done = true;
+                        break;
+                    }
+                }
+                Assert(done); // TODO @ReportError @Norelease
+
+            } break;
+
+            case US_T_SLOT_RESERVE: {
+                auto *x = &op->slot_reserve;
+                
+                bool done = false;
+
                 auto *slot = find_first_empty_inventory_slot(user);
                 if(slot) {
-                    *slot = sb->item;
+                    Assert(!(slot->flags & INV_SLOT_FILLED));
+                    Assert(!(slot->flags & INV_SLOT_RESERVED));
+                    
+                    slot->flags |= INV_SLOT_RESERVED;
+
+                    auto slot_ix = (slot - user->inventory);
+                    Assert(slot_ix >= 0);
+                    
+                    Assert(user->inventory_reservations[slot_ix] == 0);
+                    user->inventory_reservations[slot_ix] = server_id;
+                    
                     user->did_change = true;
-                } else {
-                    Assert(false); // TODO @ReportError @Norelease
+
+                    done = true;
+                    break;
                 }
-            }
-            else
-            {
-                auto *cb = &x->client_bound;
+                Assert(done); // TODO @ReportError @Norelease
                 
-                for(int i = 0; i < ARRLEN(user->inventory); i++) {
-                    if(user->inventory[i].id == cb->item_id) {
-                        // @Boilerplate: Client: world.cpp: empty_inventory_slot_locally()
-                        Zero(user->inventory[i]);
-                        user->inventory[i].id = NO_ITEM;
-                        user->inventory[i].type = ITEM_NONE_OR_NUM;
-                        user->did_change = true;
-                        return;
-                    }
+            } break;
+
+            case US_T_SLOT_UNRESERVE: {
+                auto *x = &op->slot_unreserve;
+
+                Assert(x->slot_ix >= 0 && x->slot_ix < ARRLEN(user->inventory));
+
+                auto *slot = &user->inventory[x->slot_ix];
+
+                Assert(slot->flags & INV_SLOT_RESERVED);
+                slot->flags &= ~(INV_SLOT_RESERVED);
+                
+                auto slot_ix = (slot - user->inventory);
+                Assert(slot_ix >= 0);
+
+                Assert(user->inventory_reservations[slot_ix] == server_id);
+                user->inventory_reservations[slot_ix] = 0;
+                
+                user->did_change = true;
+                
+            } break;
+
+                
+            case US_T_MONEY_RESERVE: {
+                auto *x = &op->money_reserve;
+
+                Assert(x->amount > 0);
+                Assert(user->total_money_reserved <= user->money - x->amount);
+
+                bool found = false;
+                for(int k = 0; k < user->money_reservations.n; k++) {
+                    auto *reservation = &user->money_reservations[k];
+                    if(reservation->server_id != server_id) continue;
+
+                    reservation->amount += x->amount;
+                    found = true;
+                    break;
                 }
-                Assert(false);
-            }
-            
-        } break;
 
-        default: Assert(false); return;
+                if(!found) {
+                    Money_Reservation reservation = {0};
+                    reservation.server_id = server_id;
+                    reservation.amount = x->amount;
+                    array_add(user->money_reservations, reservation);
+                }
+                
+                user->total_money_reserved += x->amount;
+
+                
+            } break;
+
+            case US_T_MONEY_UNRESERVE: {
+                auto *x = &op->money_unreserve;
+
+                Assert(user->total_money_reserved >= x->amount);
+
+                bool done = unreserve_money(user, server_id, x->amount);
+                Assert(done);
+               
+            } break;
+
+            case US_T_MONEY_TRANSFER: {
+                auto *x = &op->money_transfer;
+                
+                if (x->do_unreserve) {
+                    Assert(x->amount < 0);
+                    bool unreserve_success = unreserve_money(user, server_id, -x->amount);
+                    Assert(unreserve_success);
+                }
+
+                Assert(user->money + x->amount - user->total_money_reserved >= 0);
+
+                user->money += x->amount;
+                
+            } break;
+
+
+            default: Assert(false); return;
+        }    
     }
-}
-
-bool transaction_possible(US_Transaction t, User *user, UCB_Transaction_Commit_Vote_Payload *_commit_vote_payload)
-{
-    Zero(*_commit_vote_payload);
     
-    switch(t.type) {
-        case US_T_ITEM: {
-
-            auto *x = &t.item_details;
-            
-            if(x->is_server_bound)
-            {
-                auto *sb = &x->server_bound;
-             
-                return inventory_has_available_space_for_item(&sb->item, user);
-            }
-            else
-            {
-                auto *cb = &x->client_bound;
-                
-                for(int i = 0; i < ARRLEN(user->inventory); i++) {
-                    auto *item = &user->inventory[i];
-                    if(item->id == cb->item_id)
-                    {
-                        _commit_vote_payload->item = *item;
-                        return true;
-                    }
-                }
-                return false;
-            }
-            
-        } break;
-
-        default: Assert(false); return false;
-    }
 }
 
-bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, User *user, bool *current_transaction_exists, US_Transaction *current_transaction)
+bool transaction_possible(US_Transaction t, User *user, u32 server_id, UCB_Transaction_Commit_Vote_Payload *_commit_vote_payload)
+{
+    Assert(server_id > 0);
+    
+    Zero(*_commit_vote_payload);
+
+    _commit_vote_payload->num_operations = t.num_operations;
+
+    for(int i = 0; i < t.num_operations; i++)
+    {
+        Assert(i < ARRLEN(t.operations));
+
+        auto *op = &t.operations[i];
+        auto *op_payload = &_commit_vote_payload->operation_payloads[i];
+
+        _commit_vote_payload->operation_types[i] = op->type;
+
+        switch(op->type) {
+            case US_T_ITEM_TRANSFER: {
+                auto *x = &op->item_transfer;
+            
+                if(x->is_server_bound)
+                {
+                    auto *sb = &x->server_bound;
+
+                    Inventory_Slot *slot = NULL;
+                    if(sb->slot_ix_plus_one > 0) {
+                        Assert(sb->slot_ix_plus_one > 0 && sb->slot_ix_plus_one <= ARRLEN(user->inventory));
+                        slot = &user->inventory[sb->slot_ix_plus_one-1];
+                    } else {
+                        slot = find_first_empty_inventory_slot(user);
+                    }
+
+                    if(!slot) return false;
+                    
+                    auto slot_ix = (slot - user->inventory);
+                    Assert(slot_ix >= 0 && slot_ix < ARRLEN(user->inventory));
+                    
+                    if(slot->flags & INV_SLOT_FILLED)
+                        return false;
+                    
+                    if((slot->flags & INV_SLOT_RESERVED) && user->inventory_reservations[slot_ix] != server_id)
+                        return false;
+                    
+                }
+                else
+                {
+                    auto *cb = &x->client_bound;
+
+                    bool possible = false;
+                
+                    for(int s = 0; s < ARRLEN(user->inventory); s++) {
+
+                        auto *slot = &user->inventory[s];
+                        if(!(slot->flags & INV_SLOT_FILLED)) continue;
+                    
+                        if(slot->item.id == cb->item_id)
+                        {
+                            if ((slot->flags & INV_SLOT_RESERVED) &&
+                                user->inventory_reservations[s] != server_id)
+                            {
+                                possible = false;
+                                break;
+                            }
+                        
+                            op_payload->item_transfer.item = slot->item;
+                            possible = true;
+
+                            break;
+                        }
+                    }
+
+                    if (!possible) return false;
+                }
+            
+            } break;
+
+            case US_T_ITEM_RESERVE: {
+                auto *x = &op->item_reserve;
+
+                bool possible = false;
+                
+                for(int s = 0; s < ARRLEN(user->inventory); s++) {
+                    auto *slot = &user->inventory[s];
+                    if(!(slot->flags & INV_SLOT_FILLED)) continue;
+
+                    if(slot->item.id == x->item_id)
+                    {
+                        if(!(slot->flags & INV_SLOT_RESERVED))
+                        {   
+                            op_payload->item_reserve.item = slot->item;
+                            possible = true;
+                        }
+                        
+                        break;
+                    }
+                }
+
+                if(!possible) return false;
+                
+            } break;
+
+            case US_T_ITEM_UNRESERVE: {
+                auto *x = &op->item_unreserve;
+
+                bool possible = false;
+
+                for(int s = 0; s < ARRLEN(user->inventory); s++) {
+                    auto *slot = &user->inventory[s];
+                    if(!(slot->flags & INV_SLOT_FILLED)) continue;
+
+                    if(slot->item.id == x->item_id)
+                    {
+                        if(slot->flags & INV_SLOT_RESERVED) {
+                            Assert(user->inventory_reservations[s] != 0);
+                            possible = (user->inventory_reservations[s] == server_id);
+                        }
+                        
+                        break;
+                    }
+                }
+
+                if(!possible) return false;
+                
+            } break;
+
+            case US_T_SLOT_RESERVE: {
+                auto *x = &op->slot_reserve;
+                
+                auto *slot = find_first_empty_inventory_slot(user);
+                if(!slot) return false;
+
+                op_payload->slot_reserve.slot_ix = (slot - user->inventory);
+                
+            } break;
+
+            case US_T_SLOT_UNRESERVE: {
+                auto *x = &op->slot_unreserve;
+
+                Assert(x->slot_ix >= 0 && x->slot_ix < ARRLEN(user->inventory));
+                auto *slot = &user->inventory[x->slot_ix];
+
+                if(!(slot->flags & INV_SLOT_RESERVED)) return false;
+
+                Assert(user->inventory_reservations[x->slot_ix] != 0);
+                if(user->inventory_reservations[x->slot_ix] != server_id) return false;
+                
+            } break;
+
+            case US_T_MONEY_RESERVE: {
+                auto *x = &op->money_reserve;
+                
+                Assert(x->amount > 0);
+
+                Assert(user->total_money_reserved <= user->money);
+                if(user->money - user->total_money_reserved < x->amount) return false;
+                
+            } break;
+
+            case US_T_MONEY_UNRESERVE: {
+                auto *x = &op->money_unreserve;
+
+                bool possible = false;
+                for(int k = 0; k < user->money_reservations.n; k++) {
+                    auto *reservation = &user->money_reservations[k];
+
+                    if(reservation->server_id != server_id) continue;
+
+                    if(reservation->amount >= x->amount) {
+                        possible = true;
+                        break;
+                    }
+                }
+
+                if(!possible) return false;
+                
+            } break;
+
+            case US_T_MONEY_TRANSFER: {
+                auto *x = &op->money_transfer;
+                // NOTE: x->amount can be negative.
+
+                Money money_reserved_by_this_client = 0;
+
+                if (x->do_unreserve)
+                {
+                    if(x->amount >= 0) return false; // Can only unreserve if amount is negative.
+                    
+                    for (int k = 0; k < user->money_reservations.n; k++) {
+                        auto *reservation = &user->money_reservations[k];
+
+                        if (reservation->server_id != server_id) continue;
+
+                        Assert(reservation->amount > 0);
+                        money_reserved_by_this_client += reservation->amount;
+                    }
+                    
+                    if(money_reserved_by_this_client < -x->amount) return false; // Not enough reserved to unreserve.
+                }
+
+                if(user->money + x->amount - (user->total_money_reserved - money_reserved_by_this_client) < 0) return false;
+                
+            } break;
+
+            default: Assert(false); return false;
+        }
+    }
+
+    return true;
+}
+
+bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, User *user)
 {
     // NOTE: USB_GOODBYE is handled somewhere else.
 
     auto *node = &client->node;
 
-    if(*current_transaction_exists) {
+    if(client->current_transaction_exists) {
         
         Assert(client->type != US_CLIENT_PLAYER);
         
@@ -310,7 +705,7 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
 
             switch(p.message) {
                 case TRANSACTION_COMMAND_COMMIT: {
-                    commit_transaction(*current_transaction, user);
+                    commit_transaction(client->current_transaction, user, client->server_id);
                 } break;
 
                 case TRANSACTION_COMMAND_ABORT: {
@@ -329,7 +724,7 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
             return false;
         }
 
-        *current_transaction_exists = false;
+        client->current_transaction_exists = false;
         return true;
     }
     
@@ -347,18 +742,18 @@ bool read_and_handle_usb_packet(US_Client *client, USB_Packet_Header header, Use
 
                 case TRANSACTION_PREPARE: {
                     
-                    *current_transaction_exists = true;
-                    *current_transaction        = p.transaction;
+                    client->current_transaction_exists = true;
+                    client->current_transaction        = p.transaction;
 
                     UCB_Transaction_Commit_Vote_Payload commit_vote_payload;
-                    if(transaction_possible(p.transaction, user, &commit_vote_payload))
+                    if(transaction_possible(p.transaction, user, client->server_id, &commit_vote_payload))
                     {
-                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, p.transaction.type,
+                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node,
                                  TRANSACTION_VOTE_COMMIT, &commit_vote_payload);
                     }
                     else
                     {
-                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node, p.transaction.type,
+                        Send_Now(UCB_TRANSACTION_MESSAGE, &client->node,
                                  TRANSACTION_VOTE_ABORT);
                     }
                 } break;
@@ -504,24 +899,10 @@ void add_new_user_clients(User_Server *server)
 
             if(client->type == US_CLIENT_PLAYER)
             {
-                UCB_Packet(USER_INIT, client, user->id, user->username, user->color, user->money, user->inventory);
+                UCB_Packet(USER_INIT, client, user->id, user->username, user->color, user->money, user->total_money_reserved, user->inventory);
                 if(!client) {
                     US_Log("Unable to init user client.\n"); // initialize_user_client() disconnects client for us on error.
                 }
-
-                // @Norelease!! @Temporary
-                auto *ms_con = find_or_add_connection_to_market_server(user->id, server);
-                if(ms_con) {
-                    US_Log("Connected to market as user %llu.\n", ms_con->user_id);
-                    if(send_MSB_PLACE_ORDER_packet_now(&ms_con->node, ITEM_PLANT, 420, false)) {
-                        US_Log("Successfully sent MSB_PLACE_ORDER packet.\n");
-                    } else {
-                        US_Log("Failed to send MSB_PLACE_ORDER packet.\n");
-                    }
-                } else {
-                    US_Log("NOT connected to market as user %llu.\n", user->id);
-                }
-                //-----------------
             }
         }
 
@@ -590,9 +971,6 @@ DWORD user_server_main_loop(void *server_) {
             for(int c = 0; c < clients.n; c++) {
                 auto *client = &clients[c];
 
-                bool current_transaction_exists;
-                US_Transaction current_transaction;
-
                 while(true) {
                     
                     bool error;
@@ -601,6 +979,7 @@ DWORD user_server_main_loop(void *server_) {
                             disconnect_user_client(client); // @Cleanup @Boilerplate
                             c--;
                         }
+
                         break;
                     }
                     
@@ -618,7 +997,7 @@ DWORD user_server_main_loop(void *server_) {
                         US_Log("Client (socket = %lld) sent goodbye message.\n", client->node.socket.handle);
                         do_disconnect = true;
                     }
-                    else if(!read_and_handle_usb_packet(client, header, user, &current_transaction_exists, &current_transaction)) {
+                    else if(!read_and_handle_usb_packet(client, header, user)) {
                         do_disconnect = true;
                     }
 
@@ -637,7 +1016,7 @@ DWORD user_server_main_loop(void *server_) {
                 if(client->type != US_CLIENT_PLAYER) continue;
 
                 if(user->did_change) {
-                    UCB_Packet(USER_UPDATE, client, user->id, user->username, user->color, user->money, user->inventory);
+                    UCB_Packet(USER_UPDATE, client, user->id, user->username, user->color, user->money, user->total_money_reserved, user->inventory);
                 }
             }
 
