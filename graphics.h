@@ -78,8 +78,8 @@ struct Render_Object_Buffer
     bool current_vertex_object_began;
     Render_Object current_vertex_object;
     
-    Array<Render_Object, ALLOC_GFX> objects;
-    Vertex_Buffer<ALLOC_GFX> vertices;
+    Array<Render_Object, ALLOC_MALLOC> objects;
+    Vertex_Buffer<ALLOC_MALLOC> vertices;
 };
 
 void reset(Render_Object_Buffer *buffer)
@@ -165,8 +165,8 @@ struct Graphics
     GPU_Context gpu_ctx;
 
     // Buffered draw data
-    Vertex_Buffer<ALLOC_GFX> default_vertex_buffer;
-    Vertex_Buffer<ALLOC_GFX> universal_vertex_buffer;
+    Vertex_Buffer<ALLOC_MALLOC> default_vertex_buffer;
+    Vertex_Buffer<ALLOC_MALLOC> universal_vertex_buffer;
     World_Render_Buffer world_render_buffer;
     UI_Render_Buffer    ui_render_buffer;
 
@@ -175,7 +175,7 @@ struct Graphics
 
     // State
     u8 buffer_set_index;
-    Static_Stack<Vertex_Buffer<ALLOC_GFX> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
+    Static_Stack<Vertex_Buffer<ALLOC_MALLOC> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
     
     float   z_for_2d; // This is the Z value that will be set for "2D vertices"
                       // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.

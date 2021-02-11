@@ -92,10 +92,10 @@ struct Market_Server
 
     Market_Article articles[ITEM_NONE_OR_NUM];
     
-    Array<MS_Client, ALLOC_APP> clients;
+    Array<MS_Client, ALLOC_MALLOC> clients;
     MS_Client_Queue client_queue;
 
-    Array<MS_User_Server_Connection, ALLOC_APP> user_server_connections;
+    Array<MS_User_Server_Connection, ALLOC_MALLOC> user_server_connections;
 };
 
 

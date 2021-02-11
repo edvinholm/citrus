@@ -32,7 +32,7 @@ struct Network_Loop
     }                                                               \
 
 
-bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_NETWORK> *action_queue,
+bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_MALLOC> *action_queue,
                          bool *_server_said_goodbye)
 {
     auto *room = &client->room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
@@ -230,10 +230,10 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                         auto *c = &chat_messages[i];
                         
                         if(i < room->num_chat_messages)
-                            clear(&room->chat_messages[i].text, ALLOC_APP);
+                            clear(&room->chat_messages[i].text, ALLOC_MALLOC);
 
                         // Copy the message text. (Otherwise it points to the network node receive buffer)
-                        c->text = copy_of(&c->text, ALLOC_APP);
+                        c->text = copy_of(&c->text, ALLOC_MALLOC);
                         room->chat_messages[i] = *c;
                     }
                     room->num_chat_messages = p->num_chat_messages;
@@ -300,10 +300,10 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
                 
                 lock_mutex(mutex);
                 {
-                    clear(&user->username, ALLOC_APP);
+                    clear(&user->username, ALLOC_MALLOC);
                     
                     user->id        = p->id;
-                    user->username  = copy_of(&p->username, ALLOC_APP);
+                    user->username  = copy_of(&p->username, ALLOC_MALLOC);
                     user->color     = p->color;
                     
                     user->money     = p->money;
@@ -329,10 +329,10 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
 
                 lock_mutex(mutex);
                 {
-                    clear(&user->username, ALLOC_APP);
+                    clear(&user->username, ALLOC_MALLOC);
                     
                     user->id        = p->id;
-                    user->username  = copy_of(&p->username, ALLOC_APP);
+                    user->username  = copy_of(&p->username, ALLOC_MALLOC);
                     user->color     = p->color;
                     
                     user->money     = p->money;
@@ -351,7 +351,7 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
     return true;
 }
 
-bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action, ALLOC_NETWORK> *action_queue,
+bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action, ALLOC_MALLOC> *action_queue,
                            bool *_server_said_goodbye)
 {
     // WRITE //
@@ -525,7 +525,7 @@ DWORD network_loop(void *loop_)
     }
     unlock_mutex(client->mutex);
 
-    const Allocator_ID allocator = ALLOC_NETWORK;
+    const Allocator_ID allocator = ALLOC_MALLOC;
     
     // ROOM SERVER
     bool room_connect_requested;
@@ -757,7 +757,7 @@ DWORD network_loop(void *loop_)
             client->connections.user   = us_connection;
             client->connections.market = ms_connection;
 
-            if(did_connect_to_user_this_loop)   clear_and_reset(&client->user, ALLOC_APP);
+            if(did_connect_to_user_this_loop)   clear_and_reset(&client->user, ALLOC_MALLOC);
             if(did_connect_to_room_this_loop)   clear_and_reset(&client->room);
             if(did_connect_to_market_this_loop) clear_and_reset(&client->market);
         }

@@ -13,7 +13,7 @@ struct Linear_Allocator_Page
 
 struct Linear_Allocator
 {
-    Array<Linear_Allocator_Page, ALLOC_APP> pages;
+    Array<Linear_Allocator_Page, ALLOC_MALLOC> pages;
 };
 
 Linear_Allocator temporary_memory = {0};
@@ -60,30 +60,8 @@ struct Allocator
 };
 
 
-Allocator app_allocator    = {0};
-Allocator game_allocator   = {0};
-Allocator gfx_allocator    = {0};
-Allocator ui_allocator     = {0};
-Allocator network_allocator    = {0};
-Allocator dev_allocator    = {0};
-Allocator platform_allocator = {0};
-Allocator us_allocator = {0};
-Allocator rs_allocator = {0};
-Allocator ms_allocator = {0};
-
 Allocator *allocators[] = {
     NULL, // ALLOC_MALLOC
     NULL, // ALLOC_TMP
-    &app_allocator,
-    &game_allocator,
-    &gfx_allocator,
-    &ui_allocator,
-    &network_allocator,
-    &dev_allocator,
-    &platform_allocator,
-    
-    &us_allocator,
-    &rs_allocator,
-    &ms_allocator
 };
 static_assert(ARRLEN(allocators) == ALLOC_NONE_OR_NUM);

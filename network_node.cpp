@@ -44,7 +44,7 @@ struct Network_Node
     };
     
     s64 current_outbound_packet_start_plus_one;
-    Array<Packet, ALLOC_NETWORK> packet_queue;
+    Array<Packet, ALLOC_MALLOC> packet_queue;
     
     Socket socket;
 };

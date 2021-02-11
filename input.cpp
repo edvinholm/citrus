@@ -18,12 +18,12 @@ struct Input_Manager
     //            at the beginning.
     //            If the user inputs non-\b characters followed by a \b,
     //            the last character should be removed instead of adding a \b.
-    Array<u8, ALLOC_APP> text; // NOTE: This is UTF-8 encoded.
+    Array<u8, ALLOC_MALLOC> text; // NOTE: This is UTF-8 encoded.
 
-    Array<virtual_key, ALLOC_APP> keys; // NOT reset every loop.
-    Array<virtual_key, ALLOC_APP> keys_down; 
-    Array<virtual_key, ALLOC_APP> keys_up;
-    Array<virtual_key, ALLOC_APP> key_hits; // Keys are added here for every hit (repeats included). Reset every loop.
+    Array<virtual_key, ALLOC_MALLOC> keys; // NOT reset every loop.
+    Array<virtual_key, ALLOC_MALLOC> keys_down; 
+    Array<virtual_key, ALLOC_MALLOC> keys_up;
+    Array<virtual_key, ALLOC_MALLOC> key_hits; // Keys are added here for every hit (repeats included). Reset every loop.
 };
 
 

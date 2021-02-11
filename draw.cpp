@@ -148,6 +148,8 @@ void reset_render_object_buffer(Render_Object_Buffer *buffer)
 // IMPORTANT: We cannot use temporary memory in this proc since we call it when the mutex is unlocked.
 void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graphics *gfx)
 {
+    const Allocator_ID allocator = ALLOC_MALLOC;
+    
     Assert(!buffer->current_vertex_object_began);
 
     if (buffer->objects.n == 0) return;
@@ -160,15 +162,15 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
         // SORT OBJECTS //
         auto num_objects = buffer->objects.n;
         
-        int *object_indices = (int *)gfx_alloc(sizeof(int) * num_objects); // @Speed
-        defer(gfx_dealloc(object_indices););
+        int *object_indices = (int *)alloc(sizeof(int) * num_objects, allocator); // @Speed
+        defer(dealloc(object_indices, allocator););
 
         // NOTE: These values don't move around when we sort.
         //       An object's z does not necessarily live at the
         //       same index in object_z as its index does in
         //       object_indices.
-        float *object_z = (float *)gfx_alloc(sizeof(float) * num_objects); // @Speed
-        defer(gfx_dealloc(object_z););
+        float *object_z = (float *)alloc(sizeof(float) * num_objects, allocator); // @Speed
+        defer(dealloc(object_z, allocator););
         
         // @Speed
         for(int o = 0; o < num_objects; o++) {
@@ -210,7 +212,7 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
         //       them in.
         
         int obj_ix = 0;
-        Vertex_Buffer<ALLOC_GFX> temporary_vertex_buffer = {0}; // IMPORTANT: Do not use temporary memory here. We cannot use that when we don't have the mutex locked. (@Speed: Make one temp mem per thread)
+        Vertex_Buffer<ALLOC_MALLOC> temporary_vertex_buffer = {0}; // IMPORTANT: Do not use temporary memory here. We cannot use that when we don't have the mutex locked. (@Speed: Make one temp mem per thread)
         ensure_capacity(&temporary_vertex_buffer, vertices.n);
         defer(clear(&temporary_vertex_buffer););
 

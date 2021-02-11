@@ -137,7 +137,7 @@ struct Server_Connections
     bool room_connect_requested; // Writable by main loop
     Room_ID requested_room;      // Writable by main loop
     Room_Server_Connection room;
-    Array<C_RS_Action, ALLOC_NETWORK> room_action_queue; // Writable by main loop
+    Array<C_RS_Action, ALLOC_MALLOC> room_action_queue; // Writable by main loop
     // //// ////// //
 
     // USER SERVER //
@@ -149,6 +149,6 @@ struct Server_Connections
     // MARKET SERVER //
     bool market_connect_requested; // Writable by main loop
     Market_Server_Connection market;
-    Array<C_MS_Action, ALLOC_NETWORK> market_action_queue; // Writable by main loop
+    Array<C_MS_Action, ALLOC_MALLOC> market_action_queue; // Writable by main loop
     // ////// ////// //
 };

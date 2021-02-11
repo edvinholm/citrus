@@ -299,7 +299,7 @@ void init_fonts(Font *fonts, Graphics *gfx)
     for(int f = 0; f < NUM_FONTS; f++)
     {
         // IMPORTANT: This does NOT create a gpu texture. The texture will be created in game_init_graphics, so that we can redo it when we lose the graphics context.
-        gfx->glyph_maps[f] = create_sprite_map(texture_size, texture_size, font_textures[f], ALLOC_GFX, gfx);
+        gfx->glyph_maps[f] = create_sprite_map(texture_size, texture_size, font_textures[f], ALLOC_MALLOC, gfx);
 
         Font *font = &fonts[f];
 
@@ -307,7 +307,7 @@ void init_fonts(Font *fonts, Graphics *gfx)
 
         char *filename = (char *)font_filenames[f];
         byte *file_contents;
-        if(!read_entire_resource(filename, &file_contents, ALLOC_GFX)) // IMPORTANT: Do not dealloc this. stb_truetype needs the data as long as the font lives.
+        if(!read_entire_resource(filename, &file_contents, ALLOC_MALLOC)) // IMPORTANT: Do not dealloc this. stb_truetype needs the data as long as the font lives.
         {
             Debug_Print("Unable to read font resource file '%s'\n", filename);
             continue;

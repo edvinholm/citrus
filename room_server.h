@@ -52,13 +52,13 @@ struct Room_Server
 
     u64 next_item_number;
 
-    Array<Room_ID, ALLOC_GAME> room_ids;
-    Array<Room, ALLOC_GAME> rooms;
+    Array<Room_ID, ALLOC_MALLOC> room_ids;
+    Array<Room, ALLOC_MALLOC> rooms;
     
-    Array<Array<RS_Client, ALLOC_APP>, ALLOC_APP> clients;
+    Array<Array<RS_Client, ALLOC_MALLOC>, ALLOC_MALLOC> clients;
     RS_Client_Queue client_queue;
 
-    Array<RS_User_Server_Connection, ALLOC_APP> user_server_connections;
+    Array<RS_User_Server_Connection, ALLOC_MALLOC> user_server_connections;
 };
 
 void init_room_server(Room_Server *server, u32 server_id)

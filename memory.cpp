@@ -262,7 +262,11 @@ void reset_linear_allocator(Linear_Allocator *allocator)
     {
         if(i >= MAX_NUM_LINEAR_ALLOCATOR_PAGES_AFTER_RESET)
         {
-            app_dealloc_ignore_temporary_memory_test(allocator->pages[i].start);
+#if DEBUG
+            dealloc(allocator->pages[i].start, ALLOC_MALLOC, true);
+#else
+            dealloc(allocator->pages[i].start, ALLOC_MALLOC);
+#endif
             continue;
         }
         
@@ -316,7 +320,7 @@ u8 *linear_alloc(size_t size, Linear_Allocator *allocator)
             page_size = size;
         
         Linear_Allocator_Page new_page = {0};
-        new_page.start = app_alloc(page_size);
+        new_page.start = alloc(page_size, ALLOC_MALLOC);
         new_page.size = page_size;
         array_add(temporary_memory.pages, new_page);
 

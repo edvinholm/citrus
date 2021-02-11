@@ -44,7 +44,7 @@ namespace Client_User
         bool initialized;
         
         int selected_inventory_item_plus_one;
-        Array<u8, ALLOC_APP> chat_draft;
+        Array<u8, ALLOC_MALLOC> chat_draft;
     };
 
     void clear_and_reset(User *user, Allocator_ID allocator)

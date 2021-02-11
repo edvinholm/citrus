@@ -22,7 +22,7 @@ namespace Client_Game
     {
         double time_offset; // To get the current World_Time, do <system time> + time_offset.
 
-        Array<Entity, ALLOC_GAME> entities;
+        Array<Entity, ALLOC_MALLOC> entities;
         Entity_ID selected_entity;
         
         bool static_geometry_up_to_date;

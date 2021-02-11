@@ -84,7 +84,7 @@ void create_dummy_rooms(Room_Server *server)
 {
     double t = get_time();
 
-    Array<RS_Client, ALLOC_APP> empty_client_array = {0};
+    Array<RS_Client, ALLOC_MALLOC> empty_client_array = {0};
     
     for(int i = 0; i < 8; i++) {
         Room room = {0};
@@ -460,7 +460,7 @@ void add_new_room_clients(Room_Server *server)
 
 RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id, Room_Server *server)
 {
-    const Allocator_ID allocator = ALLOC_NETWORK;
+    const Allocator_ID allocator = ALLOC_MALLOC;
     
     for(int i = 0; i < server->user_server_connections.n; i++)
     {
@@ -1366,7 +1366,7 @@ DWORD room_server_main_loop(void *server_)
            
     double t = get_time();
 
-    Array<int, ALLOC_APP> clients_to_disconnect = {0};
+    Array<int, ALLOC_MALLOC> clients_to_disconnect = {0};
     while(!get(&server->should_exit)) {
 
         if(get(&listening_loop->client_accept_failed)){

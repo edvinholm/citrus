@@ -82,7 +82,7 @@ struct UI_ID_Manager
     UI_ID last_id;
 
 #if DEBUG
-    Array<UI_ID, ALLOC_UI> used_ids_this_build; // To detect if we generate the same ID for multiple elements. A build is a "frame"....
+    Array<UI_ID, ALLOC_MALLOC> used_ids_this_build; // To detect if we generate the same ID for multiple elements. A build is a "frame"....
 #endif
     
     struct Path_Bucket
@@ -91,9 +91,9 @@ struct UI_ID_Manager
         //                         We should have buckets because we don't want to copy all the paths when we run out of space.
         //                         Should be pretty big buckets though?
 
-        Array<u64,     ALLOC_UI> path_lengths;
-        Array<UI_Path, ALLOC_UI> paths;
-        Array<UI_ID,   ALLOC_UI> ids;
+        Array<u64,     ALLOC_MALLOC> path_lengths;
+        Array<UI_Path, ALLOC_MALLOC> paths;
+        Array<UI_ID,   ALLOC_MALLOC> ids;
     };
 
     Path_Bucket path_buckets[256]; // Hash is 8 bits, and created from a Path.
@@ -255,7 +255,7 @@ struct UI_Dropdown
     Rect box_a;
     UI_Click_State box_click_state;
     
-    Array<UI_String, ALLOC_UI> options;
+    Array<UI_String, ALLOC_MALLOC> options;
 
     bool open;
 };
@@ -342,17 +342,17 @@ struct UI_Manager
     UI_Path current_path;
     u64     current_path_length;
 
-    Array<bool,       ALLOC_UI> element_alives;
-    Array<UI_ID,      ALLOC_UI> element_ids;
-    Array<UI_Element, ALLOC_UI> elements;
+    Array<bool,       ALLOC_MALLOC> element_alives;
+    Array<UI_ID,      ALLOC_MALLOC> element_ids;
+    Array<UI_Element, ALLOC_MALLOC> elements;
     
-    Array<UI_ID, ALLOC_UI> window_stack;
+    Array<UI_ID, ALLOC_MALLOC> window_stack;
 
     // These are reset before every build //
-    Array<UI_ID, ALLOC_UI> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
-    Array<u8, ALLOC_UI> string_data;
+    Array<UI_ID, ALLOC_MALLOC> elements_in_depth_order; // TODO @Speed: After a build, find all elements by ID once and store the pointers in an array? That both the UI system and the renderer can use.
+    Array<u8, ALLOC_MALLOC> string_data;
     // ////////////////////////////////// //
-    Array<u8, ALLOC_UI> last_string_data; // String data last build, so we can see if someone's data has changed between builds.
+    Array<u8, ALLOC_MALLOC> last_string_data; // String data last build, so we can see if someone's data has changed between builds.
 
     UI_ID active_element;
     union {

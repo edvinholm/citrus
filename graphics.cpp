@@ -11,7 +11,7 @@ float eat_z_for_2d(Graphics *gfx)
 
 
 inline
-Vertex_Buffer<ALLOC_GFX> *current_vertex_buffer(Graphics *gfx)
+Vertex_Buffer<ALLOC_MALLOC> *current_vertex_buffer(Graphics *gfx)
 {
     return current(gfx->vertex_buffer_stack, &gfx->default_vertex_buffer);
 }

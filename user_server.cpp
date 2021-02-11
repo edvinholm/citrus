@@ -64,7 +64,7 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
         "generalW4ste"
     };
     
-    Array<US_Client, ALLOC_APP> empty_client_array = {0};
+    Array<US_Client, ALLOC_MALLOC> empty_client_array = {0};
 
     User_ID next_user_id = 1;
     
@@ -924,7 +924,7 @@ bool get_next_us_client_packet_or_disconnect(US_Client *client, USB_Packet_Heade
 //                     this is done -- this proc will do that for you.
 DWORD user_server_main_loop(void *server_) {
 
-    const Allocator_ID allocator = ALLOC_US;
+    const Allocator_ID allocator = ALLOC_MALLOC;
     
     User_Server *server = (User_Server *)server_;
     defer(deinit_user_server(server););

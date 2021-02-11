@@ -50,13 +50,13 @@ struct User_Server
     
     Atomic<bool> should_exit; // @Speed: Semaphore?
 
-    Array<User, ALLOC_US> users;
+    Array<User, ALLOC_MALLOC> users;
 
     Listening_Loop listening_loop;
     
     u64 next_item_number;
     
-    Array<Array<US_Client, ALLOC_APP>, ALLOC_APP> clients; // IMPORTANT: Must map 1:1 to users.
+    Array<Array<US_Client, ALLOC_MALLOC>, ALLOC_MALLOC> clients; // IMPORTANT: Must map 1:1 to users.
     US_Client_Queue client_queue;
 };
 

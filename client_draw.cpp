@@ -782,7 +782,7 @@ DWORD render_loop(void *loop_)
     bool first_frame = true;
     u64 last_second = platform_get_time();
 
-    Array<Rect, ALLOC_GFX> dirty_rects = {0};
+    Array<Rect, ALLOC_MALLOC> dirty_rects = {0};
     defer(clear(&dirty_rects););
     
     while(true)

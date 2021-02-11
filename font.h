@@ -113,8 +113,8 @@ struct Glyph_Table
 {
     struct Bucket
     {
-        Array<int, ALLOC_GFX> glyph_codepoints;
-        Array<Glyph_Info, ALLOC_GFX> glyphs;
+        Array<int, ALLOC_MALLOC> glyph_codepoints;
+        Array<Glyph_Info, ALLOC_MALLOC> glyphs;
     };
 
     Bucket buckets[256];
@@ -124,8 +124,8 @@ struct Glyph_Index_Table
 {
     struct Bucket
     {
-        Array<int, ALLOC_GFX> codepoints;
-        Array<int, ALLOC_GFX> indices;
+        Array<int, ALLOC_MALLOC> codepoints;
+        Array<int, ALLOC_MALLOC> indices;
     };
 
     Bucket buckets[256];

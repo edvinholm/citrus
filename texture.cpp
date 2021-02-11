@@ -91,7 +91,7 @@ bool load_texture_catalog_from_image_files(Texture_Catalog *cat)
 {
     
 #if DEBUG
-    Allocator_ID allocator = ALLOC_DEV;
+    Allocator_ID allocator = ALLOC_MALLOC;
 #else
     Allocator_ID allocator = ALLOC_TMP;
 #endif

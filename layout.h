@@ -35,7 +35,7 @@ struct Layout
 struct Layout_Manager
 {
     v2 root_size; // TODO REMEMBER to set this to frame size every frame/build.
-    Array<Layout, ALLOC_UI> stack; // Make fixed-sized
+    Array<Layout, ALLOC_MALLOC> stack; // Make fixed-sized
 };
 
 

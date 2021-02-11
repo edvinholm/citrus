@@ -267,7 +267,7 @@ void add_new_market_clients(Market_Server *server)
 
 MS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id, Market_Server *server)
 {
-    const Allocator_ID allocator = ALLOC_NETWORK;
+    const Allocator_ID allocator = ALLOC_MALLOC;
 
     for(int i = 0; i < server->user_server_connections.n; i++)
     {
@@ -754,7 +754,7 @@ MS_Client *find_market_client(MS_Client_ID id, Market_Server *server)
 //                     this is done -- this proc will do that for you.
 DWORD market_server_main_loop(void *server_) {
 
-    const Allocator_ID allocator = ALLOC_MS;
+    const Allocator_ID allocator = ALLOC_MALLOC;
     
     Market_Server *server = (Market_Server *)server_;
     defer(deinit_market_server(server););
