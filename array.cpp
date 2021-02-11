@@ -12,7 +12,9 @@ T &Array<T, A>::operator [] (const s64 index)
 template<typename T, Allocator_ID A>
 bool ensure_capacity(Array<T, A> &array, s64 capacity)
 {
-    s64 new_allocated = max(array.allocated, (s64)1);
+    const s64 min_capacity = max(8, 256/sizeof(T)); //@Hardcoded: @Jai: Have this as a struct parameter for Array?
+    
+    s64 new_allocated = max(array.allocated, min_capacity);
     while(new_allocated < capacity)
     {
         new_allocated *= 2;
