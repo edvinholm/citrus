@@ -61,8 +61,8 @@ Font_ID current_font_id(Graphics *gfx)
 
 inline
 Font *current_font(Graphics *gfx)
-{
-    return &gfx->fonts[current_font_id(gfx)];
+{   
+    return &(*gfx->fonts)[current_font_id(gfx)];
 }
 
 
@@ -114,8 +114,8 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
             };
             
             v2 uvs[6] = {
-                { uv0.x, uv0.y }, { uv1.x, uv1.y }, { uv0.x, uv1.y },
-                { uv0.x, uv0.y }, { uv1.x, uv1.y }, { uv1.x, uv0.y }
+                { uv0.x, uv1.y }, { uv1.x, uv0.y }, { uv0.x, uv0.y },
+                { uv0.x, uv1.y }, { uv1.x, uv0.y }, { uv1.x, uv1.y }
             };
 
             triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
@@ -131,14 +131,16 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
                 {p.x, p.y, z}, {x1, y1, z}, {p.x, y1, z},
                 {p.x, p.y, z}, {x1, y1, z}, {x1, p.y, z}
             };
-            /*
+            
             v2 uvs[6] = {
-                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p0.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y }, { glyph->sprite_frame_p0.x, glyph->sprite_frame_p1.y },
-                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p0.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y }, { glyph->sprite_frame_p1.x, glyph->sprite_frame_p0.y }
+                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p1.y },
+                { glyph->sprite_frame_p1.x, glyph->sprite_frame_p0.y },
+                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p0.y },
+                
+                { glyph->sprite_frame_p0.x, glyph->sprite_frame_p1.y },
+                { glyph->sprite_frame_p1.x, glyph->sprite_frame_p0.y },
+                { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y },
             };
-            */
-            v2 uvs[6];
-            quad_uvs(uvs, glyph->sprite_frame_p0, glyph->sprite_frame_p1);
 
             triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
         }
@@ -170,6 +172,7 @@ Rect draw_codepoint(int codepoint, v2 *p, Font *font, Font_Size size, float scal
 
     Rect glyph_a;
     glyph_a.p = *p + ((offset) ? glyph->offset : V2_ZERO);
+    glyph_a.y -= font->ascent - font->descent;
     
     if(glyph) {
         glyph_a.s = draw_glyph(glyph, glyph_a.p, vertex_colors, vertex_textures, gfx, clip_rect, do_draw);
@@ -231,7 +234,7 @@ float string_width(String string, Font_Size size, Graphics *gfx, int previous_co
 
 float string_width(String string, Font_Size size, Font_ID font_id, Graphics *gfx, int previous_codepoint = 0)
 {
-    return string_width(string, size, &gfx->fonts[font_id], previous_codepoint);
+    return string_width(string, size, &(*gfx->fonts)[font_id], previous_codepoint);
 }
 
 
@@ -248,7 +251,7 @@ v2 string_size(String string, Font_Size size, Font_ID font, Graphics *gfx)
 {
     Assert(font >= 0);
     
-    return string_size(string, size, &gfx->fonts[font]);
+    return string_size(string, size, &(*gfx->fonts)[font]);
 }
 
 inline
@@ -258,11 +261,11 @@ v2 string_size(String string, Font_Size size, Graphics *gfx)
 }
 
 //NOTE: Returns rect of drawn string
-Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color, Graphics *gfx,
+Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4 color, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    Font *font = &gfx->fonts[font_id];
+    Font *font = &(*gfx->fonts)[font_id];
     
     Texture_ID font_texture = gfx->glyph_maps[font_id].texture;
 
@@ -281,7 +284,7 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color,
     int default_previous_codepoint = 0;
     if(!previous_codepoint) previous_codepoint = &default_previous_codepoint;
 
-    if(h_align == HA_LEFT && v_align == VA_TOP)
+    if(h_align == HA_LEFT)
     {
         // Don't need to calculate string size.
     }
@@ -292,21 +295,21 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color,
         v2 str_size = string_size(string, size, font);
         
         if(h_align == HA_CENTER)
-            p.x -= str_size.w / 2.0;
+            top_left.x -= str_size.w / 2.0;
         else if(h_align == HA_RIGHT)
-            p.x -= str_size.w;
+            top_left.x -= str_size.w;
         else Assert(h_align == HA_LEFT);
 
         if(v_align == VA_CENTER)
-            p.y -= str_size.h / 2.0;
+            top_left.y += str_size.h / 2.0;
         else if(v_align == VA_BOTTOM)
-            p.y -= str_size.h;
+            top_left.y += str_size.h;
         else Assert(v_align == VA_TOP);
     }
     
     float scale = scale_for_font_size(size, font);
     
-    v2 pp = p + V2_Y * font->ascent * scale;
+    v2 pp = top_left - V2_Y * font->ascent * scale;
 
     float max_x = pp.x;
     
@@ -318,8 +321,8 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color,
 
         if(codepoint == '\n')
         {
-            pp.x = p.x;
-            pp.y += font_height(size, font);
+            pp.x  = top_left.x;
+            pp.y -= font_height(size, font);
         }
         else
         {
@@ -342,17 +345,17 @@ Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color,
         *previous_codepoint = codepoint;
     }
 
-    return { p.x, p.y,
-            max_x - p.x,
-            pp.y - p.y - font->descent * scale };
+    return { top_left.x, pp.y,
+             max_x - top_left.x,
+             top_left.y - pp.y - font->descent * scale };
 }
 
 inline
-Rect draw_string(String string, v2 p, Font_Size size, v4 color, Graphics *gfx,
+Rect draw_string(String string, v2 top_left, Font_Size size, v4 color, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
-    return draw_string(string, p, size, current_font_id(gfx), color, gfx, h_align, v_align, previous_codepoint);
+    return draw_string(string, top_left, size, current_font_id(gfx), color, gfx, h_align, v_align, previous_codepoint);
 }
 
 inline
@@ -376,6 +379,7 @@ void draw_string_in_rect_centered(String string, Rect a, Font_Size size, Font_ID
 {
     v2 string_s = string_size(string, size, font, gfx);
     v2 p = a.p + a.s/2.0f - string_s/2.0f;
+    p.y += font_ascent(size, &(*gfx->fonts)[font]) - font_descent(size, &(*gfx->fonts)[font]);
     draw_string(string, p, size, font, color, gfx);
 }
 

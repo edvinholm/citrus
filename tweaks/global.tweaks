@@ -16,12 +16,14 @@ font_oversampling_rate  2.0
 
 initial_os_window_rect  8 8 1440 1000
 
-window_border_color  0.3 0.2 0.9 1
 
 scroll_to_caret_repeat_interval 0.1  # In seconds
 
-show_player_paths false
+show_player_paths       false
 color_tiles_by_position false
 
 
 startup_user 0    # 0 means no user.
+startup_room 0    # 0 means no room.
+
+show_window_sizes false

@@ -122,43 +122,30 @@ enum Vertex_Destination
     VD_UI_TRANSLUCENT
 };
 
-// TODO @Cleanup: Move
-template<typename T, int Max>
-struct Static_Stack
-{
-    T e[Max];
-    int size;
-};
-
-template<typename T, int Max>
-void push(Static_Stack<T, Max> &stack, T elem)
-{
-    Assert(stack.size < Max);
-    Assert(stack.size >= 0);
-    stack.e[stack.size++] = elem;
-}
-
-template<typename T, int Max>
-T pop(Static_Stack<T, Max> &stack)
-{
-    Assert(stack.size <= Max);
-    Assert(stack.size > 0);
-    return stack.e[--stack.size];
-}
-
-template<typename T, int Max>
-T current(Static_Stack<T, Max> &stack, T default_if_empty)
-{
-    Assert(stack.size <= Max);
-    Assert(stack.size >= 0);
-    if(stack.size == 0) return default_if_empty;
-    else return stack.e[stack.size-1];
-}
 
 struct World_Graphics
 {
     VAO  static_opaque_vao; // For things that doesn't change very often. Like floors and walls.
 };
+
+enum Draw_Mode
+{
+    DRAW_2D,
+    DRAW_3D
+};
+
+template<int Max>
+Draw_Mode current(Static_Stack<Draw_Mode, Max> &stack)
+{
+    return current_(stack, DRAW_3D);
+}
+
+template<int Max>
+m4x4 current(Static_Stack<m4x4, Max> &stack)
+{
+    return current_(stack, M_IDENTITY);
+}
+
 
 struct Graphics
 {
@@ -175,7 +162,9 @@ struct Graphics
 
     // State
     u8 buffer_set_index;
-    Static_Stack<Vertex_Buffer<ALLOC_MALLOC> *, 8> vertex_buffer_stack; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
+    Static_Stack<Vertex_Buffer<ALLOC_MALLOC> *, 8> vertex_buffer; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
+    Static_Stack<m4x4,      16> transform;
+    Static_Stack<Draw_Mode, 16> draw_mode; 
     
     float   z_for_2d; // This is the Z value that will be set for "2D vertices"
                       // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.
@@ -198,8 +187,7 @@ struct Graphics
     
     Sprite_Map glyph_maps[NUM_FONTS];
 
-    // TODO @Robustness no_checkin: Make a Font_Table struct, so we don't accidentially pass &fonts[font_id] instead of fonts.
-    Font *fonts; // IMPORTANT: Graphics does not own this memory. This needs to be NUM_FONTS long.
+    Font_Table *fonts; // IMPORTANT: Graphics does not own this memory.
 
     // World
     World_Graphics world;

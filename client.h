@@ -12,7 +12,7 @@ String bottom_panel_tab_labels[] = {
 static_assert(ARRLEN(bottom_panel_tab_labels) == BP_TAB_NONE_OR_NUM);
 
 struct Market_UI
-{
+{    
     struct {
         Money price;
     } order_draft;
@@ -52,19 +52,21 @@ void init_client_ui(Client_UI *cui)
 struct Market
 {
     bool initialized;
-    bool waiting_for_watched_article_to_be_set;
 
-    Item_Type_ID watched_article;
+    // This is a little @Hacky. @Cleanup.
+    bool ui_needs_update; // NOTE: This is set to true to tell the UI code to for example update the price textfield after the watched article changed. It is then set to false by the UI code.
 
-    // NOTE: price history is only valid if watched_article != ITEM_NONE_OR_NUM
-    u16 price_history_length_for_watched_article;
-    Money price_history_for_watched_article[10]; // @Norelease: @Robustness: This length must be the same as it is on the server.
+    bool waiting_for_view_update; // @Norelease: What happens if we set this to true and then something goes wrong and we never get a MARKET_UPDATE from the server?  -EH, 2021-02-10
+    Market_View view;
 };
 
 void clear_and_reset(Market *market) {
     Zero(*market);
 
-    market->watched_article = ITEM_NONE_OR_NUM;
+    auto *view = &market->view;
+    Zero(*view);
+    view->target.type = MARKET_VIEW_TARGET_ARTICLE;
+    view->target.article.article = ITEM_NONE_OR_NUM;
 }
 
 struct Client
@@ -79,7 +81,7 @@ struct Client
     Window main_window;
     Rect main_window_a;
 
-    Font fonts[NUM_FONTS] = {0};
+    Font_Table fonts;
 
     // NETWORKING //
     Server_Connections connections;
@@ -99,3 +101,4 @@ struct Client
 
 User_ID current_user_id(Client *client);
 User *current_user(Client *client);
+Entity *find_current_player_entity(Client *client);

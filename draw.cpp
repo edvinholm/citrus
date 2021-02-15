@@ -51,12 +51,12 @@ void push_vertex_destination(Vertex_Destination dest, Graphics *gfx)
         default: Assert(false); break;
     }
 
-    push(gfx->vertex_buffer_stack, buffer);
+    push(gfx->vertex_buffer, buffer);
 }
 
 void pop_vertex_destination(Graphics *gfx)
 {
-    pop(gfx->vertex_buffer_stack);
+    pop(gfx->vertex_buffer);
 }
 
 
@@ -84,7 +84,7 @@ void end_vertex_render_object(Render_Object_Buffer *buffer)
     
     auto &obj = buffer->current_vertex_object;
     
-    Assert(buffer->vertices.n > obj.vertex0);
+//    Assert(buffer->vertices.n > obj.vertex0);
     obj.vertex1 = buffer->vertices.n;
 
     array_add(buffer->objects, obj);

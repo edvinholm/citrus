@@ -7,7 +7,7 @@ Rect grid_cell(int col, int row, Rect grid_a, int cols, int rows, float spacing,
     
     v2 s = { (grid_a.w - (cols-1) * spacing)/cols, row_h };
     v2 cell_p_rel = { (float)col * (s.w + spacing),
-                      (float)row * (s.h + spacing) };
+                      (float)(rows-row-1) * (s.h + spacing) };
     return rect(grid_a.p + cell_p_rel, s);
 }
 

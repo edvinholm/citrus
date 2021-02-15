@@ -87,9 +87,15 @@ void operator -= (v2 &a, v2 b)
 
 
 inline
-v2 operator*(v2 A, float S)
+v2 operator * (v2 u, float s)
 {
-    return {A.x*S, A.y*S};
+    return { u.x * s, u.y * s };
+}
+
+inline
+v2 operator * (float s, v2 u)
+{
+    return u * s;
 }
 
 inline

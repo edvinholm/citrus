@@ -18,7 +18,21 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 {
     auto *buffer = current_vertex_buffer(gfx);
     Assert(buffer);
+
     add_vertices(p, uv, c, tex, n, buffer);
+
+    // MULTIPLY BY CURRENT TRANSFORM MATRIX //
+    if(gfx->transform.size > 0)
+    {
+        m4x4 transform = current(gfx->transform);
+        
+        auto *added_p = buffer->p + buffer->n - n;
+        
+        for(u32 i = 0; i < n; i++) {
+            v3 v = added_p[i];
+            added_p[i] = vecmatmul(v, transform);
+        }
+    }
 }
 
 template<u32 NUM_VERTICES>
@@ -98,7 +112,7 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
 }
 
 
-void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM, bool fake_lighting = true)
 {
     v3 p1 = p0 + s;
 
@@ -114,23 +128,31 @@ void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_
     v3 h = { p0.x, p1.y, p0.z };
     
     v3 v[6*6] = {
-        a, f, b,
-        a, f, c,
-
-        h, d, e,
-        h, d, g,
-
-        a, e, h,
-        a, e, c,
-
-        f, b, d,
-        g, b, d,
-
+        
+        // Towards negative X
         a, g, b,
         a, g, h,
 
+        // Towards positive X
         e, c, d,
-        f, c, d
+        f, c, d,
+        
+        // Towards negative Y
+        a, f, b,
+        a, c, f,
+
+        // Towards positive Y
+        h, d, e,
+        h, g, d,
+
+        // Towards negative Z
+        e, h, a,
+        e, a, c,
+
+        // Towards positive Z
+        b, f, d,
+        b, d, g
+
     };
     
     
@@ -179,24 +201,37 @@ void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_
         1, 1
     };
 
+    v4 color_1 = color;
+    v4 color_2 = color;
+    v4 color_3 = color;
+    v4 color_4 = color;
+
+    if(fake_lighting)
+    {
+        color_1.rgb *= 1;
+        color_2.rgb *= (1.0f / 0.9f);
+        color_3.rgb *= 0.9f;
+        color_4.rgb *= 0.9f * 0.9f;
+    }
+
     v4 colors[6*6] = {
-        color, color, color,
-        color, color, color,
+        color_1, color_1, color_1,
+        color_1, color_1, color_1,
         
-        color, color, color,
-        color, color, color,
+        color_2, color_2, color_2,
+        color_2, color_2, color_2,
         
-        color, color, color,
-        color, color, color,
+        color_3, color_3, color_3,
+        color_3, color_3, color_3,
         
-        color, color, color,
-        color, color, color,
+        color_4, color_4, color_4,
+        color_4, color_4, color_4,
         
-        color, color, color,
-        color, color, color,
+        color_2, color_2, color_2,
+        color_2, color_2, color_2,
         
-        color, color, color,
-        color, color, color
+        color_3, color_3, color_3,
+        color_3, color_3, color_3
     };
 
     float t = bound_slot_for_texture(texture, gfx);
@@ -294,6 +329,14 @@ void draw_quad(v3 p0, v3 d1, v3 d2, v4 color, Graphics *gfx, v2 *uvs = NULL, Tex
     draw_quad_abs(p0, b, c, d, color, gfx, uvs, tex);
 }
 
+void draw_quad(Quad a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
+{    
+    v3 d1 = rotate_vector(V3_X, a.q);
+    v3 d2 = rotate_vector(V3_Y, a.q);
+    
+    draw_quad(a.p, d1, d2, color, gfx, uvs, tex);
+}
+
 // NOTE: n is the normal.
 void draw_line(v3 a, v3 b, v3 n, float w, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
 {
@@ -335,9 +378,14 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 
 #endif
 
-void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect(Rect a, v4 color, Graphics *gfx, float z_3d = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    float z = eat_z_for_2d(gfx);
+    Draw_Mode draw_mode = current(gfx->draw_mode); // @Volatile: Should not pass default here, should be defined where stack is defined.
+
+    float z = 0;
+    if     (draw_mode == DRAW_2D) z = eat_z_for_2d(gfx);
+    else if(draw_mode == DRAW_3D) z = z_3d;
+    
     
     v3 v[6] = {
         { a.x,       a.y,       z },
@@ -389,14 +437,12 @@ void draw_rect(Rect a, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID textu
     triangles(v, uvs, c, tex, 6, gfx);
 }
 
-
-void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, float z = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_rect({p0, (p1 - p0)}, color, gfx, uvs, texture);
+    draw_rect({p0, (p1 - p0)}, color, gfx, z, uvs, texture);
 }
 
-
-void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, float z = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    draw_rect({p0, s}, color, gfx, uvs, texture);
+    draw_rect({p0, s}, color, gfx, z, uvs, texture);
 }

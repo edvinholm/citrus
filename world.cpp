@@ -93,7 +93,7 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p
     {
         auto *e = &room->entities[i];
 
-        AABB bbox = entity_aabb(static_cast<S__Entity *>(e), world_t);
+        AABB bbox = entity_aabb(e, world_t, room);
            
         float ray_t;
         v3 intersection;
@@ -162,7 +162,6 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
     p -= viewport.p;
     p  = compdiv(p, viewport.s / 2.0f);
     p -= V2_XY;
-    p.y *= -1;
     
     /* Make 3D vector */
     v3 u = { p.x, p.y, 0 };
@@ -179,7 +178,6 @@ v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
 {
     v2 result = vecmatmul(p, projection).xy;
 
-    result.y *= -1;
     result += V2_XY;
     result  = compmul(result, viewport.s / 2.0f);
     result += viewport.p;
@@ -189,12 +187,12 @@ v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
 
 
 // NOTE: tp is tile position.
-Entity create_preview_item_entity(Item *item, v3 tp, double world_t)
+Entity create_preview_item_entity(Item *item, v3 tp, double world_t, Quat q = Q_IDENTITY)
 {
     v3 p = item_entity_p_from_tp(tp, item);
     
     Entity e = {0};
-    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, world_t);
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, world_t, q);
 
     e.is_preview = true;
     return e;
@@ -250,15 +248,38 @@ Entity *find_player_entity(User_ID user_id, Room *room)
     return NULL;
 }
 
-void prepare_entity_for_drawing(Entity *e, User_ID my_user_id)
+
+void update_local_data_for_room(Room *room, double world_t, Client *client)
 {
-    if(e->type != ENTITY_PLAYER) return;
-    e->player_local.is_me = (e->player_e.user_id == my_user_id);
+    User    *user    = current_user(client);
+    User_ID  user_id = current_user_id(client);
+    
+    for(int i = 0; i < room->entities.n; i++)
+    {
+        auto *e = &room->entities[i];
+        
+        if(e->type == ENTITY_PLAYER)
+        {
+            auto *local = &e->player_local;
+            local->is_me = (e->player_e.user_id == user_id);
+            
+            local->state_after_completed_action_queue = player_state_of(e, room);
+            apply_actions_to_player_state(&local->state_after_completed_action_queue,
+                                          e->player_e.action_queue, e->player_e.action_queue_length,
+                                          world_t, room, user);
+        }
+    }       
+}
+
+bool item_entity_can_be_at_tp(Entity *e, v3 tp, double world_t, Room *room)
+{
+    Assert(e->type == ENTITY_ITEM);
+    return item_entity_can_be_at_tp(e, tp, world_t, room->entities.e, room->entities.n, room);
 }
 
 bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
 {
-    return can_place_item_entity_at_tp(item, tp, world_t, static_cast<S__Room *>(room), room->entities.e, room->entities.n);
+    return can_place_item_entity_at_tp(item, tp, world_t, room->entities.e, room->entities.n, room);
 }
 
 
@@ -272,13 +293,12 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_
 
     Assert(e->type == ENTITY_ITEM);
     Item *item = &e->item_e.item;
-    
-    array_add(*_actions, ENTITY_ACT_PICK_UP);
 
     switch(item->type)
     {
         case ITEM_PLANT: {
             array_add(*_actions, ENTITY_ACT_HARVEST);
+            array_add(*_actions, ENTITY_ACT_WATER);
         } break;
 
         case ITEM_MACHINE: {
@@ -286,6 +306,9 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_
             array_add(*_actions, ENTITY_ACT_SET_POWER_MODE);
         } break;
     }
+    
+    array_add(*_actions, ENTITY_ACT_PICK_UP);
+    array_add(*_actions, ENTITY_ACT_PLACE_IN_INVENTORY);
 }
 
 // ///////////////////// //

@@ -24,7 +24,6 @@ void request_connection_to_market(Client *client)
 }
 
 
-
 User_ID current_user_id(Client *client)
 {
     if(!client->connections.user.connected) return NO_USER;
@@ -38,6 +37,14 @@ User *current_user(Client *client)
 {
     if(current_user_id(client) == NO_USER) return NULL;
     return &client->user;
+}
+
+Entity *find_current_player_entity(Client *client)
+{
+    User_ID user_id = current_user_id(client);
+    if(user_id == NO_USER) return NULL;
+
+    return find_player_entity(user_id, &client->room);
 }
 
 bool action_of_type_in_queue(C_MS_Action_Type type, Client *client)
@@ -95,7 +102,7 @@ void user_window(UI_Context ctx, Client *client)
     bool connected  = client->connections.user.connected; // @Cleanup
     bool connecting = client->connections.user_connect_requested;
 
-    _WINDOW_(P(ctx), user->username, true, connected, user->color);
+    _WINDOW_(P(ctx), user->username, true, opt(user->color, connected));
 
     if(connected) {
         _TOP_CUT_(480 + 72);
@@ -152,174 +159,126 @@ void user_window(UI_Context ctx, Client *client)
     }
 }
 
-void request_market_set_watched_article_action(Item_Type_ID article, Market *market, Client *client)
+void request_market_set_view(Market_View_Target target, Market *market, Client *client)
 {
     C_MS_Action action = {0};
-    action.type = C_MS_SET_WATCHED_ARTICLE;
-    
-    action.set_watched_article.article = article;
+    action.type = C_MS_SET_VIEW;
+
+    auto *x = &action.set_view;
+    x->target = target;
     
     array_add(client->connections.market_action_queue, action);// @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
 
-    market->waiting_for_watched_article_to_be_set = true;
+    market->waiting_for_view_update = true;
 }
 
-void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mui, Client *client)
+
+void market_article_view(UI_Context ctx, Market_View *view, bool controls_enabled, Input_Manager *input, Market_UI *mui, Market *market, Client *client, User *user = NULL, Item *inventory_item = NULL)
 {
     U(ctx);
     
-    User *user = current_user(client);
-    auto *market = &client->market;
+    Assert(view->target.type == MARKET_VIEW_TARGET_ARTICLE);
+    auto *article_view   = &view->article;
+    auto *article_target = &view->target.article;
+    auto article_id   = article_target->article; // @Jai: using article_target.
+    auto price_period = article_target->price_period;
     
     bool connecting = client->connections.market_connect_requested;
     bool connected  = !connecting && client->connections.market.connected;
 
-    String window_title;
-    if(connected)       window_title = STRING("MARKET [CONNECTED]");
-    else if(connecting) window_title = STRING("MARKET [CONNECTING]");
-    else                window_title = STRING("MARKET [DISCONNECTED]");
-
     
-    Item *inventory_item = NULL;
-    if(user) inventory_item = get_selected_inventory_item(user);
-
-    if(inventory_item != NULL) {
-        if(market->watched_article != inventory_item->type && 
-            !market->waiting_for_watched_article_to_be_set)
-        {
-            request_market_set_watched_article_action(inventory_item->type, market, client);
-        }
-    }
-
-    
-    bool controls_enabled = connected && !market->waiting_for_watched_article_to_be_set;
-    
-
-    _WINDOW_(P(ctx), window_title);
-
-
-
-    // ARTICLE LIST / SEARCH //
-    { _LEFT_CUT_(150);
-
-        bool list_controls_enabled = controls_enabled;
-
-        // SEARCH FIELD
-        { _TOP_CUT_(32);
-            bool text_did_change;
-            textfield_tmp(P(ctx), STRING("Foobar"), input, &text_did_change, list_controls_enabled); // @Norelease
-        }
-        cut_top(4, ctx.layout);
-
-        // @Norelease: Scroll area for the article list...
-        
-        // ITEM TYPES //
-        for(int i = 0; i < ITEM_NONE_OR_NUM; i++)
-        {
-            cut_top(2, ctx.layout);
-            
-            _TOP_SLIDE_(36);
-            
-            Item_Type_ID type_id = (Item_Type_ID)i;
-            auto *type = &item_types[type_id];
-            bool selected = (market->watched_article == type_id);
-            
-            if(button(PC(ctx, i), type->name, list_controls_enabled, selected) & CLICKED_ENABLED) {
-                    
-                request_market_set_watched_article_action(type_id, market, client);
-
-                if(user) inventory_deselect(user);
-            }
-            
-        }
-    }
-    cut_left(window_default_padding, ctx.layout);
-    
-
     // PLACE ORDER //
     { _BOTTOM_CUT_(40);
 
-        // NOTE: We don't check that a C_MS_PLACE_ORDER is not queued here. Because
-        //       all data net_client needs is included in the action struct as of
-        //       2021-02-08. I don't know about user experience though, maybe you
-        //       don't want to be able to place a new order until you see that the
-        //       first one successfully was uploaded to the market server.... But
-        //       that's an issue for later. (@Norelease).
-        bool order_controls_enabled = controls_enabled; 
+        { _SHRINK_(4); // Panel padding
 
-        // PRICE, SELL, BUY //
-        { _RIGHT_CUT_(200);
-            _GRID_(2, 1, window_default_padding);
+            // NOTE: We don't check that a C_MS_PLACE_ORDER is not queued here. Because
+            //       all data net_client needs is included in the action struct as of
+            //       2021-02-08. I don't know about user experience though, maybe you
+            //       don't want to be able to place a new order until you see that the
+            //       first one successfully was uploaded to the market server.... But
+            //       that's an issue for later. (@Norelease).
+            bool order_controls_enabled = controls_enabled; 
 
-            C_MS_Action action = {0};
-            action.type = C_MS_PLACE_ORDER;
+            // PRICE, SELL, BUY //
+            { _RIGHT_CUT_(200);
+                _GRID_(2, 1, window_default_padding);
 
-            auto *order  = &action.place_order;
-            order->price = mui->order_draft.price;
+                C_MS_Action action = {0};
+                action.type = C_MS_PLACE_ORDER;
 
-            bool do_enqueue_action = false;
+                auto *order  = &action.place_order;
+                order->price = mui->order_draft.price;
 
-            bool place_order_buttons_enabled = (order_controls_enabled &&
-                                                market->watched_article != ITEM_NONE_OR_NUM);
+                bool do_enqueue_action = false;
 
-            // BUY BUTTON //
-            { _CELL_();
+                bool place_order_buttons_enabled = (order_controls_enabled &&
+                                                    article_id != ITEM_NONE_OR_NUM);
 
-                bool enabled = false;
+                // BUY BUTTON //
+                { _CELL_();
 
-                if(user)
-                {
-                    Money available_money = user->money - user->reserved_money;
+                    bool enabled = false;
+
+                    if(user)
+                    {
+                        Money available_money = user->money - user->reserved_money;
                 
-                    enabled = (place_order_buttons_enabled &&
-                               inventory_item == NULL &&
-                               available_money >= order->price &&
-                               inventory_has_available_space_for_item_type(market->watched_article, user));
-                }
+                        enabled = (place_order_buttons_enabled     &&
+                                   inventory_item == NULL          &&
+                                   available_money >= order->price &&
+                                   inventory_has_available_space_for_item_type(article_id, user));
+                    }
                 
-                if(button(P(ctx), STRING("BUY"), enabled) & CLICKED_ENABLED) {
-                    order->is_buy_order = true;
-                    order->buy.item_type = market->watched_article;
-                    do_enqueue_action = true;
+                    if(button_colored(P(ctx), C_BUY, STRING("BUY"), enabled) & CLICKED_ENABLED)
+                    {
+                        order->is_buy_order = true;
+                        order->buy.item_type = article_id;
+                        do_enqueue_action = true;
+                    }
                 }
-            }
 
-            // SELL BUTTON //
-            { _CELL_();
-                bool enabled = place_order_buttons_enabled && (inventory_item != NULL);
-                if(button(P(ctx), STRING("SELL"), enabled) & CLICKED_ENABLED) {
-                    order->is_buy_order = false;
-                    order->sell.item_id = inventory_item->id;
-                    do_enqueue_action = true;
+                // SELL BUTTON //
+                { _CELL_();
+                    bool enabled = place_order_buttons_enabled && (inventory_item != NULL);
+                    if(button_colored(P(ctx), C_SELL, STRING("SELL"), enabled) & CLICKED_ENABLED) {
+                        order->is_buy_order = false;
+                        order->sell.item_id = inventory_item->id;
+                        do_enqueue_action = true;
 
-                    Assert(user);
-                    if(in_array(input->keys, VKEY_SHIFT))
-                        select_next_inventory_item_of_type(inventory_item->type, user);
+                        Assert(user);
+                        if(in_array(input->keys, VKEY_SHIFT)) // @Norelease @Robustness :InputFrames: We need to know if shift was down when the button was clicked. The click can have happened a few input frames back. -EH, 2021-02-12
+                            select_next_inventory_item_of_type(inventory_item->type, user);
+                    }
                 }
-            }
 
-            if(do_enqueue_action) {
+                if(do_enqueue_action) {
 // We changed this rule but I don't know yet if it was a good idea: Assert(!action_of_type_in_queue(C_MS_PLACE_ORDER, client)); @Cleanup
-                array_add(client->connections.market_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
+                    array_add(client->connections.market_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
+                }
             }
-        }
-        cut_right(window_default_padding, ctx.layout);
+            cut_right(window_default_padding, ctx.layout);
 
         
-        // PRICE TEXTFIELD //
-        { _RIGHT_CUT_(100);            
-            auto *price = &mui->order_draft.price;
-            *price = textfield_s64(P(ctx), *price, input, order_controls_enabled);
+            // PRICE TEXTFIELD //
+            { _RIGHT_CUT_(100);            
+                auto *price = &mui->order_draft.price;
+                *price = textfield_s64(P(ctx), *price, input, order_controls_enabled);
+            }
+
         }
+        panel(P(ctx));
     }
 
 
     // ARTICLE DETAILS //
-    if(connected && market->watched_article != ITEM_NONE_OR_NUM) {
-
-        Assert(market->watched_article >= 0 && market->watched_article < ARRLEN(item_types));
+    if(article_id != ITEM_NONE_OR_NUM)
+    {
+        Assert(article_view);
+        Assert(article_id >= 0 &&
+               article_id < ARRLEN(item_types));
                
-        Item_Type *item_type = &item_types[market->watched_article];
+        Item_Type *item_type = &item_types[article_id];
 
         // HEADER
         { _TOP_CUT_(48);
@@ -334,7 +293,7 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
             { _RIGHT_CUT_(96);
                 cut_bottom(2, ctx.layout); // To get it to line up with the name
 
-                Money price = (market->price_history_length_for_watched_article == 0) ? 0 : market->price_history_for_watched_article[market->price_history_length_for_watched_article-1];
+                Money price = (article_view->num_prices == 0) ? 0 : article_view->prices[article_view->num_prices-1];
                 String price_str = concat_tmp("¤", price, ctx.manager->string_builder);
                 ui_text(P(ctx), price_str, FS_28, FONT_BODY, HA_RIGHT, VA_BOTTOM);
             }
@@ -346,22 +305,60 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
         cut_top(window_default_padding, ctx.layout);
 
         // GRAPH
-        { _TOP_CUT_(300);
+        { _TOP_CUT_(min(300, area(ctx.layout).h - window_default_padding));
+
+            // Period selection
+            { _BOTTOM_CUT_(28);
+
+                bool small_buttons = (area(ctx.layout).w < 395);
+
+                { _SHRINK_(3);
+                    for(int i = PERIOD_NONE_OR_NUM-1; i >= 0; i--)
+                    {    
+                        Price_Period period = (Price_Period)i;
+                        
+                        if(i < PERIOD_NONE_OR_NUM-1) slide_right(2, ctx.layout);
+
+                        String label = price_period_names[i];
+                        if(small_buttons) label.length = min(1, label.length);
+                        
+                        _RIGHT_SLIDE_((small_buttons) ? 25 : 64);
+                        bool selected = (price_period == period);
+                        if(button(PC(ctx, i), label, !selected, selected) & CLICKED_ENABLED)
+                        {
+                            Market_View_Target view_target;
+                            Zero(view_target);
             
-     
-            // @Cleanup
-            float values[ARRLEN(Market::price_history_for_watched_article)];
-            for(int i = 0; i < market->price_history_length_for_watched_article; i++) {
-                values[i] = (float)market->price_history_for_watched_article[i];
+                            view_target.type = MARKET_VIEW_TARGET_ARTICLE;
+                            view_target.article.article      = article_id;
+                            view_target.article.price_period = period;
+         
+                            request_market_set_view(view_target, market, client);
+                        }
+                    }
+
+                    ui_text(P(ctx), STRING("PERIOD:"), FS_16, FONT_BODY, HA_RIGHT, VA_CENTER);
+                }
+                panel(P(ctx));
             }
-            int num_values = market->price_history_length_for_watched_article;
+            cut_bottom(2, ctx.layout);
+
+            
+            // The graph
+            
+            // @Cleanup
+            float values[ARRLEN(article_view->prices)];
+            for(int i = 0; i < article_view->num_prices; i++) {
+                values[i] = (float)article_view->prices[i];
+            }
+            int num_values = article_view->num_prices;
             
             // @Cleanup
             float min = FLT_MAX;
             float max = 1;
-            for(int i = 0; i < market->price_history_length_for_watched_article; i++)
+            for(int i = 0; i < article_view->num_prices; i++)
             {
-                float price = (float)market->price_history_for_watched_article[i];
+                float price = (float)article_view->prices[i];
                 Assert(price >= 0);
 
                 if(price < min) min = price;
@@ -369,7 +366,7 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
             }
 
             if(min > max) {
-                Assert(market->price_history_length_for_watched_article == 0);
+                Assert(article_view->num_prices == 0);
                 min = 0;
             }
             else if (floats_equal(min, max)) {
@@ -378,6 +375,10 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
                 max += min;
             }
 
+            // Some margin
+            min -= (max - min) * 0.05f;
+            max += (max - min) * 0.05f;
+
             graph(P(ctx), values, num_values, min, max);
         }
 
@@ -385,6 +386,165 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
         
     }
     // --
+
+}
+
+void market_orders_view(UI_Context ctx, Market_View *view, bool controls_enabled)
+{
+    U(ctx);
+
+    Assert(view->target.type == MARKET_VIEW_TARGET_ORDERS);
+    auto *orders_view = &view->orders;
+
+    ui_text(P(ctx), STRING("Hello, Sailor!"), FS_48, FONT_BODY, HA_CENTER, VA_CENTER);
+}
+
+
+void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mui, Client *client)
+{
+    U(ctx);
+
+    const Price_Period default_price_period = PERIOD_HOUR;
+    
+    User *user = current_user(client);
+    auto *market = &client->market;
+    auto *view   = &market->view;
+
+    auto *article_view_target = &view->target.article;
+    auto *article_view        = &view->article;
+    if(view->target.type != MARKET_VIEW_TARGET_ARTICLE) {
+        article_view_target = NULL;
+        article_view        = NULL;
+    }
+    
+
+    if(market->ui_needs_update) {
+        if(article_view)
+        {
+            auto price = (article_view->num_prices == 0) ? 0 : article_view->prices[article_view->num_prices-1];
+            mui->order_draft.price = price;
+        }
+        
+        market->ui_needs_update = false;
+    }
+    
+    
+    bool connecting = client->connections.market_connect_requested;
+    bool connected  = !connecting && client->connections.market.connected;
+
+    String window_title;
+    if(connected)       window_title = STRING("MARKET [CONNECTED]");
+    else if(connecting) window_title = STRING("MARKET [CONNECTING]");
+    else                window_title = STRING("MARKET [DISCONNECTED]");
+
+    
+    Item *inventory_item = NULL;
+    if(user) inventory_item = get_selected_inventory_item(user);
+
+    // Set view to article of selected inventory item type.
+    if(inventory_item != NULL) {
+        if((!article_view_target || article_view_target->article != inventory_item->type) && 
+            !market->waiting_for_view_update)
+        {
+            Market_View_Target view_target;
+            Zero(view_target);
+            
+            view_target.type = MARKET_VIEW_TARGET_ARTICLE;
+            view_target.article.article      = inventory_item->type;
+            view_target.article.price_period = (article_view_target) ? article_view_target->price_period : default_price_period;
+            
+            request_market_set_view(view_target, market, client);
+        }
+    }
+
+    
+    bool controls_enabled = connected && !market->waiting_for_view_update;
+    
+
+
+    _THEME_(C_THEME_MARKET);
+    _WINDOW_(P(ctx), window_title, true, {0}, {0}, opt<v2>({ 340, 320 }));
+
+
+
+    // ARTICLE LIST / SEARCH / ORDERS BUTTON //
+    if(area(ctx.layout).w >= 554)
+    {
+        _LEFT_CUT_(150);
+
+        bool sidebar_controls_enabled = controls_enabled;
+
+        // SEARCH FIELD
+        { _TOP_CUT_(32);
+            bool text_did_change;
+            textfield_tmp(P(ctx), STRING("Foobar"), input, &text_did_change, sidebar_controls_enabled); // @Norelease
+        }
+        cut_top(4, ctx.layout);
+
+        // ORDERS BUTTON
+        { _BOTTOM_CUT_(40);
+
+            { _SHRINK_(4);
+                
+                bool selected = view->target.type == MARKET_VIEW_TARGET_ORDERS;
+                bool enabled  = !selected && sidebar_controls_enabled;
+            
+                if(button(P(ctx), STRING("PLACED ORDERS"), enabled, selected, opt<v4>({ 0.02, 0.28, 0.23, 1 })) & CLICKED_ENABLED)
+                {
+                    Market_View_Target target;
+                    Zero(target);
+                    target.type = MARKET_VIEW_TARGET_ORDERS;
+
+                    request_market_set_view(target, market, client);
+                }
+            }
+
+            panel(P(ctx));
+        }
+        cut_bottom(4, ctx.layout);
+
+        // @Norelease: Scroll area for the article list...
+        
+        // ITEM TYPES //
+        for(int i = 0; i < ITEM_NONE_OR_NUM; i++)
+        {
+            cut_top(2, ctx.layout);
+            
+            _TOP_SLIDE_(36);
+            
+            Item_Type_ID type_id = (Item_Type_ID)i;
+            auto *type = &item_types[type_id];
+            bool selected = (article_view_target && article_view_target->article == type_id);
+            
+            if(button(PC(ctx, i), type->name, sidebar_controls_enabled, selected) & CLICKED_ENABLED)
+            {       
+                Market_View_Target view_target;
+                Zero(view_target);
+            
+                view_target.type = MARKET_VIEW_TARGET_ARTICLE;
+                view_target.article.article      = type_id;
+                view_target.article.price_period = (article_view_target) ? article_view_target->price_period : default_price_period;
+         
+                request_market_set_view(view_target, market, client);
+                
+                if(user) inventory_deselect(user);
+            }
+            
+        }
+    }
+    cut_left(window_default_padding, ctx.layout);
+
+
+    // CURRENT VIEW //
+    switch(view->target.type) {
+        case MARKET_VIEW_TARGET_ORDERS: {
+            market_orders_view(P(ctx), view, controls_enabled);
+        } break;
+
+        case MARKET_VIEW_TARGET_ARTICLE: {
+            market_article_view(P(ctx), view, controls_enabled, input, mui, market, client, user, inventory_item);
+        } break;
+    }
     
 }
 
@@ -393,6 +553,7 @@ String entity_action_label(Entity_Action action)
 {
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
+        case ENTITY_ACT_PLACE_IN_INVENTORY: return STRING("PLACE IN INVENTORY"); break;
         case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
@@ -402,6 +563,8 @@ String entity_action_label(Entity_Action action)
                 return STRING("STOP");
             }
         } break;
+        case ENTITY_ACT_WATER:      return STRING("WATER"); break;
+        case ENTITY_ACT_CHESS_MOVE: return STRING("CHESS MOVE"); break;
 
         default: Assert(false); return STRING("???"); break;
     }
@@ -422,14 +585,27 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
 
     auto *type = &item_types[item->type];
 
+    User_ID user_id = current_user_id(client);
+    bool controls_enabled = (user_id != NO_USER);
+
     UI_ID window_id;
     Rect window_a = begin_window(&window_id, P(ctx), type->name);
     {
         _AREA_(window_a);
 
-        if(e) {
+        Entity *player = NULL;
+        if(user_id != NO_USER) {
+            player = find_player_entity(user_id, &client->room);
+        }
+
+        // ACTIONS //
+        if(e && player) {
+
+            Assert(player->type == ENTITY_PLAYER);            
             Assert(e->type == ENTITY_ITEM);
-            
+
+            auto *player_local = &player->player_local;
+
             Array<Entity_Action_Type, ALLOC_TMP> actions = {0};
             get_available_actions_for_entity(e, &actions);
 
@@ -453,7 +629,7 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                     } break;
                 }
     
-                bool enabled = entity_action_predicted_possible(entity_action, e, client->user.id, world_t, &client->user);
+                bool enabled = controls_enabled && entity_action_predicted_possible(entity_action, e, &player_local->state_after_completed_action_queue, world_t, &client->user);
                 
                 if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED) {
 
@@ -506,8 +682,61 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
                     String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
                     ui_text(P(ctx), grow_str);
                 }
-            };
+            } break;
         }
+        
+        // IF ITEM IS ENTITY //
+        if(e)
+        {
+            cut_top(window_default_padding, ctx.layout);
+            
+            switch(item->type) {
+                // @Norelease: @Temporary: I think we want the chess game to be in a separate window,
+                //                         that is only open when the character sits by the board.
+                case ITEM_CHESS_BOARD: {
+                    auto *board = &e->item_e.chess_board;
+                    auto *local = &e->item_local.chess;
+                    _TOP_SQUARE_CUT_();
+
+                    UI_Chess_Board *ui_board = ui_chess_board(P(ctx), board, local->selected_square_ix_plus_one - 1);
+
+                    if(ui_board->clicked_square_ix >= 0) {
+
+                        if(local->selected_square_ix_plus_one > 0)
+                        {
+                           // @Norelease: Check move possibility
+                            
+                            u8 from = local->selected_square_ix_plus_one-1;
+                            u8 to   = ui_board->clicked_square_ix;
+
+                            // ENQUEUE CHESS MOVE ACTION
+                            C_RS_Action action = {0};
+                            action.type = C_RS_ACT_ENTITY_ACTION;                    
+                            auto &act = action.entity_action;
+
+                            Entity_Action entity_action = {0};
+                            entity_action.type = ENTITY_ACT_CHESS_MOVE;
+                            entity_action.chess_move.from = from;
+                            entity_action.chess_move.to   = to;
+
+                            act.entity = e->id;
+                            act.action = entity_action;
+
+                            array_add(client->connections.room_action_queue, action);
+                            // /////////////////////////
+                            
+                            local->selected_square_ix_plus_one = 0;
+                        }
+                        else {
+                            local->selected_square_ix_plus_one = ui_board->clicked_square_ix + 1;
+                        }
+                        
+                    }
+                    
+                } break;
+            }
+        }
+
     }
     end_window(window_id, ctx.manager, _close_button_state);
 }
@@ -526,6 +755,8 @@ void room_window(UI_Context ctx, Client *client)
     Room_ID requested_room = (client->connections.room_connect_requested) ? client->connections.requested_room : -1;
     Room_ID current_room   = client->connections.room.current_room;
 
+    _THEME_(C_THEME_ROOM);
+    
     { _WINDOW_(P(ctx), STRING("ROOM"));
         { _TOP_CUT_(room_button_h*2 + window_default_padding);
             _GRID_(num_rooms/2, 2, window_default_padding);
@@ -595,39 +826,51 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     auto world_t = world_time_for_room(room, t);
 
     Entity *player_entity = NULL;
-    User_ID current_user = current_user_id(client);
-    if(current_user != NO_USER) {
-        player_entity = find_player_entity(current_user, room);
+    User_ID user_id = current_user_id(client);
+    if(user_id != NO_USER) {
+        player_entity = find_player_entity(user_id, room);
     }
 
-    const float menu_bar_button_s = 64;
-    
-    { _LEFT_CUT_(menu_bar_button_s);
+    const float menu_bar_button_s = 52;
+    const float menu_bar_pad      = 4;
 
-        { _AREA_COPY_();
+    // LEFT MENU BAR //
+    { _LEFT_CUT_(menu_bar_button_s + menu_bar_pad * 2);
 
+        { _SHRINK_(menu_bar_pad);
+
+            // ROOM BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("ROOM"), true, cui->room_window_open) & CLICKED_ENABLED) {
+                if(button_colored(P(ctx), C_ROOM_BASE, STRING("ROOM"), true, cui->room_window_open) & CLICKED_ENABLED) {
                     cui->room_window_open = !cui->room_window_open;
                 }
             }
             
+            slide_top(menu_bar_pad, ctx.layout);
+
+            // USER BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("USER"), true, cui->user_window_open) & CLICKED_ENABLED) {
+                if(button_colored(P(ctx), C_USER_BASE, STRING("USER"), true, cui->user_window_open) & CLICKED_ENABLED) {
                     cui->user_window_open = !cui->user_window_open;
                 }
             }
             
+            slide_top(menu_bar_pad, ctx.layout);
+
+            // MARKET BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("MARK"), true, cui->market_window_open) & CLICKED_ENABLED) {
+                if(button_colored(P(ctx), C_MARKET_BASE, STRING("MARK"), true, cui->market_window_open) & CLICKED_ENABLED) {
                     cui->market_window_open = !cui->market_window_open;
                     if(cui->market_window_open) {
                         reset(&cui->market);
                     }
                 }
             }
+            
+            slide_top(menu_bar_pad, ctx.layout);
 
 #if DEVELOPER
+            // DEVELOPER BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
                 if(button(P(ctx), STRING("DEV"), true, cui->dev_window_open) & CLICKED_ENABLED) {
                     cui->dev_window_open = !cui->dev_window_open;
@@ -636,7 +879,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 #endif
         }
 
-        panel(P(ctx));
+        panel(P(ctx), opt<v4>({ 0.10, 0.10, 0.10, 1}) );
     }
     
 
@@ -673,7 +916,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     }
 
     
-    { _SHRINK_(16); _LEFT_(240); _BOTTOM_(360);
+    { _SHRINK_(16); _LEFT_(240); _BOTTOM_(424);
         
         Item *selected_item = get_selected_inventory_item(&client->user);
         if(selected_item) {
@@ -754,28 +997,28 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(!e) continue;
             Assert(e->type == ENTITY_PLAYER);
 
-            v3 entity_p      = entity_position(e, world_t);
+            v3 entity_p      = entity_position(e, world_t, room);
             v2 bottom_center = world_to_screen_space(entity_p + V3_Z * 5, world_view_a, world_projection);
 
-            bottom_center.y = min(chat_y, bottom_center.y);
-            if(bottom_center.y < chat_y) chat_y = bottom_center.y;
+            bottom_center.y = max(chat_y, bottom_center.y);
+            if(bottom_center.y > chat_y) chat_y = bottom_center.y;
 
             // @Robustness: If we change how we draw chat messages we need to change this code that measures the string.
             const Font_Size fs = FS_14;
             const Font_ID font = FONT_BODY;
             
             float max_w = 160;
-            Body_Text bt = create_body_text(chat->text, {0, 0, max_w, 0}, fs, font, client->fonts);
+            Body_Text bt = create_body_text(chat->text, {0, 0, max_w, 0}, fs, font, &client->fonts);
 
             float w = max_w;
-            if(bt.lines.n == 1) w = body_text_line_width(0, &bt, client->fonts);
+            if(bt.lines.n == 1) w = body_text_line_width(0, &bt, &client->fonts);
 
             Rect a;
             a.s = { w + 8, body_text_height(&bt) + 4 };
             a.x = bottom_center.x - a.w / 2.0f;
             a.y = bottom_center.y - a.h;
             
-            chat_y -= a.h + 8;
+            chat_y += a.h + 8;
 
             _AREA_(a);
             ui_chat(PC(ctx, i), chat->text);
@@ -786,6 +1029,8 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(player_entity != NULL) {
                 Assert(player_entity->type == ENTITY_PLAYER);
 
+                Player_State player_state = player_state_of(player_entity, &client->room);
+                
                 auto *player_e = &player_entity->player_e;
                 for(int i = 0; i < player_e->action_queue_length; i++)
                 {
@@ -800,16 +1045,23 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                             Assert(entity_action->target != NO_ENTITY);
                             Entity *target = find_entity(entity_action->target, room);
 
-                            Assert(target); // @Norelease: This fails if this is a pick-up action and the action is already performed. But we shouldn't reach this point if the action already is performed.                    
-                            Assert(target->type == ENTITY_ITEM); // @Temporary @Norelease: We will have player->player actions, right?
+                            if (target)
+                            {
+                                Assert(target->type == ENTITY_ITEM); // @Temporary @Norelease: We will have player -> player actions, right?
 
-                            label = item_types[target->item_e.item.type].name;
-                            Assert(label.length > 0);
-                            label.length = 1;
+                                label = item_types[target->item_e.item.type].name;
+                                Assert(label.length > 0);
+                                label.length = 1;
+                            }
+
                         } break;
 
                         case PLAYER_ACT_WALK: {
                             label = STRING("WALK");
+                        } break;
+
+                        case PLAYER_ACT_PUT_DOWN: {
+                            label = STRING("PUT");
                         } break;
 
                         default: Assert(false); break;
@@ -819,6 +1071,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     _SHRINK_(8);
                     bool enabled = false;
                     button(PC(ctx, i), label, enabled);
+
+                    apply_actions_to_player_state(&player_state, player_e->action_queue + i, 1, world_t, room, current_user(client));
+                    if(player_state.held_item.type != ITEM_NONE_OR_NUM) {
+                        _TRANSLATE_({-48, -24});
+                        button(PC(ctx, i), item_types[player_state.held_item.type].name);
+                    }
                 }
             }
         }
@@ -849,11 +1107,10 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(!selected_item || can_place_item_entity_at_tp(selected_item, tp, world_t, room))
             {
                 if(selected_item) {
-                    ct.item_to_place = *selected_item;
+                    ct.item_to_place = selected_item->id;
                 } else {
-                    Item no_item = {0};
-                    no_item.id = NO_ITEM;
-                    ct.item_to_place = no_item;
+                    ct.item_to_place = NO_ITEM;
+                    ct.default_action_is_put_down = in_array(input->keys, VKEY_CONTROL); // @Norelease @Robustness :InputFrame We should store the state of the CTRL key when the tile click happens. It could be different than it is later, here.
                 }
 
                 // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
@@ -917,7 +1174,7 @@ void client_mouse_move(Window *window, int x, int y, u64 ms, void *client_)
     auto *client = (Client *)client_;
     auto &input = client->input;
     
-    input.mouse.p = { (float)x, (float)y };
+    input.mouse.p = { (float)x, client->main_window_a.h - (float)y };
 }
 
 void client_character_input(Window *window, byte *utf8, int num_bytes, u16 repeat_count, void *client_)
@@ -1028,7 +1285,7 @@ int client_entry_point(int num_args, char **arguments)
 {
 
 #if 0
-    //no_checkin
+    // @Cleanup: .obj stuff in client_entry_point
     String obj_contents = {0};
     if(!read_entire_resource("meshes/bed.obj", &obj_contents.data, ALLOC_TMP, &obj_contents.length)){
         Debug_Print("Unable to read mesh resource.\n");
@@ -1225,7 +1482,7 @@ int client_entry_point(int num_args, char **arguments)
 
             }
             double t = platform_get_time(); // @Robustness: This is safe to do, right?
-            end_ui_build(ui, &client.input, client.fonts, t, &client.room, &cursor);
+            end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &cursor);
             // //////// //
 
             reset_temporary_memory();

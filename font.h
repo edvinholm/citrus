@@ -9,14 +9,14 @@ enum Font_ID
     NUM_FONTS
 };
 
-Texture_ID font_textures[NUM_FONTS] = {
+Texture_ID font_textures[] = {
     TEX_FONT_TITLE,  // FONT_TITLE
     TEX_FONT_BODY,   // FONT_BODY
     TEX_FONT_INPUT,  // FONT_BODY
 };
 static_assert(ARRLEN(font_textures) == NUM_FONTS);
 
-const char *font_filenames[NUM_FONTS] = {
+const char *font_filenames[] = {
     "RussoOne-Regular.ttf",    // FONT_TITLE
     "Varela-Regular.ttf",      // FONT_BODY
     "VarelaRound-Regular.ttf", // FONT_INPUT
@@ -49,6 +49,7 @@ enum Font_Size
     FS_12,
     FS_14,
     FS_16,
+    FS_18,
     FS_20,
     FS_24,
     FS_28,
@@ -70,6 +71,7 @@ int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversampling_rate 
         case FS_12: h = 12; break;
         case FS_14: h = 14; break;
         case FS_16: h = 16; break;
+        case FS_18: h = 18; break;
         case FS_20: h = 20; break;
         case FS_24: h = 24; break;
         case FS_28: h = 28; break;
@@ -148,4 +150,20 @@ struct Font
 
     //@Temporary ?
     stbtt_fontinfo stb_info;
+};
+
+
+
+struct Font_Table
+{
+    Font fonts[NUM_FONTS];
+
+    template<typename T>
+    Font &operator [] (T index)
+    {
+        Assert(index >= 0);
+        Assert(index < ARRLEN(fonts));
+               
+        return fonts[index];
+    }
 };

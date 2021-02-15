@@ -129,11 +129,10 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
         // OPAQUE //
         wgfx->static_opaque_vao.vertex0 = gfx->universal_vertex_buffer.n;
 
-        push(gfx->vertex_buffer_stack, &gfx->universal_vertex_buffer);
-        {
+        { Scoped_Push(gfx->vertex_buffer, &gfx->universal_vertex_buffer);
+            
             draw_static_world_geometry(room, gfx);
         }
-        pop(gfx->vertex_buffer_stack);
 
         wgfx->static_opaque_vao.vertex1 = gfx->universal_vertex_buffer.n;
         wgfx->static_opaque_vao.needs_push = true;
@@ -144,16 +143,21 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
-void draw_entity(Entity *e, double world_t, Graphics *gfx)
+void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx)
 {
     auto *s_e = static_cast<S__Entity *>(e);
-    
+
     float shadow_factor = 0.90f;
     
-    v3 origin = entity_position(s_e, world_t);
+    v3 center;
+    Quat q;
+    get_entity_transform(s_e, world_t, room, &center, &q);
+    
     v3 volume = V3_ONE;
 
     v4 base_color = V4_ONE;
+
+    float fill = 0;
     
     if(e->type == ENTITY_ITEM)
     {
@@ -161,7 +165,7 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
         
         auto *item = &e->item_e.item;
         Item_Type *item_type = item_types + item->type;
-        
+
         volume = V3(item_type->volume);
         
         if(item->type == ITEM_PLANT)
@@ -171,6 +175,11 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
         }
 
         base_color = item_type->color;
+
+        if(item->type == ITEM_WATERING_CAN) {
+            fill = item->watering_can.water_level;
+        }
+        
     }
     else if(e->type == ENTITY_PLAYER)
     {
@@ -184,8 +193,22 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
             base_color = { 0.93, 0.72, 0.52, 1.0 };
         }
 
+        int num_put_down_volumes;
+        auto *put_down_volumes = find_player_put_down_volumes<ALLOC_TMP>(e, world_t, room, &num_put_down_volumes, current_user(client));
+        if(num_put_down_volumes > 0)
+        {
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+            for(int i = 0; i < num_put_down_volumes; i++)
+            {
+                AABB vol = put_down_volumes[i];
+                draw_quad(vol.p + V3_Z * 0.001f, { vol.s.x, 0, 0 }, {0, vol.s.y, 0 }, { 0.2, 0, 0.5, 1 }, gfx);
+            }
+        }
+        
         if(tweak_bool(TWEAK_SHOW_PLAYER_PATHS))
         {
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+            
             v4 path_color = { 0.08, 0.53, 0.90, 1 };
                 
             for(int i = 0; i < player_e->walk_path_length; i++)
@@ -199,38 +222,58 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx)
         }
     }
     
+    _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(q, center));
 
+    v3 origin  = center;
+    origin.xy -= volume.xy * 0.5f;
+        
     // PREVIEW ANIMATION //
     if(e->is_preview) {
         origin.z += 0.25f + sin(world_t) * 0.1f;
     }
     // ---
 
-    v4 side_color_1 = base_color;
-    v4 side_color_2 = base_color;
+    if(fill > 0) {
+
+        v4 fill_color = { base_color.b * 1.1f, base_color.g * 1.1f, base_color.r * 1.1f, 1.0 };
+        
+        v3 fill_s = volume;
+        fill_s.z *= fill;
+        draw_cube_ps(origin, fill_s, fill_color, gfx);
+
+        volume.z -= fill_s.z;
+        origin.z += fill_s.z;
+    }
+    draw_cube_ps(origin, volume, base_color, gfx);
     
-    side_color_1.xyz *= shadow_factor;
-    side_color_2.xyz *= 1.0f / shadow_factor;
-
-    origin.xy -= volume.xy * 0.5f;
-
-    // Sides //
-    draw_quad(origin, { (float)volume.x, 0, 0 }, { 0, 0, (float)volume.z }, side_color_1, gfx);
-    draw_quad(origin, { 0, (float)volume.y, 0 }, { 0, 0, (float)volume.z }, side_color_2, gfx);
-
-    // Top //
-    v3 top_origin = origin;
-    top_origin.z += volume.z;
-    draw_quad(top_origin, { (float)volume.x, 0, 0 }, { 0, (float)volume.y, 0 }, base_color, gfx);
-
     if(e->type == ENTITY_PLAYER)
+    {    
+        float head_size = 1.8f;
+        
+        v3 head_p = center;
+        head_p.z += volume.z;
+        head_p.x -= head_size * 0.5f;
+        head_p.y -= head_size * 0.5f;
+
+        v3 head_center = head_p + V3_ONE * head_size * 0.5f;
+
+        v4 head_color = base_color;
+        head_color.rgb *= 0.94f;
+        
+        draw_cube_ps(head_p, V3_ONE * head_size, head_color, gfx);
+    }
+    else if(e->type == ENTITY_ITEM && e->item_e.item.type == ITEM_CHESS_BOARD)
     {
-        float cube_size = 1.8;
-        draw_cube_ps(top_origin - V3_XY * cube_size * 0.5f, V3_ONE * cube_size, base_color, gfx);
+        auto *board = &e->item_e.chess_board;
+
+        Scoped_Push(gfx->transform, translation_matrix(V3_Z * (origin.z + volume.z + 0.001f)));
+
+        Rect a = { origin.xy, volume.xy };        
+        draw_chess_board(board->squares, a, gfx);
     }
 }
 
-void draw_world(Room *room, double world_t, m4x4 projection, Graphics *gfx)
+void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx)
 {
     maybe_update_static_room_vaos(room, gfx);
     
@@ -245,14 +288,13 @@ void draw_world(Room *room, double world_t, m4x4 projection, Graphics *gfx)
 
     const float tile_s = 1;
     
-    // OPAQUE //
-    {
-        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
         // REMEMBER: Some things are in the static vao.
-
+    
+    // ENTITIES //
+    {
         for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
-            draw_entity(e, world_t, gfx);
+            draw_entity(e, world_t, room, client, gfx);
         }
     }
 

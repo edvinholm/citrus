@@ -70,27 +70,27 @@ bool read_obj(String contents)
             skip_line(&at, end);
         }
         else if(equal(token, "g")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else if(equal(token, "v")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else if(equal(token, "vn")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else if(equal(token, "vt")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else if(equal(token, "usemtl")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else if(equal(token, "f")) {
-            // no_checkin @Incomplete
+            // @Norelease @Incomplete
             skip_line(&at, end);
         }
         else {

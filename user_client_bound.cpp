@@ -2,8 +2,7 @@
 #ifndef USER_CLIENT_BOUND_INCLUDED
 #define USER_CLIENT_BOUND_INCLUDED
 
-// IMPORTANT: Must fit in a u64
-enum User_Connect_Status
+enum User_Connect_Status: u64 // @Cleanup: This does not need to be 64 bits (Change this here and in network code)
 {
     USER_CONNECT__CONNECTED              = 1,
     USER_CONNECT__INCORRECT_CREDENTIALS  = 2

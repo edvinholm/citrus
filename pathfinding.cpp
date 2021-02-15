@@ -47,8 +47,9 @@ void generate_walk_map(Room *room, v3s walker_volume, Walk_Mask *_map)
     for(int i = 0; i < room->num_entities; i++) {
         auto *e = &room->entities[i];
         if(e->type != ENTITY_ITEM) continue;
+        if(e->held_by != NO_ENTITY) continue;
         
-        AABB bbox = entity_aabb(e, room->t);
+        AABB bbox = entity_aabb(e, room->t, room);
         v3 p1 = bbox.p + bbox.s;
 
         set_walk_flags_on_area(UNWALKABLE, bbox.p, p1, walker_volume, _map);

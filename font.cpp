@@ -23,15 +23,9 @@ float font_height(Font_Size size, Font *font)
 }
 
 inline
-float font_ascent(float scale, Font *font)
-{
-    return font->ascent * scale;
-}
-
-inline
 float font_ascent(Font_Size size, Font *font)
 {
-    return font_ascent(scale_for_font_size(size, font), font);
+    return font->ascent * scale_for_font_size(size, font);
 }
 
 inline
@@ -64,7 +58,7 @@ bool load_glyph(int codepoint, Font_Size size, Glyph_Info *existing_glyph, Font 
     int ix0, iy0, ix1, iy1;
     {
         stbtt_GetGlyphBitmapBox(font_info, glyph_index, scale, scale,
-                                    &ix0, &iy0, &ix1, &iy1);
+                                &ix0, &iy0, &ix1, &iy1);
         glyph_w = ix1 - ix0 + 2; // @Hack: Some characters, for example H gets clipped if we don't have this +2...
         glyph_h = iy1 - iy0;
     }
@@ -183,7 +177,7 @@ bool load_glyph(int codepoint, Font_Size size, Glyph_Info *existing_glyph, Font 
     int advance_width;
     stbtt_GetGlyphHMetrics(font_info, glyph_index, &advance_width, &left_side_bearing);
     sized.offset = { left_side_bearing * scale / oversampling_rate,
-                     iy0 / oversampling_rate };
+                     -iy1 / oversampling_rate };
     sized.advance_width = advance_width * scale / oversampling_rate;
 
     return true;
@@ -290,7 +284,7 @@ bool load_font(byte *font_file_contents, Font *_font)
 }
 
 
-void init_fonts(Font *fonts, Graphics *gfx)
+void init_fonts(Font_Table *fonts, Graphics *gfx)
 {
     TIMED_FUNCTION;
 
@@ -301,7 +295,7 @@ void init_fonts(Font *fonts, Graphics *gfx)
         // IMPORTANT: This does NOT create a gpu texture. The texture will be created in game_init_graphics, so that we can redo it when we lose the graphics context.
         gfx->glyph_maps[f] = create_sprite_map(texture_size, texture_size, font_textures[f], ALLOC_MALLOC, gfx);
 
-        Font *font = &fonts[f];
+        Font *font = &(*fonts)[f];
 
         font->sprite_map = &gfx->glyph_maps[f];
 

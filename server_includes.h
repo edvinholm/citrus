@@ -8,6 +8,8 @@
 
 #include "pathfinding.h"
 
+#include "chess.h"
+
 #include "user_pre.h"
 #include "game_shared.h"
 #include "game_server.h"
@@ -15,6 +17,11 @@ using namespace Server_Game;
 
 #include "user.h"
 using namespace Server_User;
+
+#include "market.h"
+using namespace Server_Market;
+
+#include "chess.cpp"
 
 #include "user_shared.cpp"
 #include "world_shared.cpp"

@@ -120,6 +120,8 @@ enum UI_Element_Type
 
     UI_INVENTORY_SLOT,
     UI_CHAT,
+    
+    UI_CHESS_BOARD,
 
     WORLD_VIEW
 };
@@ -143,16 +145,20 @@ typedef u16 UI_Click_State; //In @JAI, this can probably be just an enum.
 struct UI_Panel
 {
     Rect a;
+    v4 color;
 };
 
 struct UI_Window
 {
     Rect initial_a;
     Rect current_a;
+    v2 min_size;
 
     UI_String title;
-    v4 border_color;
     
+    v4 border_color;
+    v4 background_color;
+
     bool pressed;
     UI_Click_State close_button_state;
     bool has_close_button;
@@ -172,6 +178,8 @@ struct UI_Text
     Rect a;
     
     UI_String text;
+
+    v4 color;
     
     Font_Size font_size;
     Font_ID   font;
@@ -189,6 +197,8 @@ struct UI_Button
     
     bool enabled;
     bool selected;
+
+    v4 color;
 };
 
 struct UI_Graph
@@ -283,6 +293,20 @@ struct UI_World_View
     Entity_ID clicked_entity;
 };
 
+struct UI_Chess_Board
+{
+    Rect a;
+    UI_String squares; // This is an array of Chess_Square. So, length % sizeof(Chess_Square) must be 0, and length must be sizeof(Chess_Board::squares).
+
+    s8 selected_square_ix; // -1 == no square. This is set by the UI user code
+    
+    UI_Click_State click_state;
+
+    s8 hovered_square_ix; // -1 == no square
+    s8 pressed_square_ix; // -1 == no square
+    s8 clicked_square_ix; // -1 == no square
+
+};
 
 struct UI_Element
 {
@@ -305,6 +329,8 @@ struct UI_Element
         
         UI_Inventory_Slot inventory_slot;
         UI_Chat chat;
+
+        UI_Chess_Board chess_board;
 
         UI_World_View world_view;
     };
@@ -335,12 +361,42 @@ struct UI_Textfield_State
     bool is_negative;   // NOTE: This is for integer fields only.
 };
 
+enum Color_Theme_ID {
+    C_THEME_DEFAULT,
+    C_THEME_MARKET,
+    C_THEME_ROOM,
+
+    C_THEME_NONE_OR_NUM
+};
+
+struct Color_Theme
+{    
+    v4 button;
+
+    v4 panel;
+
+    v4 window_border;
+    v4 window_background;
+
+    v4 text;
+};
+
+Color_Theme color_themes[] = {
+    { C_BUTTON_DEFAULT, C_PANEL_DEFAULT, C_WINDOW_BORDER_DEFAULT, C_WINDOW_BACKGROUND_DEFAULT, C_TEXT_DEFAULT },
+    { C_MARKET_BRIGHT,  C_MARKET_DARK,   C_MARKET_DARK,           C_MARKET_BASE,               C_WHITE },
+    { C_ROOM_DARK,      C_ROOM_DARK,     C_ROOM_DARK,             C_ROOM_BASE,                 C_WHITE }
+};
+static_assert(ARRLEN(color_themes) == C_THEME_NONE_OR_NUM);
+
 struct UI_Manager
 {   
     UI_ID_Manager id_manager;
 
+    // These are reset before every build //
     UI_Path current_path;
     u64     current_path_length;
+    Array<Color_Theme_ID, ALLOC_MALLOC> color_theme_stack;
+    // ////////////////////////////////// //
 
     Array<bool,       ALLOC_MALLOC> element_alives;
     Array<UI_ID,      ALLOC_MALLOC> element_ids;
@@ -370,3 +426,9 @@ struct UI_Manager
 
 #define _WINDOW_(...) \
     _WINDOW___INTERNAL_(CONCAT(window_id_, __COUNTER__), __VA_ARGS__)
+
+
+#define _THEME_(ThemeID) \
+    array_add(ctx.manager->color_theme_stack, ThemeID); \
+    defer(ctx.manager->color_theme_stack.n -= 1;)
+    

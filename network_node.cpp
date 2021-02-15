@@ -487,6 +487,7 @@ bool write_World_Time(World_Time time, Network_Node *node)
 }
 
 
+
 // Item //
 // @Norelease TODO: Check that it is a valid type.
 bool read_Item_Type_ID(Item_Type_ID *_type_id, Network_Node *node)
@@ -529,6 +530,11 @@ bool read_Item(Item *_item, Network_Node *node)
             auto *x = &_item->plant;
             Read_To_Ptr(float, &x->grow_progress, node);
         } break;
+
+        case ITEM_WATERING_CAN: {
+            auto *x = &_item->watering_can;
+            Read_To_Ptr(float, &x->water_level, node);
+        } break;
     }
     
     return true;
@@ -544,6 +550,11 @@ bool write_Item(Item item, Network_Node *node)
         case ITEM_PLANT: {
             auto *x = &item.plant;
             Write(float, x->grow_progress, node);
+        } break;
+            
+        case ITEM_WATERING_CAN: {
+            auto *x = &item.watering_can;
+            Write(float, x->water_level, node);
         } break;
     }
     
@@ -575,6 +586,136 @@ bool write_Inventory_Slot(Inventory_Slot *slot, Network_Node *node)
     Write(Item, slot->item, node);
     return true;
 }
+
+
+
+// Market //
+
+// @Norelease TODO: Check that it is a valid value.
+bool read_Price_Period(Price_Period *_period, Network_Node *node)
+{
+    Read(u8, period, node);
+    *_period = (Price_Period)period;
+    return true;
+}
+
+bool write_Price_Period(Price_Period period, Network_Node *node)
+{
+    Write(u8, period, node);
+    return true;
+}
+
+// @Norelease TODO: Check that it is a valid value.
+bool read_Market_View_Target_Type(Market_View_Target_Type *_type, Network_Node *node)
+{
+    Read(u8, type, node);
+    *_type = (Market_View_Target_Type)type;
+    return true;
+}
+
+bool write_Market_View_Target_Type(Market_View_Target_Type type, Network_Node *node)
+{
+    Write(u8, type, node);
+    return true;
+}
+
+bool read_Market_View_Target(Market_View_Target *_target, Network_Node *node)
+{
+    Read_To_Ptr(Market_View_Target_Type, &_target->type, node);
+
+    switch(_target->type)
+    {
+        case MARKET_VIEW_TARGET_ARTICLE: {
+            auto *x = &_target->article;
+            Read_To_Ptr(Item_Type_ID, &x->article,      node);
+            Read_To_Ptr(Price_Period, &x->price_period, node);
+        } break;
+
+        case MARKET_VIEW_TARGET_ORDERS: {
+            
+        } break;
+    }
+
+    return true;
+}
+
+bool write_Market_View_Target(Market_View_Target target, Network_Node *node)
+{
+    Write(Market_View_Target_Type, target.type, node);
+
+    switch(target.type)
+    {
+        case MARKET_VIEW_TARGET_ARTICLE: {
+            auto *x = &target.article;
+            Write(Item_Type_ID, x->article,      node);
+            Write(Price_Period, x->price_period, node);
+        } break;
+
+        case MARKET_VIEW_TARGET_ORDERS: {
+            
+        } break;
+    }
+
+    return true;
+}
+
+
+bool read_Market_View(S__Market_View *_view, Network_Node *node)
+{
+    Read_To_Ptr(Market_View_Target, &_view->target, node);
+
+    switch(_view->target.type)
+    {
+        case MARKET_VIEW_TARGET_ARTICLE: {
+            auto *x = &_view->article;
+            
+            if(_view->target.article.article != ITEM_NONE_OR_NUM)
+            {
+                Read_To_Ptr(u16, &x->num_prices, node);
+                Fail_If_True(x->num_prices > ARRLEN(x->prices));
+                
+                for(int i = 0; i < x->num_prices; i++) {
+                    Read_To_Ptr(Money, &x->prices[i], node);
+                }
+            }
+        } break;
+
+        case MARKET_VIEW_TARGET_ORDERS: {
+            auto *x = &_view->orders;
+        } break;
+    }
+    
+    return true;
+}
+
+bool write_Market_View(S__Market_View *view, Network_Node *node)
+{
+    Write(Market_View_Target, view->target, node);
+
+    switch(view->target.type)
+    {
+        case MARKET_VIEW_TARGET_ARTICLE: {
+            auto *x = &view->article;
+            
+            if(view->target.article.article != ITEM_NONE_OR_NUM)
+            {
+                Fail_If_True(x->num_prices > ARRLEN(x->prices));
+                Write(u16, x->num_prices, node);
+                
+                for(int i = 0; i < x->num_prices; i++) {
+                    Write(Money, x->prices[i], node);
+                }
+            }
+        } break;
+
+        case MARKET_VIEW_TARGET_ORDERS: {
+            auto *x = &view->orders;
+        } break;
+    }
+
+    return true;
+}
+
 
 
 // Room //
@@ -663,6 +804,14 @@ bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
             auto *x = &_action->set_power_mode;
             Read_To_Ptr(bool, &x->set_to_on, node);
         } break;
+
+        case ENTITY_ACT_CHESS_MOVE: {
+            auto *x = &_action->chess_move;
+
+            // @Norelease: Check that square indices are in range!
+            Read_To_Ptr(u8, &x->from, node);
+            Read_To_Ptr(u8, &x->to, node);
+        } break;
     }
     
     return true;
@@ -676,6 +825,13 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
             Write(bool, x->set_to_on, node);
+        } break;
+
+        case ENTITY_ACT_CHESS_MOVE: {
+            auto *x = &action.chess_move;
+
+            Write(u8, x->from, node);
+            Write(u8, x->to, node);
         } break;
     }
     
@@ -702,7 +858,7 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
 {
     Read_To_Ptr(Player_Action_Type, &_action->type, node);
 
-    switch(_action->type) {
+    switch(_action->type) { // @Jai: #complete
         case PLAYER_ACT_ENTITY: {
             auto *x = &_action->entity;
             Read_To_Ptr(Entity_ID,     &x->target, node);
@@ -712,6 +868,11 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
         case PLAYER_ACT_WALK: {
             auto *x = &_action->walk;
             Read_To_Ptr(v3,         &x->p1, node);
+        } break;
+            
+        case PLAYER_ACT_PUT_DOWN: {
+            auto *x = &_action->put_down;
+            Read_To_Ptr(v3, &x->tp, node);
         } break;
 
         default: Assert(false); return false;
@@ -724,7 +885,7 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
 {
     Write(Player_Action_Type, action.type, node);
 
-    switch(action.type) {
+    switch(action.type) { // @Jai: #complete
         case PLAYER_ACT_ENTITY: {
             auto *x = &action.entity;
             Write(Entity_ID,     x->target, node);
@@ -735,10 +896,35 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
             auto *x = &action.walk;
             Write(v3, x->p1, node);
         } break;
+            
+        case PLAYER_ACT_PUT_DOWN: {
+            auto *x = &action.put_down;
+            Write(v3, x->tp, node);
+        } break;
 
         default: Assert(false); return false;
     }
 
+    return true;
+}
+
+
+// @Norelease: Check that all squares have valid values.
+bool read_Chess_Board(Chess_Board *_board, Network_Node *node)
+{
+    static_assert(sizeof(_board->squares[0]) == 1);
+    static_assert(sizeof(_board->squares)    == 8*8);
+    
+    Read_Bytes(_board->squares, 8*8, node);
+    return true;
+}
+
+bool write_Chess_Board(Chess_Board *_board, Network_Node *node)
+{
+    static_assert(sizeof(_board->squares[0]) == 1);
+    static_assert(sizeof(_board->squares)    == 8*8);
+    
+    Write_Bytes(_board->squares, 8*8, node);
     return true;
 }
 
@@ -749,6 +935,9 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
     
     Read_To_Ptr(Entity_ID,   &_entity->id,   node);
     Read_To_Ptr(Entity_Type, &_entity->type, node);
+    
+    Read_To_Ptr(Entity_ID, &_entity->held_by, node);
+    Read_To_Ptr(Entity_ID, &_entity->holding, node);
 
     switch(_entity->type) {
         case ENTITY_ITEM: {
@@ -771,6 +960,13 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                     Read_To_Ptr(World_Time, &machine->stop_t,  node);
                 } break;
 
+                case ITEM_CHESS_BOARD: {
+                    auto *board = &x->chess_board;
+                    Read_To_Ptr(Chess_Board, board, node);
+                } break;
+                    
+
+                case ITEM_WATERING_CAN:
                 case ITEM_CHAIR:
                 case ITEM_BED:
                 case ITEM_TABLE:
@@ -814,6 +1010,9 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
 {
     Write(Entity_ID,   entity->id,   node);
     Write(Entity_Type, entity->type, node);
+    
+    Write(Entity_ID, entity->held_by, node);
+    Write(Entity_ID, entity->holding, node);
 
     switch(entity->type) {
         case ENTITY_ITEM: {
@@ -836,6 +1035,12 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                     Write(World_Time, machine->stop_t, node);
                 } break;
                     
+                case ITEM_CHESS_BOARD: {
+                    auto *board = &x->chess_board;
+                    Write(Chess_Board, board, node);
+                } break;
+                    
+                case ITEM_WATERING_CAN:                    
                 case ITEM_CHAIR:
                 case ITEM_BED:
                 case ITEM_TABLE:
@@ -850,13 +1055,15 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             auto *x = &entity->player_e;
             Write(User_ID, x->user_id, node);
 
+            // WALK PATH //
             Fail_If_True(x->walk_path_length < 2);
-            
+
             Write(World_Time, x->walk_t0,          node);
             Write(u16,        x->walk_path_length, node);
             for(int i = 0; i < x->walk_path_length; i++) {
                 Write(v3, x->walk_path[i], node);
             }
+            //--
             
             Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
             Write(u8, x->action_queue_length, node);

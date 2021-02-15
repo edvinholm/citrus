@@ -17,6 +17,8 @@ enum Item_Type_ID
     ITEM_TABLE,
     ITEM_PLANT,
     ITEM_MACHINE,
+    ITEM_WATERING_CAN,
+    ITEM_CHESS_BOARD,
 
     ITEM_NONE_OR_NUM
 };
@@ -32,10 +34,17 @@ struct Item_Type
 enum Entity_Action_Type
 {
     ENTITY_ACT_PICK_UP = 1,
+    ENTITY_ACT_PLACE_IN_INVENTORY = 2,
 
-    ENTITY_ACT_HARVEST = 2,
+    // Plant
+    ENTITY_ACT_HARVEST = 3,
+    ENTITY_ACT_WATER = 4,
 
-    ENTITY_ACT_SET_POWER_MODE = 3
+    // Machine
+    ENTITY_ACT_SET_POWER_MODE = 5,
+
+    // Chess
+    ENTITY_ACT_CHESS_MOVE = 6
 };
 
 struct Entity_Action
@@ -46,16 +55,23 @@ struct Entity_Action
         struct {
             bool set_to_on;
         } set_power_mode;
+
+        struct {
+            u8 from; // square index
+            u8 to;
+        } chess_move;
     };
 };
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, {0.6, 0.1, 0.6, 1.0}, STRING("Chairg") },
-    { {3, 6, 1}, {0.1, 0.6, 0.6, 1.0}, STRING("Bed") }, 
-    { {2, 4, 2}, {0.6, 0.6, 0.1, 1.0}, STRING("Table") },
-    { {1, 1, 3}, {0.3, 0.8, 0.1, 1.0}, STRING("Plant") },
-    { {2, 2, 2}, {0.3, 0.5, 0.5, 1.0}, STRING("Machine") }
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chairg") },
+    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed") }, 
+    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table") },
+    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant") },
+    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine") },
+    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can") },
+    { {2, 2, 3}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board") }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -84,6 +100,10 @@ struct Item {
         struct {
             float grow_progress;
         } plant;
+
+        struct {
+            float water_level; // 0 -> 1
+        } watering_can;
     };
 };
 
@@ -117,7 +137,8 @@ static_assert(player_walk_speed > 0);
 enum Player_Action_Type
 {
     PLAYER_ACT_ENTITY,
-    PLAYER_ACT_WALK
+    PLAYER_ACT_WALK,
+    PLAYER_ACT_PUT_DOWN // Put down held item.
 };
 
 struct Player_Action
@@ -134,6 +155,10 @@ struct Player_Action
             Entity_ID     target;
             Entity_Action action;
         } entity;
+
+        struct {
+            v3 tp;
+        } put_down;
     };
 };
 
@@ -144,9 +169,13 @@ struct S__Entity
     
     Entity_Type type;
 
+    Entity_ID held_by;
+    Entity_ID holding;
+
     union {
         struct {
-            v3 p;
+            v3   p;
+            Quat q;
             
             Item item;
 
@@ -160,6 +189,8 @@ struct S__Entity
                     World_Time start_t; // NOTE: Machine is on if start_t > stop_t.
                     World_Time stop_t;
                 } machine;
+
+                Chess_Board chess_board;
             };
         } item_e;
 
@@ -182,10 +213,18 @@ void clear(S__Entity *e)
 
     dealloc(e->player_e.walk_path, ALLOC_MALLOC);
 }
-  
 
-// Must fit in an s8.
-enum Tile_Type {
+
+// This is what we use to predict, for example, if a particular
+// action will be possible after a given queue of actions has been performed.
+struct Player_State
+{
+    User_ID user_id; // Don't change this :)
+    
+    Item held_item; // No item if .type == ITEM_NONE_OR_NUM.
+};
+
+enum Tile_Type: s8 {
     TILE_SAND = 0,
     TILE_GRASS = 1,
     TILE_STONE = 2,

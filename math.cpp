@@ -44,24 +44,6 @@
 
 v3 vecmatmul(v3 v, m4x4 m);
 
-struct Quad
-{
-    v3 p0;
-    v3 d1;
-    v3 d2;
-};
-
-
-inline
-Quad quad(v3 p0, v3 d1, v3 d2)
-{
-    Quad result;
-    result.p0 = p0;
-    result.d1 = d1;
-    result.d2 = d2;
-    return result;
-}
-
 
 #include "v4.cpp"
 #include "v2s.cpp"
@@ -122,6 +104,85 @@ struct AABB
     v3 p;
     v3 s;
 };
+
+
+struct Quad
+{
+    v3 p;
+    v2 s;
+    Quat q;
+};
+
+
+inline
+Quad quad(v3 p, v2 s, Quat q = Q_IDENTITY)
+{
+    Quad result;
+    result.p = p;
+    result.s = s;
+    result.q = q;
+    return result;
+}
+
+Quad quad(Rect a, float z = 0, Quat q = Q_IDENTITY)
+{
+    Quad quad = {0};
+    
+    quad.p = { a.x, a.y, z };
+    quad.s = a.s;
+    quad.q = q;
+
+    return quad;
+}
+
+Quad center_of(Quad a, v2 s)
+{
+    v3 e_x = rotate_vector(V3_X, a.q);
+    v3 e_y = rotate_vector(V3_Y, a.q);
+
+    a.p += e_x * ((a.s.x - s.x) * 0.5f);
+    a.p += e_y * ((a.s.y - s.y) * 0.5f);
+
+    a.s -= s;
+
+    return a;
+}
+
+v3 center_of(Quad a)
+{
+    v3 e_x = rotate_vector(V3_X, a.q);
+    v3 e_y = rotate_vector(V3_Y, a.q);
+
+    v3 p = a.p;
+    p += e_x * (a.s.x/2.0f);
+    p += e_y * (a.s.y/2.0f);
+
+    return p;
+}
+
+Quad bottom_of(Quad a, float h)
+{
+    v3 e_y = rotate_vector(V3_Y, a.q);
+
+    a.p += e_y * (a.s.y - h);
+    a.s.y = h;
+
+    return a;
+}
+
+Quad shrunken(Quad a, float inset)
+{
+    v3 e_x = rotate_vector(V3_X, a.q);
+    v3 e_y = rotate_vector(V3_Y, a.q);
+
+    a.p += e_x * inset;
+    a.p += e_y * inset;
+
+    a.s.x -= inset * 2;
+    a.s.y -= inset * 2;
+
+    return a;
+}
 
 
 

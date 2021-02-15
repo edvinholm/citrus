@@ -15,7 +15,8 @@ struct MS_Client
     Network_Node node;
 
     User_ID      user_id;
-    Item_Type_ID watched_article;
+    
+    Market_View_Target view_target;
     
     Market_Server *server;
 };
@@ -70,7 +71,7 @@ struct Market_Article
     Array<MS_Client_ID, ALLOC_MALLOC> watchers;
 
     u16 price_history_length; // @Norelease: Save minute, hour, day, month, year. (Later our own time units).
-    Money price_history[10];
+    Money price_history[128];
     
     bool did_change;
 };

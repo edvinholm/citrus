@@ -28,6 +28,17 @@ String get_ui_string(UI_String string, UI_Manager *ui, bool from_last_build = fa
     return str;
 }
 
+// NOTE: Should never return NULL. (IMPORTANT)
+Color_Theme *current_color_theme(UI_Manager *ui)
+{
+    if(ui->color_theme_stack.n == 0) return &color_themes[C_THEME_DEFAULT];
+
+    auto id = last_element(ui->color_theme_stack);
+    Assert(id >= 0 && id < C_THEME_NONE_OR_NUM);
+    
+    return &color_themes[id];
+}
+
 
 
 // @Cleanup: I don't like this!
@@ -231,7 +242,9 @@ void clear_ui_element(UI_Element *e)
         case GRAPH:
 
         case UI_INVENTORY_SLOT:
-        case UI_CHAT: 
+        case UI_CHAT:
+
+        case UI_CHESS_BOARD:
 
         case WORLD_VIEW:
             break;
@@ -415,7 +428,6 @@ private:
 };
 
 
-
 UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Manager *input, bool enabled = true)
 {
     auto &mouse = input->mouse;
@@ -473,7 +485,7 @@ Rect scrollbar_handle_rect(Rect scrollbar_a, float content_h, float view_h, floa
     float max_scroll = max(0, content_h - view_h);
     
     if(max_scroll > 0.0001f) // Avoid division by zero
-        a.y += (scroll / max_scroll) * space;
+        a.y -= (scroll / max_scroll) * space;
 
     return a;
 }
@@ -510,7 +522,7 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
         float handle_rel_y = mouse->p.y - scroll->handle_grab_rel_p - scrollbar_a.y;
 
         if(space_h > 0.0001f) // Avoid division by zero
-            scroll->value = (handle_rel_y/space_h) * scroll_max;
+            scroll->value = (1 - (handle_rel_y/space_h)) * scroll_max;
         else
             scroll->value = 0;
 
@@ -523,50 +535,73 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
 }
 
 
-void panel(UI_Context ctx)
+void panel(UI_Context ctx, Optional<v4> color = {0})
 {
     U(ctx);
+
+    auto *ui    = ctx.manager;
+    auto *theme = current_color_theme(ui);
 
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), PANEL, ctx.manager);
 
     auto *panel = &e->panel;
-    ui_set(e, &panel->a, area(ctx.layout));
+    ui_set(e, &panel->a,     area(ctx.layout));
+    ui_set(e, &panel->color, get_or_default(color, theme->panel));
 }
 
 void ui_text(UI_Context ctx, String text,
              Font_Size font_size = FS_14, Font_ID font = FONT_BODY,
-             H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP)
+             H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
+             Optional<v4> custom_color = {0})
 {
     U(ctx);
+
+    auto *ui    = ctx.manager;
+    auto *theme = current_color_theme(ui);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
 
     auto *txt = &e->text;
     ui_set(e, &txt->a,         area(ctx.layout));
     ui_set(e, &txt->text,      text, ctx.manager);
+    
+    ui_set(e, &txt->color,   get_or_default(custom_color, theme->text));
+    
     ui_set(e, &txt->font_size, font_size);
     ui_set(e, &txt->font,      font);
+    
     ui_set(e, &txt->h_align,   h_align);
     ui_set(e, &txt->v_align,   v_align);
 }
 
 
 
-UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false)
-{    
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0})
+{
     U(ctx);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), BUTTON, ctx.manager);
 
-    Rect a = area(ctx.layout); 
+    Rect a = area(ctx.layout);
+    Color_Theme *theme = current_color_theme(ctx.manager);
     
     auto *btn = &e->button;
     ui_set(e, &btn->a, a);
     ui_set(e, &btn->label,    label,     ctx.manager);
     ui_set(e, &btn->enabled,  enabled);
     ui_set(e, &btn->selected, selected);
+    ui_set(e, &btn->color,    get_or_default(custom_color, theme->button));
     
     return btn->state;
+}
+
+// @Jai: Remove this and use named arguments for calls to button instead.
+//       This exists just so you don't have to pass a lot of default arguments
+//       when you want to set the color of a button.
+UI_Click_State button_colored(UI_Context ctx, v4 color, String label = EMPTY_STRING, bool enabled = true, bool selected = false)
+{
+    U(ctx);
+    return button(P(ctx), label, enabled, selected, opt(color));
 }
 
 void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float y_max = 1)
@@ -701,7 +736,7 @@ Rect textfield_inner_rect(UI_Textfield *tf)
     return shrunken(tf->a, 10, textfield_scrollbar_w, 8, 8);
 }
 
-Body_Text create_textfield_body_text(String text, Rect inner_a, Font *fonts)
+Body_Text create_textfield_body_text(String text, Rect inner_a, Font_Table *fonts)
 {
     return create_body_text(text, inner_a, FS_16, FONT_INPUT, fonts);
 }
@@ -967,7 +1002,7 @@ void textfield(UI_Context ctx, Array<u8, A> *text, Input_Manager *input, bool en
 
 // NOTE: Only one direction can be passed -- dir is not used as a bitmask.
 // NOTE: If the caret moved, the index of the line of the caret is returned. Otherwise -1.   
-int textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font *fonts)
+int textfield_navigate(Direction dir, bool shift_is_down, Body_Text *bt, UI_Textfield_State *tf_state, Font_Table *fonts)
 {
     String &text = bt->text;
     auto *caret = &tf_state->caret;
@@ -1117,7 +1152,7 @@ void textfield_scroll_to_codepoint_index(u64 cp_index, float inner_h, Body_Text 
     textfield_scroll_to_line(line, inner_h, bt->line_height, bt->lines.n, scroll);
 }
 
-void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_Manager *ui, Font *fonts, bool became_active, double t, bool *_use_i_beam_cursor)
+void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_Manager *ui, Font_Table *fonts, bool became_active, double t, bool *_use_i_beam_cursor)
 {
     Assert(e->type == TEXTFIELD);
     auto *tf = &e->textfield;
@@ -1171,9 +1206,8 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     auto *caret           = &tf_state->caret;
     auto *highlight_start = &tf_state->highlight_start;
     
-    Rect text_a = inner_a;
-    text_a.h  = text_h;
-    text_a.y -= tf->scroll.value;
+    Rect text_a = top_of(inner_a, text_h);
+    text_a.y   += tf->scroll.value;
     
 
     if(became_active) {
@@ -1201,8 +1235,10 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     
     if(tf->click_state & PRESSED) {
         e->needs_redraw = true;
-        
-        Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, text_a.p, fonts);
+
+        v2 bt_top_left = text_a.p;
+        bt_top_left.y += text_a.h;
+        Text_Location mouse_text_location = text_location_from_position(mouse->p, &bt, bt_top_left, fonts);
 
         caret->cp = mouse_text_location.cp_index;
 
@@ -1368,7 +1404,7 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     
     auto &mouse = client->input.mouse;
 
-    v2 min_size = { 250, 250 };
+    v2 min_size = win->min_size;
     Rect a0 = win->current_a;
 
     // RESIZE IF RESIZING //
@@ -1414,7 +1450,9 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
 }
 
 Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool use_default_padding = true,
-                  bool use_custom_border_color = false, v4 custom_border_color = V4_ZERO)
+                  Optional<v4> custom_border_color     = {0},
+                  Optional<v4> custom_background_color = {0},
+                  Optional<v2> custom_min_size         = {0})
 {
     U(ctx);
 
@@ -1423,6 +1461,8 @@ Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool 
 
     bool was_created;
     UI_Element *e = find_or_create_ui_element(id, WINDOW, ui, &was_created);
+
+    auto *theme = current_color_theme(ui);
 
     if(was_created) {
         array_add(ui->window_stack, id);
@@ -1434,7 +1474,9 @@ Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool 
         ui_set(e, &win->current_a, win->initial_a);
 
     ui_set(e, &win->title, title, ui);
-    ui_set(e, &win->border_color, (use_custom_border_color) ? custom_border_color : tweak_v4(TWEAK_WINDOW_BORDER_COLOR));
+    ui_set(e, &win->border_color,     get_or_default(custom_border_color,     theme->window_border));
+    ui_set(e, &win->background_color, get_or_default(custom_background_color, theme->window_background));
+    ui_set(e, &win->min_size,         get_or_default(custom_min_size,         {250, 250}));
 
     // NOTE: We do this when we begin the window, instead of in the UI update phase.
     //       Because we don't want the children of the window to lag behind. This
@@ -1584,10 +1626,21 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
 UI_World_View *world_view(UI_Context ctx)
 {
     U(ctx);
-    
-    UI_Element *e = find_or_create_ui_element(ctx.get_id(), WORLD_VIEW, ctx.manager);
-    
+
+    bool was_created;
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), WORLD_VIEW, ctx.manager, &was_created);
     auto *view = &e->world_view;
+
+    if(was_created) {
+        view->hovered_tile_ix = -1;
+        view->pressed_tile_ix = -1;
+        view->clicked_tile_ix = -1;
+        
+        view->hovered_entity = NO_ENTITY;
+        view->pressed_entity = NO_ENTITY;
+        view->clicked_entity = NO_ENTITY;
+    }
+    
     ui_set(e, &view->a, area(ctx.layout));
 
     e->needs_redraw = true;
@@ -1604,7 +1657,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     auto *view = &e->world_view;
     auto *mouse = &input->mouse;
 
-    view->clicked_tile_ix = U64_MAX;
+    view->clicked_tile_ix = -1;
     view->clicked_entity  = NO_ENTITY;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
@@ -1664,6 +1717,69 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
 }
 
+UI_Chess_Board *ui_chess_board(UI_Context ctx, Chess_Board *board, s8 selected_square_ix = -1)
+{
+    U(ctx);
+
+    Rect a = area(ctx.layout);
+
+    bool was_created;
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_CHESS_BOARD, ctx.manager, &was_created);
+    auto *ui_board = &e->chess_board;
+
+    if(was_created) {
+        ui_board->hovered_square_ix = -1;
+        ui_board->pressed_square_ix = -1;
+        ui_board->clicked_square_ix = -1;
+    }
+        
+    String squares = { (u8 *)board->squares, sizeof(board->squares) };
+    
+    ui_set(e, &ui_board->a, a);
+    ui_set(e, &ui_board->squares, squares, ctx.manager);
+    
+    ui_set(e, &ui_board->selected_square_ix, selected_square_ix);
+
+    return ui_board;
+}
+
+void update_ui_chess_board(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
+{
+    Assert(e->type == UI_CHESS_BOARD);
+    auto *cb = &e->chess_board;
+    auto *mouse = &input->mouse;
+
+    cb->clicked_square_ix = -1;
+
+    bool hovered = (e == hovered_element);
+    ui_set(e, &cb->click_state, evaluate_click_state(cb->click_state, hovered, input));
+
+    s32 hovered_square_ix = -1;
+    if(hovered)
+    {
+        Assert(point_inside_rect(mouse->p, cb->a));
+
+        static_assert(ARRLEN(Chess_Board::squares) == 8*8);
+        int x = (mouse->p.x - cb->a.p.x) / (cb->a.w / 8.0f);
+        int y = (mouse->p.y - cb->a.p.y) / (cb->a.h / 8.0f);
+
+        hovered_square_ix = (y * 8 + x);
+
+        if(cb->click_state & PRESSED_NOW) {
+            cb->pressed_square_ix = hovered_square_ix;
+        }
+
+        if(cb->click_state & CLICKED_ENABLED) {
+            if(cb->pressed_square_ix == hovered_square_ix) {
+                cb->clicked_square_ix = cb->pressed_square_ix;
+            }
+        }
+    }
+
+    cb->hovered_square_ix = hovered_square_ix;
+    if(!(cb->click_state & PRESSED))
+        cb->pressed_square_ix = -1;
+}
 
 
 Rect ui_element_rect(UI_Element *e)
@@ -1719,7 +1835,7 @@ void begin_ui_build(UI_Manager *ui)
 #endif
 }
 
-void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, Room *room, Cursor_Icon *_cursor)
+void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, double t, Room *room, Cursor_Icon *_cursor)
 {
     Array<u8, ALLOC_TMP> temp = {0};
     
@@ -1845,6 +1961,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
             case UI_INVENTORY_SLOT: mouse_over = point_inside_rect(mouse.p, e->inventory_slot.a); break;
             case UI_CHAT:           mouse_over = point_inside_rect(mouse.p, e->chat.a); break;
 
+            case UI_CHESS_BOARD: mouse_over = point_inside_rect(mouse.p, e->chess_board.a); break;
+
             case UI_TEXT:
                 break;
                 
@@ -1907,6 +2025,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font *fonts, double t, R
 
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 
+            case UI_CHESS_BOARD: update_ui_chess_board(e, input, hovered_element); break;
+                
             case GRAPH:
             case PANEL:
             case UI_TEXT:

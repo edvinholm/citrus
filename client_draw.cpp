@@ -188,11 +188,15 @@ bool init_graphics(Window *window, Graphics *gfx)
 
 void config_gpu_for_ui(Graphics *gfx)
 {
-    m4x4 ui_projection = make_m4x4(
-        2.0/gfx->frame_s.w,  0, 0, -1,
-        0, -2.0/gfx->frame_s.h, 0,  1,
-        0,  0, 1,  0,
-        0,  0, 0,  1);
+    float a = 2.0 / gfx->frame_s.w;
+    float b = 2.0 / gfx->frame_s.h;
+    
+    m4x4 ui_projection = {
+        a, 0, 0,-1,
+        0, b, 0,-1,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    };
 
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
@@ -203,7 +207,7 @@ void config_gpu_for_ui(Graphics *gfx)
 
 void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
 {
-    gpu_set_viewport(viewport.x, gfx->frame_s.h - viewport.y - viewport.h, viewport.w, viewport.h);
+    gpu_set_viewport(viewport.x, viewport.y, viewport.w, viewport.h);
     
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
@@ -229,10 +233,8 @@ void draw_panel(UI_Element *e, UI_Manager *ui, Graphics *gfx, double t)
 {
     Assert(e->type == PANEL);
 
-    v4 color = { 0.53, 0.21, 0.12, 1.0f };
-
     _OPAQUE_UI_();
-    draw_rect(e->panel.a, color, gfx);
+    draw_rect(e->panel.a, e->panel.color, gfx);
 }
 
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -240,7 +242,7 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     Assert(e->type == WINDOW);
     auto *win = &e->window;
     auto a = win->current_a;
-
+    
     {
         _TRANSLUCENT_UI_();
         const v4 shadow_c = { 0, 0, 0, 0.05 };
@@ -262,7 +264,7 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     draw_string_in_rect_centered(get_ui_string(win->title, ui), title_a, FS_20, FONT_TITLE, c_white, gfx);
     //---------
 
-    draw_rect(r, c_white, gfx);
+    draw_rect(r, win->background_color, gfx);
 
     const v4 c_red    = { 1, 0, 0, 1 };
     if(win->resize_dir_x < 0) draw_rect(left_of(  a, window_border_width), c_red, gfx);
@@ -286,6 +288,11 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
         btn_a.h -= visible_border_w;
         draw_rect(btn_a, btn_c, gfx);
     }
+
+    
+    if(tweak_bool(TWEAK_SHOW_WINDOW_SIZES)) {
+        draw_string(concat_tmp(a.w, " x ", a.h, ui->string_builder), { a.x + a.w, a.y }, FS_12, FONT_TITLE, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
+    }
 }
 
 
@@ -301,7 +308,7 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     Rect clip_rect = a;
 
     draw_body_text(text, txt.font_size, txt.font, a,
-                   {0.1, 0.1, 0.1, 1}, gfx, txt.h_align,
+                   txt.color, gfx, txt.h_align,
                    &clip_rect, NULL,
                    txt.v_align);
 }
@@ -309,30 +316,42 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
 void _draw_button_label(String label, Rect a, Graphics *gfx)
 {
-    draw_string_in_rect_centered(label, a, FS_20, FONT_TITLE, {1, 1, 1, 1}, gfx);
+    draw_string_in_rect_centered(label, a, FS_16, FONT_TITLE, {1, 1, 1, 1}, gfx);
 }
 
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
-void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx,
-                 bool enabled = true, bool selected = false, String label = EMPTY_STRING)
+void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx, v4 color,
+                  bool enabled = true, bool selected = false, String label = EMPTY_STRING)
 {
     float z = eat_z_for_2d(gfx);
     v3 p0 = { a.x, a.y, z };
     
-    v4 c_idle     = { 0.05,  0.6,   0.30, 1 };
-    v4 c_hovered  = { 0.00, 0.65, 0.225, 1 };
-    v4 c_pressed  = { 0.00,  0.5,  0.20, 1 };
-    v4 c_disabled = { 0.30,  0.5,  0.35, 1 };
-    v4 c_selected = { 0.00, 0.85,  0.35, 1 };
+    float color_saturation = saturation_of(color);
+    
+    v4 c_idle = color;
+    
+    v4 c_hovered = color;
+    c_hovered.rgb *= 1.1f;
 
-    v4 color;
-    if(!enabled)             color = c_disabled;
-    else if(selected)        color = c_selected;
-    else if(click_state & PRESSED) color = c_pressed;
-    else if(click_state & HOVERED) color = c_hovered;
-    else color = c_idle;
+    v4 c_pressed = color;
+    c_pressed.rgb *= 0.6f;
 
-    draw_quad(p0, V3_X * a.w, V3_Y * a.h, color, gfx);
+    v4 c_disabled = color;
+    c_disabled.rgb *= 0.9f;
+    adjust_saturation(&c_disabled, 0.33f);
+    
+    v4 c_selected = color;
+    c_selected.rgb *= 1.28f;
+    //--
+
+    v4 color_to_use;
+    if(selected)                   color_to_use = c_selected;
+    else if(!enabled)              color_to_use = c_disabled;
+    else if(click_state & PRESSED) color_to_use = c_pressed;
+    else if(click_state & HOVERED) color_to_use = c_hovered;
+    else color_to_use = c_idle;
+
+    draw_quad(p0, V3_X * a.w, V3_Y * a.h, color_to_use, gfx);
     if(label.length > 0)
         _draw_button_label(label, a, gfx);
 }
@@ -344,7 +363,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     
     _OPAQUE_UI_();
 
-    _draw_button(btn.a, btn.state, gfx,
+    _draw_button(btn.a, btn.state, gfx, btn.color,
                 btn.enabled, btn.selected, get_ui_string(btn.label, ui));
 }
 
@@ -355,7 +374,7 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
     _OPAQUE_UI_();
     
-    _draw_button(slot.a, slot.click_state, gfx,
+    _draw_button(slot.a, slot.click_state, gfx, { 0.24, 0.30, 0.38, 1 },
                  slot.enabled, slot.selected);
 
     auto a = slot.a;
@@ -404,7 +423,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
     Rect inner_a = textfield_inner_rect(tf);
     
     Rect text_a = inner_a;
-    text_a.y -= tf->scroll.value;
+    text_a.y   += tf->scroll.value;
     
     String text = get_ui_string(tf->text, ui);
     Body_Text bt = create_textfield_body_text(text, inner_a, gfx->fonts);
@@ -430,6 +449,8 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
         
         v2 highlight_p0 = text_a.p + position_from_codepoint_index(highlight_cp0, &bt, gfx->fonts);
         v2 highlight_p1 = text_a.p + position_from_codepoint_index(highlight_cp1, &bt, gfx->fonts);
+        highlight_p0.y += text_a.h - bt.line_height;
+        highlight_p1.y += text_a.h - bt.line_height;
 
         
         int highlight_line0 = line_from_codepoint_index(highlight_cp0, &bt);
@@ -448,7 +469,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
             
             // TODO :PushPop color
             Rect a = {start_x - 2,
-                      highlight_p0.y + bt.line_height * l,
+                      highlight_p0.y - bt.line_height * l,
                       end_x - start_x + 2,
                       bt.line_height};
             a = rect_intersection(a, clip_rect);
@@ -474,7 +495,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
         
 #if true && DEBUG // DEBUG DISPLAY: LAST VERTICAL NAV X
         draw_rect_ps({inner_a.x + ui->active_textfield_state.last_vertical_nav_x-2,
-                    inner_a.y - 4}, {4, 4}, {1, 0, 0, 0.5}, gfx);
+                    inner_a.y + 4}, {4, 4}, {1, 0, 0, 0.5}, gfx);
         draw_rect_ps(inner_a.p + V2_X * (ui->active_textfield_state.last_vertical_nav_x-1), {2, inner_a.h}, {1, 0, 0, 0.5}, gfx);
 #endif
 
@@ -484,18 +505,18 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
             String cp_index_str = concat_tmp("", tf_state.caret.cp, gfx->debug.sb);
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
-            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y}, {cp_index_str_w + 4, 16}, {0, 0, 0, 1}, gfx);
+            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + inner_a.h - 16}, {cp_index_str_w + 4, 16}, {0, 0, 0, 1}, gfx);
             
-            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + 2 }, FS_12, FONT_TITLE, {1, 1, 1, 1}, gfx);   
+            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + inner_a.h - 2 }, FS_12, FONT_TITLE, {1, 1, 1, 1}, gfx);   
         }
 
         { // HIGHLIGHT
             String cp_index_str = concat_tmp("", tf_state.highlight_start.cp, gfx->debug.sb);
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
-            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + 16}, {cp_index_str_w + 4, 16}, {0.10, 0.61, 0.53, 1}, gfx);
+            draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + inner_a.h - 32}, {cp_index_str_w + 4, 16}, {0.10, 0.61, 0.53, 1}, gfx);
             
-            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + 2 + 16 }, FS_12, FONT_TITLE, {1, 1, 1, 1}, gfx);   
+            draw_string(cp_index_str, { inner_a.x - cp_index_str_w - 2, inner_a.y + inner_a.h - 2 - 16 }, FS_12, FONT_TITLE, {1, 1, 1, 1}, gfx);   
         }
         
 #endif
@@ -592,8 +613,7 @@ void draw_dropdown(UI_Element *e, Graphics *gfx)
     draw_rect(dropdown_rect(dd->box_a, dd->open), {0.8, 0.4f, 0.2f, 1.0f}, gfx);
 }
 
-// NOTE: This does not support crossing the x-axis. Might look weird if crossing happens mid-section.
-//                                                  Also, we don't clip the vertices of the sections that are on *the line*.
+// NOTE: This does not support negative values.
 void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     _OPAQUE_UI_();
@@ -603,11 +623,14 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     auto a = graph->a;
 
     // BACKGROUND //
-    draw_rect(a, { 1, 1, 1, 1 }, gfx);
-
-    // GRAPH //
-    v4 fill_color = { 0.21, 0.14, 0.82, 1 };
-    v4 line_color = { 0.15, 0.81, 0.78, 1 };
+    draw_rect(a, { 0.02, 0.12, 0.09, 1}, gfx);
+    // ////////// //
+    
+    v4 fill_color = { 0.00, 0.59, 0.53, 0.2 };
+    v4 line_color = { 0.00, 0.59, 0.53,   1 };
+    v4 grid_color = { 0.00, 0.16, 0.08,   1 };
+    v4 number_color = line_color;
+    number_color.rgb *= 0.9f;
 
     String values_str = get_ui_string(graph->data, ui);
     Assert(values_str.length % sizeof(float) == 0);
@@ -620,20 +643,70 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     
     float y_factor = a.h / y_minmax_delta;
     float y_offset = -graph->y_min * y_factor;
+
+    const float numbers_w = 26;
+    float graph_w = a.w - numbers_w;
+
+    // NUMBERS BACKGROUND
+    draw_rect(right_of(a, numbers_w), { 0, 0, 0, 0.6 }, gfx);
+
+    // GRID
+    float magnitude       = floor(log10(y_minmax_delta));
+    s64 grid_ystep        = roundf(roundf(y_minmax_delta / 10.0f / (5.0f * magnitude)) * 5.0f * magnitude);
+    
+    if(grid_ystep > 0) {
+
+        s64 grid_yy = 0;
+        while(grid_yy <= graph->y_min)             grid_yy += grid_ystep;
+        while(grid_yy - grid_ystep > graph->y_min) grid_yy -= grid_ystep;
+
+        int line_ix = 0;
+        while(grid_yy < graph->y_max)
+        {
+            v2 p = a.p + V2_Y * (((grid_yy - graph->y_min) / y_minmax_delta) * a.h);
+            
+            draw_rect_ps(p, { a.w, 1 }, grid_color, gfx);
+
+            // @Norelease: Do K, M, G suffixes, so we fit.
+            if(p.y > a.y + 22)
+                draw_string(s64_to_string(grid_yy, ALLOC_TMP), { a.x + a.w - 2, p.y - 2 }, FS_12, FONT_BODY, number_color, gfx, HA_RIGHT);
+            
+            grid_yy += grid_ystep;
+            line_ix++;
+        }
+    }
+
+    const int max_grid_cols = 20;
+    int num_grid_cols = num_values;
+    while(num_grid_cols > max_grid_cols)
+    {
+        if(num_grid_cols % 2 == 0) num_grid_cols /= 2;
+        else num_grid_cols = max_grid_cols;
+    }
+
+    num_grid_cols -= 1;
+        
+    for(int x = 1; x < num_grid_cols; x++)
+    {
+        draw_rect_ps(a.p + V2_X * (x * (graph_w/(num_grid_cols))), { 1, a.h }, grid_color, gfx);
+    }
+    // --
+    
     
     float fill_z = eat_z_for_2d(gfx);
     float line_z = eat_z_for_2d(gfx);
     
-    v3 origin = { a.x, a.y + a.h - y_offset, fill_z };
-    float section_w = a.w / (num_values-1);
-    
+    v3 origin = { a.x, a.y + y_offset, fill_z };
+    float section_w = (num_values > 1) ? graph_w / (num_values-1) : graph_w;
+
+    // GRAPH //
     for(int i = 0; i < num_values; i++)
     {
         float y1 = values[i];
         float y0;
         
         if(i == 0) {
-            if(num_values > 0) continue;
+            if(num_values > 1) continue;
             else {
                 y0 = y1;
                 i += 1;
@@ -643,12 +716,12 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
         v3 p0 = origin + V3_X * (i-1) * section_w;
         v3 p1 = p0 + V3_X * section_w;
-        v3 p2 = p0 - V3_Y * (y0 * y_factor);
-        v3 p3 = p1 - V3_Y * (y1 * y_factor);
+        v3 p2 = p0 + V3_Y * (y0 * y_factor);
+        v3 p3 = p1 + V3_Y * (y1 * y_factor);
 
-        // clip
-        if(p0.y > a.y + a.h) p0.y = a.y + a.h;
-        if(p1.y > a.y + a.h) p1.y = a.y + a.h;
+        // Fill down to the bottom, even if 0 is higher up.
+        p0.y = a.y;
+        p1.y = a.y;
         
         v3 p[6] = {
             p0, p1, p2,
@@ -661,7 +734,18 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
         v3 line_p1 = p3;
         line_p0.z = line_z;
         line_p1.z = line_z;
-        draw_line(line_p0, line_p1, V3_Z, 4, line_color, gfx);
+        draw_line(line_p0, line_p1, V3_Z, 2, line_color, gfx);
+
+
+        // Last value sign
+        if(i == num_values-1)
+        {
+            Rect aa = { { line_p1.x, line_p1.y - 18 }, { numbers_w, 18 } };
+            
+            draw_rect(aa, { 0, 0, 0, 0.8 }, gfx);
+            draw_string(s64_to_string((s64)y1, ALLOC_TMP), center_bottom_of(aa), FS_18, FONT_BODY, line_color, gfx, HA_CENTER, VA_BOTTOM);
+            draw_line(line_p1, line_p1 + V3_X * numbers_w, V3_Z, 2, line_color, gfx);
+        }
     }
     // ///// //
     
@@ -670,40 +754,79 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room *room, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
     {
-        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
         
         if(selected_item)
         {
-            Entity preview_entity = create_preview_item_entity(selected_item, tp, world_t);
-            draw_entity(&preview_entity, world_t, gfx);
+            Entity preview_entity = create_preview_item_entity(selected_item, tp, world_t, Q_IDENTITY);
+            draw_entity(&preview_entity, world_t, room, client, gfx);
 
             Assert(preview_entity.type == ENTITY_ITEM);
 
-            v3 p = preview_entity.item_e.p;
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             
-            v3 p0 = p;
+            v3 p0 = preview_entity.item_e.p;
             auto vol = item_types[selected_item->type].volume;
             p0.xy -= vol.xy * 0.5f;
 
             v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
-            if(!can_place_item_entity(selected_item, p, world_t, room, room->entities.e, room->entities.n))
+            if(!can_place_item_entity_at_tp(selected_item, tp, world_t, room->entities.e, room->entities.n, room))
                 shadow_color = { 0.4,   0.1,  0.1, 1 };
             
             draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
         }
         else {
+
+            // Preview PUT_DOWN of held item.
+            if(in_array(input->keys, VKEY_CONTROL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
+            {
+                auto *player = find_current_player_entity(client);
+                if(player) {
+                    Assert(player->type == ENTITY_PLAYER);
+                    auto *player_e = &player->player_e;
+
+                    auto *state = &player->player_local.state_after_completed_action_queue;
+                    
+                    if(state->held_item.type != ITEM_NONE_OR_NUM) {
+                        // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
+                        
+                        Entity preview_entity = create_preview_item_entity(&state->held_item, tp, world_t, Q_IDENTITY);
+                        draw_entity(&preview_entity, world_t, room, client, gfx);
+
+                        // @Norelease: Draw shadow and show if placement is possible
+                    }
+                }
+            }
+
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             draw_quad(tp + V3(-1, -1, 0.001f), V3_X * 2.0f, V3_Y * 2.0f, { 1, 0, 0, 1 }, gfx);
         }
     }
 }
 
 
-m4x4 draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx, User *user = NULL)
+void draw_ui_chess_board(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    _OPAQUE_UI_();
+    
+    Assert(e->type == UI_CHESS_BOARD);
+    auto *board = &e->chess_board;
+    
+    String squares_str = get_ui_string(board->squares, ui);
+    Assert(squares_str.length == sizeof(Chess_Board::squares));
+
+    Chess_Square *squares = (Chess_Square *)squares_str.data;
+
+    draw_chess_board(squares, board->a, gfx, board->selected_square_ix);
+    
+}
+
+
+m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, Client *client, Graphics *gfx, User *user = NULL)
 {
     _OPAQUE_UI_();
 
@@ -718,22 +841,22 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Graphics *gfx, User *u
     // PROJECTION MATRIX //
     m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx->z_for_2d);
 
-    // PREPARE ENTITIES //
-    for(int i = 0; i < room->entities.n; i++) {
-        prepare_entity_for_drawing(&room->entities[i], (user) ? user->id : NO_USER);
+
+    {
+        Scoped_Push(gfx->draw_mode, DRAW_3D);
+
+        // DRAW WORLD //
+        draw_world(room, world_t, projection, client, gfx);
+
+        // HOVERED TILE, ITEM PREVIEW //
+        v3 hovered_tile_p = { 0 };
+        hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
+        hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
+
+        Item *selected_item = (user) ? get_selected_inventory_item(user) : NULL;
+        draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, room, input, client, gfx);
     }
-
-    // DRAW WORLD //
-    draw_world(room, world_t, projection, gfx);
-
-    // HOVERED TILE, ITEM PREVIEW //
-    v3 hovered_tile_p = {0};
-    hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
-    hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
-
-    Item *selected_item = (user) ? get_selected_inventory_item(user) : NULL;
-    draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, room, gfx);
-
+    
     // EAT Z //
     gfx->z_for_2d -= 0.2;
 
@@ -745,9 +868,10 @@ DWORD render_loop(void *loop_)
 {
     Render_Loop *loop = (Render_Loop *)loop_;
 
-    Client     *client = loop->client;
-    UI_Manager *ui;    
-    Window     *main_window;
+    Client *client = loop->client;
+    UI_Manager    *ui;    
+    Input_Manager *input;    
+    Window        *main_window;
     
     Graphics gfx = {0};
 
@@ -756,10 +880,11 @@ DWORD render_loop(void *loop_)
     {
         Assert(loop->state == Render_Loop::INITIALIZING);
         
-        ui =          &client->ui;    
+        ui          = &client->ui;
+        input       =  &client->input;
         main_window = &client->main_window;
         
-        gfx.fonts = client->fonts;
+        gfx.fonts = &client->fonts;
         
         bool graphics_init_result = init_graphics(main_window, &gfx);
         Assert(graphics_init_result);
@@ -819,6 +944,8 @@ DWORD render_loop(void *loop_)
             
             if(dirty_rects.n > 0)
             {
+                Scoped_Push(gfx.draw_mode, DRAW_2D);
+                
                 // Draw UI //
                 const v4 background_color = { 0.3, 0.36, 0.42, 1 };
                 draw_rect(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
@@ -842,6 +969,8 @@ DWORD render_loop(void *loop_)
                             
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
+                            
+                        case UI_CHESS_BOARD:    draw_ui_chess_board(e, ui, &gfx);  break;
 
                         case WORLD_VIEW: {
                             auto *room = &client->room;
@@ -851,7 +980,7 @@ DWORD render_loop(void *loop_)
                                 break;
                             }
 
-                            m4x4 projection = draw_world_view(e, room, t, &gfx, current_user(client));
+                            m4x4 projection = draw_world_view(e, room, t, input, client, &gfx, current_user(client));
 
                             auto &graphics = gfx; // @Hack @Stupid @Cleanup
                             
@@ -872,6 +1001,7 @@ DWORD render_loop(void *loop_)
                         default: Assert(false); break;
                     }
                 }
+
             }
 
             if(second != last_second) {
@@ -931,6 +1061,8 @@ DWORD render_loop(void *loop_)
                         gpu_set_depth_mask(true);
                         draw_render_object_buffer(&gfx.world_render_buffer.opaque, false, &gfx);
 
+                        // Static Opaque
+                        gpu_set_uniform_m4x4(gfx.vertex_shader.transform_uniform, M_IDENTITY);
                         draw_vao(&gfx.world.static_opaque_vao, &gfx);
 
                         // Translucent

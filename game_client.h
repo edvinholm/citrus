@@ -12,7 +12,14 @@ namespace Client_Game
         union {
             struct {
                 bool is_me;
+                Player_State state_after_completed_action_queue;
             } player_local;
+
+            struct {
+                struct {
+                    s8 selected_square_ix_plus_one;
+                } chess;
+            } item_local;
         };
 
         bool exists_on_server; // Used on RCB_ROOM_UPDATE to know which entities to remove.

@@ -34,10 +34,10 @@ struct Body_Text
     float glyph_scale;
 };
 
-Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font *font, float start_x = 0, bool multiline = true);
-Text_Location text_location_from_position(v2 p, Body_Text *bt, v2 bt_p, Font *fonts);
+Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font_Table *fonts, float start_x = 0, bool multiline = true);
+Text_Location text_location_from_position(v2 p, Body_Text *bt, v2 bt_p, Font_Table *fonts);
 
 int line_from_codepoint_index(int cp_index, Body_Text *bt, int *_cp_index_on_line = NULL);
 
-float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text *bt, Font *fonts, int *_cp = NULL);
-int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font *fonts, bool place_before_trailing_newline, strlength *_rel_byte = NULL);
+float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text *bt, Font_Table *fonts, int *_cp = NULL);
+int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font_Table *fonts, bool place_before_trailing_newline, strlength *_rel_byte = NULL);

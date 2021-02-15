@@ -9,7 +9,7 @@ enum MSB_Packet_Type
     MSB_GOODBYE = 2,
 
     MSB_PLACE_ORDER = 3,
-    MSB_SET_WATCHED_ARTICLE = 4
+    MSB_SET_VIEW_TARGET = 4
 };
 
 // User Server Bound Packet Header
@@ -42,8 +42,8 @@ struct MSB_Packet_Header
         } place_order;
 
         struct {
-            Item_Type_ID article;
-        } set_watched_article;
+            Market_View_Target target;
+        } set_view_target;
     };
 };
 
@@ -77,7 +77,6 @@ bool write_MS_Client_Type(MS_Client_Type type, Network_Node *node)
     return true;
 }
 
-
 bool read_MSB_Packet_Header(MSB_Packet_Header *_header, Network_Node *node)
 {    
     Zero(*_header);
@@ -107,11 +106,11 @@ bool read_MSB_Packet_Header(MSB_Packet_Header *_header, Network_Node *node)
             }
         } break;
 
-		case MSB_SET_WATCHED_ARTICLE: {
-			auto *p = &_header->set_watched_article;
+        case MSB_SET_VIEW_TARGET: {
+            auto *p = &_header->set_view_target;
 
-			Read_To_Ptr(Item_Type_ID, &p->article, node);
-		} break;
+            Read_To_Ptr(Market_View_Target, &p->target, node);
+        } break;
 
         default: Assert(false); break;
     }
@@ -172,13 +171,14 @@ bool enqueue_MSB_PLACE_ORDER_packet(Network_Node *node, Money price, bool is_buy
     return true;
 }
 
-bool enqueue_MSB_SET_WATCHED_ARTICLE_packet(Network_Node *node, Item_Type_ID article)
+bool enqueue_MSB_SET_VIEW_TARGET_packet(Network_Node *node, Market_View_Target target)
 {
     begin_outbound_packet(node);
     {
-        Write(MSB_Packet_Type, MSB_SET_WATCHED_ARTICLE, node);
+        Write(MSB_Packet_Type, MSB_SET_VIEW_TARGET, node);
         //--
-        Write(Item_Type_ID, article, node);
+        
+        Write(Market_View_Target, target, node);
     }
     end_outbound_packet(node);
     return true;

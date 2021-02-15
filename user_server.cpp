@@ -85,6 +85,11 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
             if(type != ITEM_NONE_OR_NUM) {
                 slot.flags |= INV_SLOT_FILLED;
                 slot.item   = create_item(type, user.id, server);
+
+                if(slot.item.type == ITEM_WATERING_CAN)
+                {
+                    slot.item.watering_can.water_level = random_float();
+                }
             }
             
             user.inventory[j] = slot;

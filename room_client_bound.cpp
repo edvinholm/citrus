@@ -1,8 +1,7 @@
 #ifndef ROOM_CLIENT_BOUND_INCLUDED
 #define ROOM_CLIENT_BOUND_INCLUDED
 
-// IMPORTANT: Must fit in a u64
-enum Room_Connect_Status
+enum Room_Connect_Status: u64 // @Cleanup: This does not need to be 64 bits (Change this here and in network code)
 {
     ROOM_CONNECT__REQUEST_RECEIVED = 1,
     ROOM_CONNECT__CONNECTED        = 2,

@@ -891,7 +891,10 @@ bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
     
     while(at < end) {
         int result = send(sock->handle, (const char *)at, end - at, 0);
-        if(result == SOCKET_ERROR) return false;
+		if (result == SOCKET_ERROR) {
+			auto err = WSAGetLastError();
+			return false;
+		}
         Assert(result > 0);
         at += result;
     }

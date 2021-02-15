@@ -51,11 +51,18 @@
 
 #include "world.h"
 
+// --
+
+#include "chess.h"
+#include "chess.cpp"
+
 //--
 
 #include "user_pre.h"
 #include "game_shared.h"
 #include "user.h"
+#include "market.h"
+
 
 #include "user_shared.cpp"
 #include "world_shared.cpp"
@@ -69,7 +76,7 @@
 
 #include "net_client.h"
 
-
+#include "color.h"
 #include "ui.h"
 
 
@@ -77,6 +84,7 @@
 using namespace Client_Game;
 
 using namespace Client_User;
+using namespace Client_Market;
 
 
 #include "client.h"
@@ -87,6 +95,8 @@ using namespace Client_User;
 #include "net_client.cpp"
 
 #include "body_text.h"
+
+#include "color.cpp"
 
 #include "ui.cpp"
 
@@ -100,6 +110,8 @@ using namespace Client_User;
 #include "font_draw.cpp"
 
 #include "body_text.cpp"
+
+#include "chess_draw.cpp"
 
 #include "world_draw.cpp"
 #include "client_draw.cpp"

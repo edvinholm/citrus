@@ -170,7 +170,7 @@ Rect slide_top(float h, Layout_Manager *manager)
 {
     Rect a = area(manager);
     Rect result = top_of(a, h);
-    a.y += h;
+    a.y -= h;
     set_area(a, manager);
     return result;
 }
@@ -180,7 +180,7 @@ Rect slide_bottom(float h, Layout_Manager *manager)
 {
     Rect a = area(manager);
     Rect result = bottom_of(a, h);
-    a.y -= h;
+    a.y += h;
     set_area(a, manager);
     return result;
 }
@@ -353,3 +353,7 @@ Rect cut_right_square(Layout_Manager *manager)
 
 #define _GROW_BOTTOM_(DH) \
     _AREA_(grown(area(ctx.layout), 0, 0, 0, DH));
+
+
+#define _TRANSLATE_(...) \
+    _AREA_(translated(area(ctx.layout), __VA_ARGS__));

@@ -161,6 +161,10 @@ v3 operator + (v3 v, v3 u)
     
 }
 
+v3 operator + (v3 u, v2 v)
+{
+    return { u.x + v.x, u.y + v.y, u.z };
+}
 
 void operator += (v3 &v, v3 u)
 {
@@ -210,3 +214,13 @@ v3 normalize(v3 v)
     return v * (1.0f/magnitude(v));
 }
 
+
+void magnitude_and_direction(v3 v, float *_magnitude, v3 *_direction)
+{
+    float mag = magnitude(v);
+    
+    if(mag <= 0.0f) *_direction = V3_ZERO;
+    else            *_direction = v * (1.0f / mag);
+
+    *_magnitude = mag;
+}

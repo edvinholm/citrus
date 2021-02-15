@@ -54,7 +54,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
             switch(action.type) { // @Jai: #complete
                 case C_RS_ACT_CLICK_TILE: {
                     auto &ct = action.click_tile;
-                    Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place);
+                    Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place, ct.default_action_is_put_down);
                 } break;
                     
                 case C_RS_ACT_ENTITY_ACTION: {
@@ -132,7 +132,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
 
                 lock_mutex(client->mutex);
                 {
-                    double t = platform_get_time();
+                    double t       = platform_get_time();
+                    double world_t = world_time_for_room(room, t);
                     
                     room->t = p->time;
                     room->time_offset = room->t - t;
@@ -144,7 +145,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Assert(room->entities.n == 0);
 
                     array_set(room->entities, entities);
-                    
+
+                    update_local_data_for_room(room, world_t, client);
                     room->static_geometry_up_to_date = false;
                 }
                 unlock_mutex(client->mutex);
@@ -174,6 +176,9 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                 
                 lock_mutex(client->mutex);
                 {
+                    double t       = platform_get_time();
+                    double world_t = world_time_for_room(room, t);
+                    
                     remove_preview_entities(room);
 
                     // Reset exists_on_server
@@ -242,6 +247,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     if(p->tile1 - p->tile0 > 0) {
                         room->static_geometry_up_to_date = false;
                     }
+
+                    update_local_data_for_room(room, world_t, client);
                 }
                 unlock_mutex(client->mutex);
             } break;
@@ -377,9 +384,9 @@ bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action
                     Enqueue(MSB_PLACE_ORDER, node, x->price, x->is_buy_order, item_id_to_sell, item_type_to_buy);
                 } break;
 
-                case C_MS_SET_WATCHED_ARTICLE: {
-                    auto *x = &action->set_watched_article;
-                    Enqueue(MSB_SET_WATCHED_ARTICLE, node, x->article);
+                case C_MS_SET_VIEW: {
+                    auto *x = &action->set_view;
+                    Enqueue(MSB_SET_VIEW_TARGET, node, x->target);
                 } break;
                     
             }
@@ -425,20 +432,12 @@ bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action
                 lock_mutex(client->mutex);
                 {
                     auto *market = &client->market;
-                    
-                    market->watched_article = p->watched_article;
-                    
-                    if(market->watched_article != ITEM_NONE_OR_NUM)
-                    {
-                        Assert(p->price_history_length <= ARRLEN(market->price_history_for_watched_article));
+                    auto *view = &market->view;
 
-                        for(int i = 0; i < p->price_history_length; i++) {
-                            market->price_history_for_watched_article[i] = p->price_history[i];
-                        }
-                        market->price_history_length_for_watched_article = p->price_history_length;
-                    }
-                    
-                    market->waiting_for_watched_article_to_be_set = false;
+                    *static_cast<S__Market_View *>(view) = p->view;
+                                
+                    market->waiting_for_view_update = false;
+                    market->ui_needs_update = true;
                 }
                 unlock_mutex(client->mutex);
                 

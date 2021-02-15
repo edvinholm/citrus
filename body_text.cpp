@@ -10,7 +10,7 @@ Rect glyph_area(Sized_Glyph *glyph, int glyph_index, v2 p, int last_glyph_index,
     Rect glyph_a;
 
     glyph_a.x = p.x + glyph->offset.x;
-    glyph_a.y = p.y + glyph->offset.y + font_ascent(scale, font);
+    glyph_a.y = p.y + glyph->offset.y - font->ascent * scale;
     glyph_a.s = { glyph->pixel_s.w, glyph->pixel_s.h };
     
     p.x += glyph->advance_width;
@@ -116,7 +116,7 @@ void get_line_cp_start_and_end(int line_index, Body_Text *bt, int *_start_cp_ind
 
 
 // NOTE: If place_before_trailing_whitespace is true, we will get the index of the last codepoint before end, if the last codepoint is a whitespace. Instead of last codepoint index + 1.
-int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font *fonts, bool place_before_trailing_whitespace, strlength *_rel_byte/* = NULL*/)
+int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font_Table *fonts, bool place_before_trailing_whitespace, strlength *_rel_byte/* = NULL*/)
 {
     v2 pp = V2_ZERO;
 
@@ -124,7 +124,7 @@ int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font *fon
     int prev_cp = 0;
     u8 *prev_cp_start = start; // Not really, but whatevs. It works.
 
-    Font *font = &fonts[bt->font];
+    Font *font = &(*fonts)[bt->font];
 
     int cp_index = 0;
     while (at < end)
@@ -165,11 +165,11 @@ int codepoint_index_from_x(float x, u8 *start, u8 *end, Body_Text *bt, Font *fon
     return cp_index;
 }
 
-float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text *bt, Font *fonts, int *_cp/* = NULL*/)
+float x_from_codepoint_index(int cp_index_to_find, u8 *start, u8 *end, Body_Text *bt, Font_Table *fonts, int *_cp/* = NULL*/)
 {
     v2 pp = V2_ZERO;
 
-    Font *font = &fonts[bt->font];
+    Font *font = &(*fonts)[bt->font];
     
     u8 *at = start;
     int prev_cp = 0;
@@ -205,13 +205,13 @@ float y_from_line_index(int line_index, Body_Text *bt)
     Assert(line_index >= 0);
     Assert(line_index < bt->lines.n);
 
-    return line_index * bt->line_height;
+    return -line_index * bt->line_height;
 }
 
-Text_Location text_location_from_position(v2 p, Body_Text *bt, v2 bt_p, Font *fonts)
+Text_Location text_location_from_position(v2 p, Body_Text *bt, v2 bt_top_left, Font_Table *fonts)
 {
-    v2 delta = p - bt_p;
-    s64 line_index = delta.y / bt->line_height;
+    v2 delta = p - bt_top_left;
+    s64 line_index = -delta.y / bt->line_height;
 
     // Clamp line to valid interval
     line_index = clamp(line_index, (s64)0, bt->lines.n - 1);
@@ -295,7 +295,7 @@ int line_from_codepoint_index(int cp_index, Body_Text *bt, int *_cp_index_on_lin
 }
 
 
-v2 position_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_cp = NULL, int *_line_index = NULL)
+v2 position_from_codepoint_index(int cp_index, Body_Text *bt, Font_Table *fonts, int *_cp = NULL, int *_line_index = NULL)
 {
     Assert(cp_index >= 0);
     Assert(cp_index <= bt->num_codepoints);
@@ -317,7 +317,7 @@ v2 position_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *
     return { x, y_from_line_index(line_index, bt) };
 }
 
-Rect area_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_cp = NULL)
+Rect area_from_codepoint_index(int cp_index, Body_Text *bt, Font_Table *fonts, int *_cp = NULL)
 {
     Rect a;
     int cp = 0;
@@ -325,12 +325,12 @@ Rect area_from_codepoint_index(int cp_index, Body_Text *bt, Font *fonts, int *_c
 
     if(_cp) *_cp = cp;
     v2 unused;
-    return codepoint_area(cp, a.p, bt->font_size, &fonts[bt->font], bt->glyph_scale, &unused);
+    return codepoint_area(cp, a.p, bt->font_size, &(*fonts)[bt->font], bt->glyph_scale, &unused);
 }
 
-void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, H_Align h_align = HA_LEFT, Rect *clip_rect = NULL)
+void draw_body_text(Body_Text *bt, v2 top_left, v4 color, Graphics *gfx, H_Align h_align = HA_LEFT, Rect *clip_rect = NULL)
 {
-    Font *font = &gfx->fonts[bt->font];
+    Font *font = &(*gfx->fonts)[bt->font];
     Texture_ID font_texture = gfx->glyph_maps[bt->font].texture;
 
     float texture_slot = bound_slot_for_texture(font_texture, gfx);
@@ -348,7 +348,7 @@ void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, H_Align h_alig
     
     u8 *end = bt->text.data + bt->text.length;
     
-    v2 pp = p;
+    v2 pp = top_left;
     pp.x += bt->start_x;
 
 
@@ -372,10 +372,10 @@ void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, H_Align h_alig
         bool do_draw_line = true;
         Rect *line_clip_rect = NULL;
         if(clip_rect) {
-            if(pp.y + bt->line_height < clip_rect->y) {
+            if(pp.y - bt->line_height >= clip_rect->y + clip_rect->h) {
                 do_draw_line = false; // Past top border of clip rect.
             }
-            else if(pp.y >= clip_rect->y + clip_rect->h) {
+            else if(pp.y < clip_rect->y) {
                 break; // Past bottom border of clip rect.
             }
             else if(pp.y < clip_rect->y || pp.y + bt->line_height > clip_rect->y + clip_rect->h)
@@ -421,17 +421,17 @@ void draw_body_text(Body_Text *bt, v2 p, v4 color, Graphics *gfx, H_Align h_alig
         }
 
         // Prepare position for next line
-        pp.x = p.x;
-        pp.y += bt->line_height;
+        pp.x = top_left.x;
+        pp.y -= bt->line_height;
     }
 }
 
 // TODO @Cleanup: Take a size instead of a rect
-Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font *fonts, float start_x/* = 0*/, bool multiline/* = true*/)
+Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font_Table *fonts, float start_x/* = 0*/, bool multiline/* = true*/)
 {
     float a_x1 = a.x + a.w;
 
-    Font *font = &fonts[font_id];
+    Font *font = &(*fonts)[font_id];
     
     // SETUP THINGS WE ALREADY KNOW ABOUT OUR Body_Text //
     Body_Text bt = {0};
@@ -465,7 +465,8 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
     u8 *at  = text.data;
     u8 *end = text.data + text.length;
 
-    v2 pp = a.p;
+    v2 start_p = a.p + V2_Y * a.h;
+    v2 pp = start_p;
     pp.x += start_x;
 
     int prev_cp = 0;
@@ -533,7 +534,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
 
             // Prepare position for next line //
             pp.x = a.x;
-            pp.y += bt.line_height;
+            pp.y -= bt.line_height;
 
             // Reset line state //
             whitespace_or_hyphen_cp_index = -1;
@@ -550,7 +551,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
             cp_index++;
         }
     }
-    bt.end_p = pp - a.p;
+    bt.end_p  = pp - start_p;
     bt.end_cp = prev_cp;
     // /////////////////////// //
 
@@ -566,7 +567,7 @@ float body_text_height(Body_Text *bt)
     return bt->line_height * bt->lines.n;
 }
 
-float body_text_line_width(int line_index, Body_Text *bt, Font *fonts)
+float body_text_line_width(int line_index, Body_Text *bt, Font_Table *fonts)
 {
     Assert(line_index >= 0 && line_index < bt->lines.n);
     
@@ -578,7 +579,7 @@ float body_text_line_width(int line_index, Body_Text *bt, Font *fonts)
     if(line_index == bt->lines.n-1) end = bt->text.data + bt->text.length;
     else  end = bt->text.data + bt->lines[line_index+1].start_byte;
 
-    Font *font = &fonts[bt->font];
+    Font *font = &(*fonts)[bt->font];
 
     float x0 = pp.x;
     float min_x = FLT_MAX;
@@ -625,9 +626,13 @@ void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 c
 
     v2 p = a.p;
     if(v_align == VA_BOTTOM)
-        p.y += a.h - body_text_height(&body_text);
+        p.y += body_text_height(&body_text);
     else if(v_align == VA_CENTER)
         p.y += a.h * 0.5f - body_text_height(&body_text) * 0.5f;
+    else {
+        Assert(v_align == VA_TOP);
+        p.y += a.h;
+    }
     
     draw_body_text(&body_text, p, color, gfx, h_align, clip_rect); //TODO @Robustness: @Incomplete: h_align should be taken into account in create_body_text
 

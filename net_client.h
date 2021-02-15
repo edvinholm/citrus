@@ -12,7 +12,8 @@ struct C_RS_Action
     union {
         struct {
             s64 tile_ix;
-            Item item_to_place;
+            Item_ID item_to_place;
+            bool default_action_is_put_down;
         } click_tile;
         
         struct {
@@ -30,7 +31,7 @@ struct C_RS_Action
 enum C_MS_Action_Type
 {
     C_MS_PLACE_ORDER,
-    C_MS_SET_WATCHED_ARTICLE
+    C_MS_SET_VIEW
 };
 
 struct C_MS_Action
@@ -52,8 +53,8 @@ struct C_MS_Action
         } place_order;
         
         struct {
-            Item_Type_ID article;
-        } set_watched_article;
+            Market_View_Target target;
+        } set_view;
     };
 };
 

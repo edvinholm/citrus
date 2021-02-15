@@ -59,9 +59,9 @@ Rect rect(v2 P, v2 S)
 }
 
 inline
-float bottom_y(Rect A)
+float bottom_y(Rect a)
 {
-    return A.y + A.h;
+    return a.y;
 }
 
 inline
@@ -131,13 +131,13 @@ v2 center_left_of(Rect a)
 inline
 v2 center_top_of(Rect a)
 {
-    return { center_x(a), a.y };
+    return { center_x(a), a.y + a.h };
 }
 
 inline
 Rect center_top_of(Rect a, float w, float h, float offset_from_top = 0)
 {
-    a.y += offset_from_top;
+    a.y += a.h - offset_from_top;
     a.x += (a.w - w) / 2.0f;
     a.w = w;
     a.h = h;
@@ -161,7 +161,7 @@ v2 center_bottom_of(Rect a)
 inline
 Rect center_bottom_of(Rect a, v2 s, float offset_from_bottom = 0)
 {
-    a.y += a.h - s.h - offset_from_bottom;
+    a.y += offset_from_bottom;
     a.x += a.w / 2.0 - s.w / 2.0;
     return rect(a.p, s);
 }
@@ -221,7 +221,7 @@ Rect translated(Rect a, v2 offset)
 inline
 Rect shrunken(Rect a, float left, float right, float top, float bottom)
 {
-    return {a.x + left, a.y + top, a.w - left - right, a.h - top - bottom};
+    return {a.x + left, a.y + bottom, a.w - left - right, a.h - top - bottom};
 }
 
 inline
@@ -240,7 +240,7 @@ Rect shrunken(Rect a, v4 insets)
 inline
 Rect grown(Rect a, float left, float right, float top, float bottom)
 {
-    return {a.x - left, a.y - top, a.w + left + right, a.h + top + bottom};
+    return {a.x - left, a.y - bottom, a.w + left + right, a.h + top + bottom};
 }
 
 inline
@@ -264,18 +264,18 @@ Rect round_rect(Rect a)
 }
 
 inline
-Rect top_half_of(Rect Rect)
+Rect top_half_of(Rect a)
 {
-    Rect.h *= 0.5f;
-    return Rect;
+    a.h *= 0.5f;
+    a.y += a.h;
+    return a;
 }
 
 inline
-Rect bottom_half_of(Rect Rect)
+Rect bottom_half_of(Rect a)
 {
-    Rect.h *= 0.5f;
-    Rect.y += Rect.h;
-    return Rect;
+    a.h *= 0.5f;
+    return a;
 }
 
 inline
@@ -322,11 +322,10 @@ Rect right_square_of(Rect a)
 }
 
 inline
-Rect bottom_of(Rect Rect, float h)
+Rect bottom_of(Rect a, float h)
 {
-    Rect.y = Rect.y + Rect.h - h;
-    Rect.h = h;
-    return Rect;
+    a.h = h;
+    return a;
 }
 
 inline
@@ -336,10 +335,11 @@ Rect bottom_square_of(Rect a)
 }
 
 inline
-Rect top_of(Rect Rect, float h)
+Rect top_of(Rect a, float h)
 {
-    Rect.h = h;
-    return Rect;
+    a.y += a.h - h;
+    a.h = h;
+    return a;
 }
 
 inline
@@ -351,7 +351,7 @@ Rect top_square_of(Rect a)
 inline
 v2 top_right_of(Rect a)
 {
-    return { a.x + a.w, a.y };
+    return { a.x + a.w, a.y + a.h };
 }
 
 
@@ -359,6 +359,7 @@ inline
 Rect top_right_of(Rect a, float w, float h)
 {
     a.x += a.w - w;
+    a.y += a.h - h;
     a.w = w;
     a.h = h;
     return a;
@@ -369,7 +370,6 @@ inline
 Rect bottom_right_of(Rect a, float w, float h)
 {
     a.x = a.x + a.w - w;
-    a.y = a.y + a.h - h;
     a.w = w;
     a.h = h;
     return a;
@@ -380,7 +380,6 @@ inline
 Rect bottom_left_of(Rect a, float w, float h)
 {
     a.x = a.x;
-    a.y = a.y + a.h - h;
     a.w = w;
     a.h = h;
     return a;
@@ -389,11 +388,9 @@ Rect bottom_left_of(Rect a, float w, float h)
 
 
 inline
-Rect removed_bottom(Rect Rect, float Bottom)
+Rect removed_bottom(Rect a, float bottom)
 {
-    return {
-        Rect.x, Rect.y, Rect.w, max(0, Rect.h - Bottom)
-    };
+    return { a.x, a.y + bottom, a.w, a.h - bottom };
 }
 
 inline
@@ -413,11 +410,9 @@ Rect cut_bottom_off(Rect *a, float h) // TODO @Cleanup @BadNames everywhere dude
 
 
 inline
-Rect removed_top(Rect Rect, float Top)
+Rect removed_top(Rect a, float top)
 {
-    return {
-        Rect.x, min(Rect.y + Rect.h, Rect.y + Top), Rect.w, max(0, Rect.h - Top)
-    };
+    return { a.x, a.y, a.w, a.h - top };
 }
 
 inline
@@ -483,12 +478,10 @@ Rect cut_right_off(Rect *a, float w) // TODO @Cleanup @BadNames everywhere dude
 
 
 inline
-Rect AddedTop(Rect Rect, float Top)
+Rect added_top(Rect a, float top)
 {
-    return {
-        Rect.x, Rect.y - Top,
-        Rect.w, Rect.h + Top
-    };
+    a.h += top;
+    return a;
 }
 
 
@@ -504,6 +497,7 @@ Rect AddedLeft(Rect Rect, float Left)
 inline
 Rect added_bottom(Rect a, float bottom)
 {
+    a.y -= bottom;
     a.h += bottom;
     return a;
 }

@@ -139,24 +139,42 @@ bool start_market_server_listening_loop(Market_Server *server, Thread *_thread)
 }
 
 
-void set_watched_article(MS_Client *client, Item_Type_ID article)
+void remove_view_connections(MS_Client *client)
 {
     auto *server = client->server;
     
-    // Remove from current article.
-    if(client->watched_article != ITEM_NONE_OR_NUM) {
-        auto *article = &server->articles[client->watched_article];
+    if(client->view_target.type == MARKET_VIEW_TARGET_ARTICLE &&
+       client->view_target.article.article != ITEM_NONE_OR_NUM)
+    {
+        auto *article = &server->articles[client->view_target.article.article];
         ensure_not_in_array(article->watchers, client->id);
     }
+}
 
-    // Set
-    client->watched_article = article;
-    
-    // Add to new article.
-    if(client->watched_article != ITEM_NONE_OR_NUM) {
-        auto *article = &server->articles[client->watched_article];
+void add_view_connections(MS_Client *client)
+{
+    auto *server = client->server;
+
+    if(client->view_target.type == MARKET_VIEW_TARGET_ARTICLE &&
+       client->view_target.article.article != ITEM_NONE_OR_NUM)
+    {
+        auto *article = &server->articles[client->view_target.article.article];
         ensure_in_array(article->watchers, client->id);
     }
+}
+
+void set_view_target(MS_Client *client, Market_View_Target target)
+{
+    auto *server = client->server;
+
+    // Remove old connections
+    remove_view_connections(client);
+
+    // Set
+    client->view_target = target;
+
+    // Add new connections;
+    add_view_connections(client);
 }
 
 void disconnect_market_client(MS_Client *client)
@@ -174,7 +192,7 @@ void disconnect_market_client(MS_Client *client)
     
     auto *server = client->server;
 
-    set_watched_article(client, ITEM_NONE_OR_NUM);
+    remove_view_connections(client);
 
     // Remove client
     auto client_index = client - server->clients.e;
@@ -245,8 +263,11 @@ void add_new_market_clients(Market_Server *server)
                 continue;
             }
 
-            
-            client->watched_article = ITEM_NONE_OR_NUM;
+
+            Market_View_Target view_target = {0};
+            view_target.type = MARKET_VIEW_TARGET_ARTICLE;
+            view_target.article.article = ITEM_NONE_OR_NUM;
+            set_view_target(client, view_target);
                  
             client = array_add(server->clients, *client);
             MS_Log("Added client (socket = %lld) to market server.\n", client->node.socket.handle);
@@ -536,22 +557,73 @@ bool exchange_item_and_money(User_ID item_receiver, User_ID money_receiver, Item
     return can_commit;
 }
 
-bool send_market_update_to_watcher(MS_Client *client, Item_Type_ID article_id, Market_Article *article)
+bool send_market_update_to_article_watcher(MS_Client *client, Item_Type_ID article_id, Market_Article *article, Market_Server *server)
 {
-    u16 price_history_length = 0;
-    Money *price_history = NULL;
+    Assert(client->view_target.type == MARKET_VIEW_TARGET_ARTICLE &&
+           client->view_target.article.article == article_id); // We pass article_id and article to this procedure because of @Speed. But the passed article should be the client's watched article!
+
+    Market_View view;
+    Zero(view);
+    view.target = client->view_target;
+
+    auto *article_view = &view.article;
+    
+    article_view->num_prices = 0;
     if(article != NULL)
     {
-        Assert(article_id != ITEM_NONE_OR_NUM);
-        price_history_length = article->price_history_length;
-        price_history        = article->price_history;
+        article_view->num_prices = article->price_history_length;
+
+        static_assert(sizeof(article->price_history[0]) == sizeof(article_view->prices[0]));
+        static_assert(sizeof(article->price_history)    == sizeof(article_view->prices));
+
+        memcpy(article_view->prices, article->price_history, sizeof(article_view->prices));
     }
 
-    MS_Log("Set watched article for client %lld to %d\n", client->id, client->watched_article);
-
-    Assert(price_history != NULL || price_history_length == 0);
+    Assert(article != NULL || article_view->num_prices == 0);
             
-    MCB_Packet(MARKET_UPDATE, client, client->watched_article, price_history, price_history_length);
+    MCB_Packet(MARKET_UPDATE, client, &view);
+
+    return true;
+}
+
+
+bool send_market_update(MS_Client *client)
+{
+    Market_Server *server = client->server;
+    //--
+    
+    if(client->view_target.type == MARKET_VIEW_TARGET_ARTICLE)
+    {
+        auto *article_target = &client->view_target.article;
+        
+        Market_Article *article = NULL;
+        auto article_id = article_target->article;
+        if(article_id != ITEM_NONE_OR_NUM)
+        {
+            Assert(article_id >= 0 &&
+                   article_id < ARRLEN(server->articles));
+            
+            article = &server->articles[article_id];
+        }    
+
+        return send_market_update_to_article_watcher(client, article_id, article, server);
+    }
+
+    
+    Market_View view;
+    Zero(view);
+    view.target = client->view_target;
+
+    switch(view.target.type) {
+        case MARKET_VIEW_TARGET_ARTICLE: Assert(false); return false; // This should be handled above.
+
+        case MARKET_VIEW_TARGET_ORDERS:
+        {
+            auto *orders_view = &view.orders;
+        } break;
+    }
+    
+    MCB_Packet(MARKET_UPDATE, client, &view);
 
     return true;
 }
@@ -618,22 +690,21 @@ bool read_and_handle_msb_packet(MS_Client *client, MSB_Packet_Header header)
            
         } break;
 
-        case MSB_SET_WATCHED_ARTICLE: {
-            auto *p = &header.set_watched_article;
+        case MSB_SET_VIEW_TARGET: {
+            auto *p = &header.set_view_target;
 
             auto *server = client->server;
             
             // @Norelease: Check that article exists.
-            set_watched_article(client, p->article);
+            set_view_target(client, p->target);
+            
+            MS_Log("Set view target for client %lld to { .type = %d }\n", client->id, client->view_target.type); // @Jai: Log Market_View_Target struct.
 
-            Market_Article *article = NULL;
-            if(client->watched_article != ITEM_NONE_OR_NUM)
-            {
-                Assert(client->watched_article >= 0 && client->watched_article < ARRLEN(server->articles));
-                article = &server->articles[client->watched_article];
-            }
+            // SEND MARKET_UPDATE //
+            
+            Fail_If_True(!send_market_update(client));
 
-            Fail_If_True(!send_market_update_to_watcher(client, client->watched_article, article));
+            // ////////////////// //
             
         } break;
 
@@ -763,7 +834,17 @@ DWORD market_server_main_loop(void *server_) {
     auto *listening_loop = &server->listening_loop;
 
     // INITIALIZE MODEL //
-    // TODO
+    // @Norelease
+    for(int i = 0; i < ARRLEN(server->articles); i++) {
+        auto *article = &server->articles[i];
+        article->price_history_length = random_int(0, ARRLEN(article->price_history));
+        Money last = random_int(0, 100);
+        for(int i = 0; i < article->price_history_length; i++) {
+            auto random = random_int(-10, 10);
+            article->price_history[i] = max(0, last + random);
+            last = article->price_history[i];
+        }
+    }
 
     // START LISTENING LOOP //
     Thread listening_loop_thread;
@@ -857,7 +938,7 @@ DWORD market_server_main_loop(void *server_) {
                     continue; // @Norelease: Remove this watcher?
                 }
 
-                Fail_If_True(!send_market_update_to_watcher(client, article_id, article));
+                Fail_If_True(!send_market_update_to_article_watcher(client, article_id, article, server));
             }
             
             article->did_change = false;

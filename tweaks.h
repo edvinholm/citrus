@@ -12,9 +12,6 @@ enum Tweak_ID {
     TWEAK_MAX_MULTISAMPLE_SAMPLES,
     TWEAK_FONT_TEXTURE_SIZE,
     TWEAK_FONT_OVERSAMPLING_RATE,
-
-    // APPEARANCE //
-    TWEAK_WINDOW_BORDER_COLOR, // @Temporary?
     
     // //
     TWEAK_INITIAL_OS_WINDOW_RECT,
@@ -27,6 +24,7 @@ enum Tweak_ID {
     TWEAK_COLOR_TILES_BY_POSITION,
     TWEAK_STARTUP_USER,
     TWEAK_STARTUP_ROOM,
+    TWEAK_SHOW_WINDOW_SIZES,
     //
 
     TWEAK_NONE_OR_NUM
@@ -58,9 +56,6 @@ struct Tweaks
         { "font_texture_size",       TWEAK_TYPE_UINT,  1 },
         { "font_oversampling_rate",  TWEAK_TYPE_FLOAT, 1 },
 
-        // APPEARANCE //
-        { "window_border_color", TWEAK_TYPE_FLOAT, 4 },
-
         // //
         { "initial_os_window_rect", TWEAK_TYPE_INT, 4 },
 
@@ -71,7 +66,8 @@ struct Tweaks
         { "show_player_paths",       TWEAK_TYPE_BOOL, 1 },
         { "color_tiles_by_position", TWEAK_TYPE_BOOL, 1 },
         { "startup_user",            TWEAK_TYPE_UINT, 1 },
-        { "startup_room",            TWEAK_TYPE_UINT, 1 }
+        { "startup_room",            TWEAK_TYPE_UINT, 1 },
+        { "show_window_sizes",       TWEAK_TYPE_BOOL, 1 }
         //
     };
     static_assert(ARRLEN(infos) == TWEAK_NONE_OR_NUM);

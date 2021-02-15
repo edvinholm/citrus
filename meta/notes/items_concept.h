@@ -1,7 +1,6 @@
 
 
-// IMPORTANT Must fit in a u8.
-enum State_Of_Matter
+enum State_Of_Matter: u8
 {
     SOLID  = 0x01,
     LIQUID = 0x02,
@@ -22,8 +21,7 @@ Substance_Type substance_types[] = {
 };
 
 
-// IMPORTANT Must fit in a u16.
-enum Item_Flag_
+enum Item_Flag_: u16
 {
     PLACEABLE = 0x0001,
     CONTAINER = 0x0002,
