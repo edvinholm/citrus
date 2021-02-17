@@ -1428,6 +1428,10 @@ int client_entry_point(int num_args, char **arguments)
         Cursor_Icon cursor;
 
         { Scoped_Lock(client.mutex);
+
+#if DEBUG
+            auto pcounter0 = platform_performance_counter();
+#endif
             
             // MAYBE RELOAD TWEAKS //
 #if OS_WINDOWS
@@ -1495,6 +1499,11 @@ int client_entry_point(int num_args, char **arguments)
                 updates_this_second = 0;
             }
             updates_this_second++;
+#endif
+            
+#if DEBUG
+            auto pcounter1 = platform_performance_counter();
+            register_frame_time(pcounter1 - pcounter0);
 #endif
             
             if(should_quit) break;

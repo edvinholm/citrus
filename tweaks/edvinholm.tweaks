@@ -16,4 +16,6 @@ show_player_paths true
 startup_user 1
 startup_room 1
 
-show_window_sizes true
+show_window_sizes false
+
+show_profiler false

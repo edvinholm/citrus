@@ -30,7 +30,7 @@ const u16 MARKET_SERVER_PORT = 50999;
 #endif
 
 #include "debug.h"
-
+#include "profile.h"
 
 // --
 

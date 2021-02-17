@@ -17,8 +17,13 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *t
 void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 {
     auto *buffer = current_vertex_buffer(gfx);
-    Assert(buffer);
 
+    if(!buffer) {
+        triangles_now(p, uv, c, tex, n, current_default_buffer_set(gfx), true);
+        return;
+    }
+    
+    Assert(buffer);
     add_vertices(p, uv, c, tex, n, buffer);
 
     // MULTIPLY BY CURRENT TRANSFORM MATRIX //
