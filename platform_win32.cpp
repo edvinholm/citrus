@@ -366,12 +366,12 @@ LPARAM LParam
 }
 
 //NOTE: Returns false if the window should close.
-bool platform_process_input(Window *window, bool sleep_if_no_messages = false)
+bool platform_receive_next_input_message(Window *window, bool sleep_if_no_messages = false)
 {
     bool any_messages = false;
     
     MSG Message;
-    while(PeekMessage(&Message, window->Handle, 0, 0, PM_REMOVE))
+    if(PeekMessage(&Message, window->Handle, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&Message);
         DispatchMessage(&Message);
@@ -891,10 +891,10 @@ bool platform_write_to_socket(u8 *data, u64 length, Socket *sock)
     
     while(at < end) {
         int result = send(sock->handle, (const char *)at, end - at, 0);
-		if (result == SOCKET_ERROR) {
-			auto err = WSAGetLastError();
-			return false;
-		}
+        if (result == SOCKET_ERROR) {
+            auto err = WSAGetLastError();
+            return false;
+        }
         Assert(result > 0);
         at += result;
     }

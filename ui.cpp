@@ -1400,7 +1400,11 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
     // NOTE: (@Speed?) Processing input for every window. (This is to get the absolute latest mouse position..)
     //       IMPORTANT: (@Robustness) When we are doing this, the mouse can be at a different location during window resize/move
     //                                than during the update phase.
-    platform_process_input(&client->main_window);
+    //
+    // @Norelease: Should we do this??
+    //             If we were to do it, we would need to make sure
+    //             other elements doesn't miss this input frame:
+    //             platform_process_input(&client->main_window);
     
     auto &mouse = client->input.mouse;
 

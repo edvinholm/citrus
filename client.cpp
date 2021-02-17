@@ -1428,7 +1428,7 @@ int client_entry_point(int num_args, char **arguments)
         // //////////////////////////////////// //
 
         // NOTE: Get input as close as possible to the UI update.
-        if(!platform_process_input(main_window, true)) {
+        if(!platform_receive_next_input_message(main_window, true)) {
             break;
         }
 
