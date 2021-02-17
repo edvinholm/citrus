@@ -1,4 +1,10 @@
 
+
+#define Scoped_Lock(Mutex) \
+    lock_mutex(Mutex); \
+    defer(unlock_mutex(Mutex);)
+
+
 // @Temporary?
 template<typename T>
 struct Atomic {

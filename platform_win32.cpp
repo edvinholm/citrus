@@ -366,23 +366,26 @@ LPARAM LParam
 }
 
 //NOTE: Returns false if the window should close.
-bool platform_receive_next_input_message(Window *window, bool sleep_if_no_messages = false)
+bool platform_receive_next_input_message(Window *window, bool *_should_quit, bool sleep_if_no_messages = false)
 {
-    bool any_messages = false;
+    bool any_message = false;
     
     MSG Message;
     if(PeekMessage(&Message, window->Handle, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&Message);
         DispatchMessage(&Message);
-        any_messages = true;
+        any_message = true;
     }
 
-    if(!any_messages && sleep_if_no_messages) {
-        Sleep(2);
+    *_should_quit = window->CloseButtonClicked;
+
+    if(!any_message) {
+        if(sleep_if_no_messages) Sleep(2);
+        return false;
     }
 
-    return !window->CloseButtonClicked;
+    return true;
 }
 
 bool platform_make_gpu_context_current(Window *window)

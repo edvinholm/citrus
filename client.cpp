@@ -1412,8 +1412,6 @@ int client_entry_point(int num_args, char **arguments)
    
     while(true)
     {
-        new_input_frame(input);
-
         Assert((u64)wglGetCurrentContext() == 0);
         
         // TIME //
@@ -1427,16 +1425,10 @@ int client_entry_point(int num_args, char **arguments)
         layout->root_size = window_a.s;
         // //////////////////////////////////// //
 
-        // NOTE: Get input as close as possible to the UI update.
-        if(!platform_receive_next_input_message(main_window, true)) {
-            break;
-        }
-
         Cursor_Icon cursor;
-        
-        lock_mutex(client.mutex);
-        {
 
+        { Scoped_Lock(client.mutex);
+            
             // MAYBE RELOAD TWEAKS //
 #if OS_WINDOWS
             {
@@ -1454,40 +1446,59 @@ int client_entry_point(int num_args, char **arguments)
             }
 #endif
             // ------------------ //
-            
-            client.main_window_a = window_a;
 
-            update_client(&client, input);
+
+            bool should_quit = false;
+            int num_ui_loops = 0;
+        
+            while(true) {
+                // RECEIVE NEXT INPUT MESSAGE //
+                new_input_frame(input);
+                bool any_input_message = platform_receive_next_input_message(main_window, &should_quit, true);
+
+                if(should_quit) break;
+                if(!any_input_message && num_ui_loops > 0) break;
+
+                num_ui_loops++;
+                ////////////////////////////////
             
-            // BUILD UI //
-            begin_ui_build(ui);
-            {
-                push_area_layout(window_a, layout);
+                client.main_window_a = window_a;
+                
+                update_client(&client, input);
             
-                client_ui(P(ui_ctx), input, t, &client);
+                // BUILD UI //
+                begin_ui_build(ui);
+                {
+                    push_area_layout(window_a, layout);
+            
+                    client_ui(P(ui_ctx), input, t, &client);
+            
+                    pop_layout(layout);
+
+                }
+                double t = platform_get_time(); // @Robustness: This is safe to do, right?
+                end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &cursor);
+                // //////// //
+
+                reset_temporary_memory();
+            }
+
             
 #if DEBUG || true
-                if(second != last_second) {
-                    ups = updates_this_second;
+            if(second != last_second) {
+                ups = updates_this_second;
 
-                    char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
-                    title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
-                    platform_set_window_title(main_window, title);
+                char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
+                title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
+                platform_set_window_title(main_window, title);
                     
-                    updates_this_second = 0;
-                }
-                updates_this_second++;
-#endif
-                pop_layout(layout);
-
+                updates_this_second = 0;
             }
-            double t = platform_get_time(); // @Robustness: This is safe to do, right?
-            end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &cursor);
-            // //////// //
-
-            reset_temporary_memory();
+            updates_this_second++;
+#endif
+            
+            if(should_quit) break;
         }
-        unlock_mutex(client.mutex);
 
 #if DEBUG || true
         last_second = second;
