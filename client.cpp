@@ -1469,14 +1469,14 @@ int client_entry_point(int num_args, char **arguments)
 #if DEBUG || true
                 if(second != last_second) {
                     ups = updates_this_second;
+
+                    char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
+                    title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
+                    platform_set_window_title(main_window, title);
+                    
                     updates_this_second = 0;
                 }
                 updates_this_second++;
-
-                char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
-                title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
-                
-                platform_set_window_title(main_window, title);
 #endif
                 pop_layout(layout);
 
