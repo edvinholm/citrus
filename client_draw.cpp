@@ -1001,7 +1001,37 @@ DWORD render_loop(void *loop_)
                         default: Assert(false); break;
                     }
                 }
+#if DEBUG
+                if(tweak_bool(TWEAK_SHOW_PROFILER)) {
 
+                    // STUPID @Cleanup
+                    auto *ggg = &gfx;
+                    auto *gfx = ggg;
+
+                    _OPAQUE_UI_();
+                    float segment_w = gfx->frame_s.w / (float)ARRLEN(frame_times);
+                    auto *start = frame_times;
+                    auto *at    = start;
+                    auto *end   = start + ARRLEN(frame_times);
+
+                    /*
+                    auto max = *start;
+                    while(at < end) {
+                        if(*at > max) max = *at;
+                        at++;
+                    }
+                    */
+                    float halfHz = 0.5f * (float)platform_performance_counter_frequency();
+
+                    //if(max >= 0) {
+                        at = start;
+                        while(at < end) {
+                            draw_rect_ps(V2_X * (segment_w * (at - start)), { segment_w, gfx->frame_s.h * 0.5f * ((float)(*at)/halfHz) }, C_RED, gfx);
+                            at++;
+                        }
+                        //}
+                }
+#endif
             }
 
             if(second != last_second) {
@@ -1076,11 +1106,13 @@ DWORD render_loop(void *loop_)
                 {
                     gpu_set_depth_mask(false);
                     
-                    draw_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);
+                    draw_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);              
                 }
                 
             }
             gpu_disable_scissor();
+
+
         }
         
 

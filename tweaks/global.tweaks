@@ -27,3 +27,5 @@ startup_user 0    # 0 means no user.
 startup_room 0    # 0 means no room.
 
 show_window_sizes false
+
+show_profiler false
