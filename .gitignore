@@ -17,10 +17,14 @@ citrus_server.exe
 
 **.pdb
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 **.VC.db
 **.psess
 **.vsp
 **.VC.opendb
+=======
+**.VC.db
+>>>>>>> Stashed changes
 =======
 **.VC.db
 >>>>>>> Stashed changes
