@@ -16,7 +16,11 @@ citrus_release.exe
 citrus_server.exe
 
 **.pdb
+<<<<<<< Updated upstream
 **.VC.db
 **.psess
 **.vsp
 **.VC.opendb
+=======
+**.VC.db
+>>>>>>> Stashed changes
