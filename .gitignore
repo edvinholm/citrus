@@ -16,3 +16,7 @@ citrus_release.exe
 citrus_server.exe
 
 **.pdb
+**.VC.db
+**.psess
+**.vsp
+**.VC.opendb
