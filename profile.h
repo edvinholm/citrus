@@ -1,6 +1,4 @@
 
-
-
 s64 frame_times[60*60] = {0};
 u64 frame_time_cursor = 0;
 
