@@ -44,7 +44,6 @@ bool update_gpu_resources(Graphics *gfx)
     gpu_update_framebuffer(gfx->framebuffer, gfx->multisample_texture, true, gfx->depth_buffer_texture);
     //
 
-
     return true;
 }
 
@@ -102,21 +101,11 @@ void frame_end(Window *window, Graphics *gfx)
     // BLIT MULTISAMPLE TO DEFAULT FRAMEBUFFER //
     auto w = gfx->frame_s.w;
     auto h = gfx->frame_s.h;
-    //@Temporary: Move to GPU layer @Cleanup @Cleanup @Cleanup
-#if 0
-    glBlitNamedFramebuffer(gfx->framebuffer, 0, 0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-#else
-    GLint old_framebuffer;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_framebuffer);
-    
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, gfx->framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    auto err = glGetError();
-    Assert(err == 0);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, old_framebuffer);
-#endif
+    const int default_framebuffer = 0;
+    
+    gpu_blit_framebuffer(gfx->framebuffer,    0, 0, w, h,
+                         default_framebuffer, 0, 0, w, h);
     //
 
     // Switch buffer set //
@@ -269,8 +258,8 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     const v4 c_red    = { 1, 0, 0, 1 };
     if(win->resize_dir_x < 0) draw_rect(left_of(  a, window_border_width), c_red, gfx);
     if(win->resize_dir_x > 0) draw_rect(right_of( a, window_border_width), c_red, gfx);
-    if(win->resize_dir_y < 0) draw_rect(top_of(   a, window_border_width), c_red, gfx);
-    if(win->resize_dir_y > 0) draw_rect(bottom_of(a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y < 0) draw_rect(bottom_of(a, window_border_width), c_red, gfx);
+    if(win->resize_dir_y > 0) draw_rect(top_of(   a, window_border_width), c_red, gfx);
 
     // CLOSE BUTTON //
     if(win->has_close_button)
@@ -291,7 +280,7 @@ void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
     
     if(tweak_bool(TWEAK_SHOW_WINDOW_SIZES)) {
-        draw_string(concat_tmp(a.w, " x ", a.h, ui->string_builder), { a.x + a.w, a.y }, FS_12, FONT_TITLE, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
+        draw_string(concat_tmp(a.w, " x ", a.h), { a.x + a.w, a.y }, FS_12, FONT_TITLE, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
     }
 }
 
@@ -502,7 +491,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 #if true && DEBUG // DEBUG DISPLAY: CARET/HIGHLIGHT CODEPOINT INDEX
 
         { // CARET
-            String cp_index_str = concat_tmp("", tf_state.caret.cp, gfx->debug.sb);
+            String cp_index_str = concat_tmp("", tf_state.caret.cp);
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
             draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + inner_a.h - 16}, {cp_index_str_w + 4, 16}, {0, 0, 0, 1}, gfx);
@@ -511,7 +500,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
         }
 
         { // HIGHLIGHT
-            String cp_index_str = concat_tmp("", tf_state.highlight_start.cp, gfx->debug.sb);
+            String cp_index_str = concat_tmp("", tf_state.highlight_start.cp);
             float cp_index_str_w = string_width(cp_index_str, FS_12, FONT_TITLE, gfx);
         
             draw_rect_ps({inner_a.x - cp_index_str_w - 4, inner_a.y + inner_a.h - 32}, {cp_index_str_w + 4, 16}, {0.10, 0.61, 0.53, 1}, gfx);
@@ -809,19 +798,20 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room 
 }
 
 
-void draw_ui_chess_board(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+void draw_ui_chess_board(UI_Element *e, UI_Manager *ui, Graphics *gfx, Client *client)
 {
     _OPAQUE_UI_();
     
     Assert(e->type == UI_CHESS_BOARD);
-    auto *board = &e->chess_board;
+    auto *chess = &e->chess_board;
     
-    String squares_str = get_ui_string(board->squares, ui);
-    Assert(squares_str.length == sizeof(Chess_Board::squares));
+    String board_str = get_ui_string(chess->board, ui);
+    Assert(board_str.length == sizeof(Chess_Board));
 
-    Chess_Square *squares = (Chess_Square *)squares_str.data;
+    Chess_Board *board = (Chess_Board *)board_str.data;
 
-    draw_chess_board(squares, board->a, gfx, board->selected_square_ix);
+    Chess_Move *queued_move = (chess->queued_move.from != chess->queued_move.to) ? &chess->queued_move : NULL;
+    draw_chess_board(board, chess->a, gfx, current_user_id(client), chess->selected_square_ix, queued_move);
     
 }
 
@@ -856,6 +846,8 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         Item *selected_item = (user) ? get_selected_inventory_item(user) : NULL;
         draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, room, input, client, gfx);
     }
+
+    
     
     // EAT Z //
     gfx->z_for_2d -= 0.2;
@@ -970,7 +962,7 @@ DWORD render_loop(void *loop_)
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
                             
-                        case UI_CHESS_BOARD:    draw_ui_chess_board(e, ui, &gfx);  break;
+                        case UI_CHESS_BOARD:    draw_ui_chess_board(e, ui, &gfx, client);  break;
 
                         case WORLD_VIEW: {
                             auto *room = &client->room;
@@ -998,40 +990,15 @@ DWORD render_loop(void *loop_)
                                 
                         } break;
 
+#if DEBUG
+                        case UI_PROFILER: {
+                            draw_ui_profiler(e, PROFILER, input, &gfx);
+                        } break;
+#endif
+
                         default: Assert(false); break;
                     }
                 }
-#if DEBUG
-                if(tweak_bool(TWEAK_SHOW_PROFILER)) {
-
-                    // STUPID @Cleanup
-                    auto *ggg = &gfx;
-                    auto *gfx = ggg;
-
-                    _OPAQUE_UI_();
-                    float segment_w = gfx->frame_s.w / (float)ARRLEN(frame_times);
-                    auto *start = frame_times;
-                    auto *at    = start;
-                    auto *end   = start + ARRLEN(frame_times);
-
-                    /*
-                    auto max = *start;
-                    while(at < end) {
-                        if(*at > max) max = *at;
-                        at++;
-                    }
-                    */
-                    float halfHz = 0.5f * (float)platform_performance_counter_frequency();
-
-                    //if(max >= 0) {
-                        at = start;
-                        while(at < end) {
-                            draw_rect_ps(V2_X * (segment_w * (at - start)), { segment_w, gfx->frame_s.h * 0.5f * ((float)(*at)/halfHz) }, C_RED, gfx);
-                            at++;
-                        }
-                        //}
-                }
-#endif
             }
 
             if(second != last_second) {

@@ -3,6 +3,7 @@
   Server Game
 */
 
+
 namespace Server_Game
 {
     struct Entity: public S__Entity
@@ -14,8 +15,6 @@ namespace Server_Game
         Entity_ID next_entity_id_minus_one;
         int num_entities;
         Entity entities[MAX_ENTITIES_PER_ROOM];
-
-        Walk_Mask walk_map[room_size_x * room_size_y];
         
         // @Temporary @NoRelease
         double randomize_cooldown;

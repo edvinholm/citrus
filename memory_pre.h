@@ -10,9 +10,5 @@ enum Allocator_ID
 u8 *alloc(size_t size, Allocator_ID allocator);
 
 
-void dealloc(void *ptr, Allocator_ID allocator
-#if DEBUG
-    , bool DEBUG_ignore_temporary_memory_test = false
-#endif
-              );
+void dealloc(void *ptr, Allocator_ID allocator);
 

@@ -55,12 +55,10 @@ Item create_item(Item_Type_ID type, User_ID owner, Room_Server *server)
 
 void create_dummy_entities(Room *room, Room_Server *server)
 {   
-    return;
-    
-    v3 pp = { 0, 0 };
-    for(int i = 0; i < 4; i++)
+    v3 pp = { room_size_x/2 + 8, room_size_y/2 };
+    for(int i = 0; i < 1; i++)
     {
-        Item_Type_ID item_type_id = (Item_Type_ID)random_int(0, ITEM_NONE_OR_NUM - 1);
+        Item_Type_ID item_type_id = ITEM_CHESS_BOARD;
         Item_Type *item_type = item_types + item_type_id;
         
         Item item = {0};
@@ -70,8 +68,6 @@ void create_dummy_entities(Room *room, Room_Server *server)
         Entity e = {0};
         *static_cast<S__Entity *>(&e) = create_item_entity(&item, pp, room->t);
         e.id = 1 + room->next_entity_id_minus_one++;
-        e.item_e.p.x += item_type->volume.x * 0.5f;
-        e.item_e.p.y += item_type->volume.y * 0.5f + (i % 2);
 
         Assert(room->num_entities < ARRLEN(room->entities));
         room->entities[room->num_entities++] = { e };
@@ -85,6 +81,14 @@ void create_dummy_rooms(Room_Server *server)
     double t = get_time();
 
     Array<RS_Client, ALLOC_MALLOC> empty_client_array = {0};
+
+    const int map_pixel_components = 3;
+    
+    int map_sx, map_sy, unused;
+    auto *map = stbi_load("res/maps/default_01.bmp", &map_sx, &map_sy, &unused, 3);
+    defer(free(map););
+
+    Assert(map_sx == room_size_x && map_sy == room_size_y);
     
     for(int i = 0; i < 8; i++) {
         Room room = {0};
@@ -93,7 +97,31 @@ void create_dummy_rooms(Room_Server *server)
 
         create_dummy_entities(&room, server);
 
-#if 0
+#if 1
+        
+        auto *map_at = map;
+        for(int t = 0; t < room_size_x * room_size_y; t++) {
+            auto *tile = room.tiles + t;
+
+            static_assert(map_pixel_components == 3);
+            auto r = *map_at++;
+            auto g = *map_at++;
+            auto b = *map_at++;
+
+            if(r == 255 && g == 255 && b == 255) {
+                *tile = TILE_WALL;
+            } else if(r == 128 && g == 128 && b == 128) {
+                // Sidewalk (@Norelease)
+                *tile = TILE_SAND;
+            } else if(r == 0 && g == 128 && b == 0) {
+                *tile = TILE_GRASS;
+            } else if(r == 128 && g == 64 && b == 0) {
+                // Wooden floor or something. (@Norelease)
+                *tile = TILE_SAND;
+            }
+        }
+        
+#elif 0
         for(int t = 0; t < room_size_x * room_size_y; t++) {
             room.tiles[t] = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
         }
@@ -328,11 +356,16 @@ void disconnect_room_client(RS_Client *client)
         Assert(RS_Client_Ptr->node.packet_queue.n == 1);                \
         if(success && !send_outbound_packets(&RS_Client_Ptr->node)) success = false; \
         if(!success) {                                                  \
-            RS_Log("Client disconnected from room %d due to RCB packet failure (socket = %lld, WSA Error: %d).\n", RS_Client_Ptr->room, RS_Client_Ptr->node.socket.handle, WSAGetLastError()); \
+            auto wsa_error_1 = WSAGetLastError();                       \
+                                                                        \
+            String socket_str = socket_to_string(client->node.socket);       \
+                                                                        \
+            RS_Log("Client disconnected from room %d due to RCB packet failure (socket = %.*s), E1: %d).\n", \
+                   RS_Client_Ptr->room, (int)socket_str.length, socket_str.data, wsa_error_1); \
             disconnect_room_client(RS_Client_Ptr);                      \
             RS_Client_Ptr = NULL;                                       \
         }                                                               \
-    }
+}
 
 
 
@@ -350,7 +383,7 @@ void disconnect_room_client(RS_Client *client)
 
 bool initialize_room_client(RS_Client *client, Room *room)
 {
-    RCB_Packet(client, ROOM_INIT, room->t, room->num_entities, room->entities, room->tiles);
+    RCB_Packet(client, ROOM_INIT, room->t, room->num_entities, room->entities, room->tiles, &room->walk_map);
     return true;
 }
 
@@ -411,7 +444,9 @@ void add_new_room_clients(Room_Server *server)
             auto *clients = &server->clients[room_index];
             client = array_add(*clients, *client);
             client->room_t_on_connect = room->t;
-            RS_Log("Added client (socket = %lld) to room %d.\n", client->node.socket.handle, client->room);
+            
+            String socket_str = socket_to_string(client->node.socket);
+            RS_Log("Room %d: Added client (socket = %.*s)\n", client->room, (int)socket_str.length, socket_str.data);
 
             // @Norelease: @Temporary: We should not let players connect if there
             //                         is no entity with their ID.
@@ -437,7 +472,7 @@ void add_new_room_clients(Room_Server *server)
                 
                 v3s p;
                 do    p = { random_int(1, room_size_x-1), random_int(1, room_size_y-1), 0 };
-                while(room->walk_map[p.y * room_size_x + p.x] & UNWALKABLE);
+                while(room->walk_map.nodes[p.y * room_size_x + p.x].flags & UNWALKABLE);
 
                 auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
@@ -642,47 +677,31 @@ void player_set_walk_path(v3 *path, u16 length, Entity *e, Room *room)
     room->did_change = true;
 }
 
-double player_walk_path_duration(v3 *path, u16 length)
-{
-    double t = 0;
-    for(int i = 1; i < length; i++)
-        t += magnitude(path[i] - path[i-1]) / player_walk_speed;
-    
-    return t;
-}
-
 void player_stop_walking(Entity *e, Room *room)
 {
     v3 p      = compfloor(entity_position(e, room->t, room));
     v3 path[] = { p, p };
     player_set_walk_path(path, ARRLEN(path), e, room);
-
-    
 }
 
 
-// NOTE: *_was_same_start_and_end_tile duration will only be set if allow_same_start_and_end_tile == false.
+
 bool player_walk_to(v3 p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 = NULL, bool allow_same_start_and_end_tile = true, bool *_was_same_start_and_end_tile = NULL)
 {
-    Assert(e->type == ENTITY_PLAYER);
-    auto *player_e = &e->player_e;
-
     if (!allow_same_start_and_end_tile) {
         Assert(_was_same_start_and_end_tile);
         *_was_same_start_and_end_tile = false;
     }
-
-    v3 p0 = entity_position(e, room->t, room);
-
-    Array<v3, ALLOC_TMP> path = {0};
     
+    // @Volatile @Boilerplate: The other player_walk_to() 
+    v3 p0 = entity_position(e, room->t, room);
     v3s start_tile = { (s32)roundf(p0.x), (s32)roundf(p0.y), (s32)roundf(p0.z) };
-    v3s end_tile = { (s32)roundf(p1.x), (s32)roundf(p1.y), (s32)roundf(p1.z) };
-
+    v3s end_tile   = { (s32)roundf(p1.x), (s32)roundf(p1.y), (s32)roundf(p1.z) };
+    
+    if(_p0)  *_p0 = p0;
+    
     if(start_tile == end_tile)
     {
-        
-        if(_p0)  *_p0 = p0;
         if(_dur) *_dur = 0;
 
         if (!allow_same_start_and_end_tile) {
@@ -694,31 +713,20 @@ bool player_walk_to(v3 p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 =
         
         return true;
     }
-    
-    if(!find_path(start_tile, end_tile, room->walk_map, &path))
-    {
-        player_stop_walking(e, room);
-        
-        if(_p0)  *_p0  = p0;
-        if(_dur) *_dur = 0;
-        
-        return false;
-    }
+
+    Array<v3, ALLOC_TMP> path = {0};
+    if(!find_path_to_any(p0, &p1, 1, &room->walk_map, true, &path, _dur)) return false; // @Cleanup: Do we really need to call xx_to_any here?
 
     Assert(path.n >= 2);
     
-    if(_p0)  *_p0  = p0;
-    if(_dur) *_dur = player_walk_path_duration(path.e, path.n);
-
     player_set_walk_path(path.e, path.n, e, room);
-    
     return true;
 }
 
 void update_walk_map_and_paths(Room *room, Room_Server *server)
 {
     // UPDATE WALK MAP //
-    generate_walk_map(room, player_entity_volume, room->walk_map);
+    generate_walk_map(room, player_entity_volume, &room->walk_map);
 
     // UPDATE WALK PATHS //
     for(int i = 0; i < room->num_entities; i++) {
@@ -906,7 +914,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
     if(player == NULL) return false;
     Assert(player->type == ENTITY_PLAYER);
 
-    Player_State player_state = player_state_of(player, room);
+    Player_State player_state = player_state_of(player, room->t, room);
     if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL)) return false;
     
     switch(action->type) { // @Jai: #complete
@@ -1008,17 +1016,18 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     return true;
                 } break;
 
-                case ENTITY_ACT_CHESS_MOVE: {
-                    auto *move = &entity_action->chess_move;
+                case ENTITY_ACT_CHESS: {
+                    auto *chess_action = &entity_action->chess;
             
                     Assert(target->type == ENTITY_ITEM);
                     Assert(target->item_e.item.type == ITEM_CHESS_BOARD);
                     auto *board = &target->item_e.chess_board;
 
-                    make_chess_move(board, move->from, move->to);
-            
-                    room->did_change = true;
-                    return true;
+                    if(perform_chess_action_if_possible(chess_action, player_state.user_id, board)) {
+                        room->did_change = true;
+                        return true;
+                    }
+                    return false;
                 } break;
 
                 default: Assert(false); return false;
@@ -1097,79 +1106,15 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
 
     double next_update_t = 0;
 
-    Player_State player_state = player_state_of(e, room);
-    if (!player_action_predicted_possible(action, &player_state, room->t, room, NULL)) return false;
+    Array<v3, ALLOC_TMP> path = {0};
+    double path_duration;
+    
+    Player_State player_state = player_state_of(e, room->t, room);
+    if (!player_action_predicted_possible(action, &player_state, room->t, room, &path, &path_duration)) return false;
 
-    switch(action->type) { // @Jai: #complete
-
-        case PLAYER_ACT_WALK:
-        {
-            v3 p1 = action->walk.p1;
-            
-            double dur;
-            if(!player_walk_to(p1, e, room, &dur)) return false;
-            
-            next_update_t = room->t + dur;
-        } break;
-
-        case PLAYER_ACT_PUT_DOWN:
-        {
-            Assert(e->holding != NO_ENTITY); // player_action_predicted_possible should have checked this.
-
-            auto *held = find_entity(e->holding, room);
-            Assert(held); // player_action_predicted_possible should have checked this.
-
-            Assert(held->type == ENTITY_ITEM);
-            
-            Entity copy = *held;
-            copy.held_by = NO_ENTITY;
-            copy.item_e.p = item_entity_p_from_tp(action->put_down.tp, &held->item_e.item);
-            
-            v3 p1 = entity_action_position(&copy, room->t, room);
-
-            double dur;
-            if (!player_walk_to(p1, e, room, &dur)) return false;
-
-            next_update_t = room->t + dur;
-
-        } break;
-
-        
-        case PLAYER_ACT_ENTITY: {
-            auto *x = &action->entity;
-
-            // @Speed: player_action_predicted_possible calls entity_action_predicted_possible, which looks up the target entity.
-            //         Here, we do it again.
-            Entity *target_entity = find_entity(x->target, room);
-            Assert(target_entity); // player_action_predicted_possible should have checked this.
-
-            if(target_entity->held_by == NO_ENTITY)
-            {
-                v3 p1 = entity_action_position(target_entity, room->t, room);
-                
-                double dur;
-                if (!player_walk_to(p1, e, room, &dur)) {
-                    return false;
-                }
-                
-                next_update_t = (room->t + dur);
-            }
-            else
-            {
-                if(target_entity->held_by != e->id) return false;
-                next_update_t = room->t; // No walking needed, because we hold the item. => Zero duration.
-            }
-
-        } break;
-
-        default: {
-            RS_Log("Unhandled player action type %d in %s.\n", action->type, __FUNCTION__);
-            Assert(false);
-            return false;
-        } break;
-    }
-
-    action->next_update_t = next_update_t;
+    if (path.n == 0) player_stop_walking(e, room);
+    else             player_set_walk_path(path.e, path.n, e, room);
+    action->next_update_t = room->t + path_duration; // NOTE: path_duration can be zero here.
 
     if(action->next_update_t < room->t) {
         Assert(false);
@@ -1227,7 +1172,7 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
     if(player_e->action_queue_length >= ARRLEN(player_e->action_queue))
         return false;
 
-    Player_State player_state = player_state_of(e, room);
+    Player_State player_state = player_state_of(e, room->t, room);
     apply_actions_to_player_state(&player_state, player_e->action_queue, player_e->action_queue_length, room->t, room, NULL);
     if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL))
         return false;
@@ -1495,7 +1440,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                             action.put_down.tp = p1;
 
                             if(enqueue_player_action(e, &action, room, server)) {
-                                
+
                             }
                         }
                         else
@@ -1513,38 +1458,27 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             }            
         } break;
 
-        case RSB_ENTITY_ACTION: {
-            auto *p = &header.entity_action;
-
-            Entity *e = find_entity(p->entity, room);
-            if(!e) {
-                return true; // It's OK, the entity might have been destroyed after the client sent the request.
-            }
+        case RSB_PLAYER_ACTION: {
+            auto *player_action = &header.player_action;
 
             Entity *player = NULL;
             if(client->user == NO_USER) return false;
             
             player = find_player_entity(client->user, room);
             if(!player) {
-                RS_Log("Player trying to perform entity action, but that player's entity was not found.\n");
+                RS_Log("Player trying to perform an action, but that player's entity was not found.\n");
                 return false;
             }
 
             Assert(player);
             
             auto *player_e = &player->player_e;
-
-            Player_Action player_action = {0};
-            player_action.type = PLAYER_ACT_ENTITY;
-            player_action.entity.target = e->id;
-            player_action.entity.action = p->action;
             
-            if(enqueue_player_action(player, &player_action, room, server)) {
+            if(enqueue_player_action(player, player_action, room, server)) {
                 
             }
             
         } break;
-
 
         case RSB_CHAT: {
             auto *p = &header.chat;
@@ -1702,7 +1636,7 @@ DWORD room_server_main_loop(void *server_)
                 int num_chat_messages = room->num_chat_messages - first_chat_ix;
                 Assert(num_chat_messages >= 0);
                 
-                RCB_Packet(client, ROOM_UPDATE, 0, room_size, room->tiles, room->num_entities, room->entities,
+                RCB_Packet(client, ROOM_UPDATE, 0, room_size, room->tiles, &room->walk_map, room->num_entities, room->entities,
                            num_chat_messages, room->chat_messages + first_chat_ix);
                 if(client == NULL) c--;
             }
@@ -1711,6 +1645,14 @@ DWORD room_server_main_loop(void *server_)
         add_new_room_clients(server);
             
         platform_sleep_milliseconds(1);
+
+        // @Cleanup @Robustness: Disable profiling on server.
+        //                       Some procedures that are shared between client and server
+        //                       might add profiler nodes. If we never call next_profiler_frame(),
+        //                       we will overflow the frame's node array.
+        //                       But we can't call next_profiler_frame() from all threads, because
+        //                       the profiler is not thread safe!
+        next_profiler_frame(PROFILER);
     }
 
     RS_Log("Stopping listening loop...");
@@ -1723,3 +1665,4 @@ DWORD room_server_main_loop(void *server_)
 
     return 0;
 }
+    

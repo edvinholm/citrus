@@ -13,6 +13,7 @@ void init_developer(Developer *dev)
         Debug_Print("Unable to open %s.\n", filename);
         return;
     }
+    defer(close_file(file););
 
     strlength user_id_length;
     if(!read_entire_file(file, &dev->user_id.data, ALLOC_MALLOC, &user_id_length)) {

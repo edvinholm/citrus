@@ -49,23 +49,30 @@
 
 #include "input.cpp"
 
+
 #include "world.h"
+
+
+#include "user_pre.h"
 
 // --
 
 #include "chess.h"
 #include "chess.cpp"
 
-//--
+// --
 
-#include "user_pre.h"
+#include "game_shared_pre.h"
+
+#include "pathfinding.h"
+
 #include "game_shared.h"
 #include "user.h"
 #include "market.h"
 
-
 #include "user_shared.cpp"
 #include "world_shared.cpp"
+
 
 #include "transaction.h"
 
@@ -87,6 +94,11 @@ using namespace Client_User;
 using namespace Client_Market;
 
 
+#include "pathfinding_shared.cpp"
+
+
+#include "ui_dev_client.h"
+
 #include "client.h"
 
 
@@ -98,12 +110,6 @@ using namespace Client_Market;
 
 #include "color.cpp"
 
-#include "ui.cpp"
-
-#if DEVELOPER
-#include "ui_dev_client.cpp"
-#endif
-
 #include "draw.cpp"
 
 #include "sprite_draw.cpp"
@@ -112,6 +118,16 @@ using namespace Client_Market;
 #include "body_text.cpp"
 
 #include "chess_draw.cpp"
-
 #include "world_draw.cpp"
+
+#if DEBUG
+#include "profile_draw.cpp"
+#endif
+
+#include "ui.cpp"
+
+#if DEVELOPER
+#include "ui_dev_client.cpp"
+#endif
+
 #include "client_draw.cpp"

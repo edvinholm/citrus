@@ -170,7 +170,7 @@ void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size, b
     Assert(data != NULL);
     Assert(size >= 0);
     
-	{ auto err = glGetError(); Assert(err == 0); }
+    { auto err = glGetError(); Assert(err == 0); }
     glBindBuffer(GL_ARRAY_BUFFER, buffer);                      { auto err = glGetError(); Assert(err == 0); }
     glBufferData(GL_ARRAY_BUFFER, size, data, (static_data) ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
 }
@@ -250,6 +250,24 @@ void gpu_update_framebuffer(GPU_Framebuffer_ID id, GPU_Texture_ID color_attachme
     // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
     // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
     Assert(status == GL_FRAMEBUFFER_COMPLETE);
+}
+
+// NOTE 0 is default frame buffer.
+void gpu_blit_framebuffer(GPU_Framebuffer_ID  src,  int src_x0,  int src_y0,  int src_x1,  int src_y1,
+                          GPU_Framebuffer_ID dest, int dest_x0, int dest_y0, int dest_x1, int dest_y1)
+{
+    GLint old_framebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_framebuffer);
+    
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, src);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dest);
+    glBlitFramebuffer(src_x0,   src_y0,  src_x1,  src_y1,
+                      dest_x0, dest_y0, dest_x1, dest_y1,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    auto err = glGetError();
+    Assert(err == 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, old_framebuffer);
 }
 
 inline

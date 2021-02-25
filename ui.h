@@ -123,6 +123,10 @@ enum UI_Element_Type
     
     UI_CHESS_BOARD,
 
+#if DEBUG
+    UI_PROFILER,
+#endif
+    
     WORLD_VIEW
 };
 
@@ -295,11 +299,15 @@ struct UI_World_View
 
 struct UI_Chess_Board
 {
+    // These are set by the UI user code
     Rect a;
-    UI_String squares; // This is an array of Chess_Square. So, length % sizeof(Chess_Square) must be 0, and length must be sizeof(Chess_Board::squares).
+    UI_String board; // This is a Chess_Board, so length must be sizeof(Chess_Board). We have it as a string so we don't make UI_Element too big.
 
-    s8 selected_square_ix; // -1 == no square. This is set by the UI user code
-    
+    s8 selected_square_ix; // -1 == no square.
+    Chess_Move queued_move; // Set to = from to unset this.
+    bool enabled;
+    // --
+
     UI_Click_State click_state;
 
     s8 hovered_square_ix; // -1 == no square
@@ -307,6 +315,18 @@ struct UI_Chess_Board
     s8 clicked_square_ix; // -1 == no square
 
 };
+
+#if DEBUG
+struct UI_Profiler
+{
+    Rect a;
+
+    int selection_start;
+    int selection_end;
+    int selected_frame;
+    int selected_node;
+};
+#endif
 
 struct UI_Element
 {
@@ -333,6 +353,10 @@ struct UI_Element
         UI_Chess_Board chess_board;
 
         UI_World_View world_view;
+
+#if DEBUG
+        UI_Profiler profiler;
+#endif
     };
 };
 
@@ -414,8 +438,6 @@ struct UI_Manager
     union {
         UI_Textfield_State active_textfield_state;
     };
-
-    String_Builder string_builder;
 };
 
 

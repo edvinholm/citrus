@@ -263,7 +263,7 @@ void update_local_data_for_room(Room *room, double world_t, Client *client)
             auto *local = &e->player_local;
             local->is_me = (e->player_e.user_id == user_id);
             
-            local->state_after_completed_action_queue = player_state_of(e, room);
+            local->state_after_completed_action_queue = player_state_of(e, world_t, room);
             apply_actions_to_player_state(&local->state_after_completed_action_queue,
                                           e->player_e.action_queue, e->player_e.action_queue_length,
                                           world_t, room, user);
@@ -285,7 +285,7 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
 
 // IMPORTANT: The *_actions array should be in a valid state before calling this proc!
 template<Allocator_ID A>
-void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_actions)
+void get_available_actions_for_entity(Entity *e, Array<Entity_Action, A> *_actions)
 {
     _actions->n = 0;
     
@@ -297,18 +297,45 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action_Type, A> *_
     switch(item->type)
     {
         case ITEM_PLANT: {
-            array_add(*_actions, ENTITY_ACT_HARVEST);
-            array_add(*_actions, ENTITY_ACT_WATER);
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_HARVEST;
+
+            Entity_Action act2 = {0};
+            act2.type = ENTITY_ACT_WATER;
+            
+            array_add(*_actions, act1);
+            array_add(*_actions, act2);
         } break;
 
         case ITEM_MACHINE: {
             auto *machine_e = &e->item_e.machine;
-            array_add(*_actions, ENTITY_ACT_SET_POWER_MODE);
+
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_SET_POWER_MODE;
+            act1.set_power_mode.set_to_on = (machine_e->stop_t >= machine_e->start_t);
+                
+            array_add(*_actions, act1);
+        } break;
+
+        case ITEM_CHESS_BOARD: {
+            auto *board = &e->item_e.chess_board;
+
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_CHESS;
+            act1.chess.type = CHESS_ACT_JOIN;
+
+            array_add(*_actions, act1);
         } break;
     }
+
+    Entity_Action act_a = {0};
+    act_a.type = ENTITY_ACT_PICK_UP;
+
+    Entity_Action act_b = {0};
+    act_b.type = ENTITY_ACT_PLACE_IN_INVENTORY;
     
-    array_add(*_actions, ENTITY_ACT_PICK_UP);
-    array_add(*_actions, ENTITY_ACT_PLACE_IN_INVENTORY);
+    array_add(*_actions, act_a);
+    array_add(*_actions, act_b);
 }
 
 // ///////////////////// //

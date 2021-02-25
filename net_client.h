@@ -1,8 +1,8 @@
 
 enum C_RS_Action_Type
 {
-    C_RS_ACT_CLICK_TILE,
-    C_RS_ACT_ENTITY_ACTION,
+    C_RS_ACT_CLICK_TILE, // @Cleanup: Should be in player action. (?)
+    C_RS_ACT_PLAYER_ACTION,
     C_RS_ACT_CHAT
 };
 
@@ -15,11 +15,8 @@ struct C_RS_Action
             Item_ID item_to_place;
             bool default_action_is_put_down;
         } click_tile;
-        
-        struct {
-            Entity_ID     entity;
-            Entity_Action action;
-        } entity_action;
+
+        Player_Action player_action;
 
         struct {
             

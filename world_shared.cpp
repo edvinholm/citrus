@@ -176,21 +176,104 @@ v3 entity_position(ENTITY *e, double world_t, ROOM *room)
 }
 
 template<typename ENTITY, typename ROOM>
-v3 entity_action_position(ENTITY *e, double world_t, ROOM *room)
+Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, double world_t, ROOM *room)
 {
+    Array<v3, ALLOC_TMP> positions = {0};
+    
     v3 p  = entity_position(e, world_t, room);
     
     if(e->type != ENTITY_ITEM) {
         Assert(false);
-        return p;
+        array_add(positions, p);
+        return positions;
     }
+    auto *item_e = &e->item_e;
+    auto *item   = &item_e->item;
 
-    v3s volume = item_types[e->item_e.item.type].volume;
+    v3s volume = item_types[item->type].volume;
+
+    v3 forward = rotate_vector(V3_Y, item_e->q);
+    v3 right   = rotate_vector(V3_X, item_e->q);
+
+    // @Cleanup: action should not be optional. We have it here for PUT_DOWN.
+    if(action) {
+        
+        switch(action->type) {
+
+            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP.
+            case ENTITY_ACT_PICK_UP: {
+
+                v3 tp0  = p;
+                tp0.xy -= volume.xy * 0.5f;
+                
+                for(int y = 0; y < volume.y+1; y++) {
+                    for(int x = 0; x < volume.x+1; x++) {
+
+                        v3 pp = tp0;
+                        pp.x += x;
+                        pp.y += y;
+                        
+                        // @Speed: Continuing on most squares for big volumes.
+                        if(x > 0 && x < volume.x &&
+                           y > 0 && y < volume.y) continue;
+
+                        const float offs = 1.0f;
+                        
+                        if     (x == 0)        array_add(positions, pp - right * offs);
+                        else if(x == volume.x) array_add(positions, pp + right * offs);
+                        
+                        if     (y == 0)        array_add(positions, pp - forward * offs);
+                        else if(y == volume.y) array_add(positions, pp + forward * offs);
+                    }
+                }
+            } break;
+
+            case ENTITY_ACT_CHESS: {
+                auto *chess_action = &action->chess;
+            
+                Assert(item->type == ITEM_CHESS_BOARD);
+                auto *board = &item_e->chess_board;
+
+                v3 white_p = p + forward * (volume.y * 0.5f + 1);
+                v3 black_p = p - forward * (volume.y * 0.5f + 1);
+
+                switch(chess_action->type)
+                {
+                    case CHESS_ACT_MOVE: {       
+                        auto *move = &chess_action->move;
+                    
+                        Chess_Piece piece;
+                        bool found = get_chess_piece_at(move->from, board, &piece);
+                    
+                        if(!found) { Assert(false); break; }
+                    
+                        if(piece.is_black) array_add(positions, black_p);
+                        else               array_add(positions, white_p);
+                        
+                    } break;
+
+                    case CHESS_ACT_JOIN: {
+                        auto *join = &chess_action->join;
+                        
+                        // @Norelease: We must check if there is already a player on its way to join!
+                        
+                        if     (join->as_black) array_add(positions, black_p); // Join as black
+                        else                    array_add(positions, white_p); // Join as white
+                        
+                    } break;
+                }
+            } break;
+        }
+    }
+        
+    if(positions.n == 0) {
+        array_add(positions, p + forward * (volume.y * 0.5f + 1));
+    }
     
-    p.y -= volume.y * 0.5f + 1;
-    
-    return p;
+    return positions;
 }
+
+
 
 template<typename ENTITY, typename ROOM>
 AABB entity_aabb(ENTITY *e, double world_t, ROOM *room)
@@ -269,14 +352,17 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, ENTITY *enti
 
 
 template<typename ROOM>
-Player_State player_state_of(S__Entity *player, ROOM *room)
+Player_State player_state_of(S__Entity *player, double world_t, ROOM *room)
 {
     Player_State state = {0};
     
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
 
+    state.entity_id = player->id;
     state.user_id = player_e->user_id;
+
+    state.p = entity_position(player, world_t, room);
     
     if(player->holding != NO_ENTITY)
     {
@@ -298,10 +384,18 @@ Player_State player_state_of(S__Entity *player, ROOM *room)
 template<typename ROOM>
 void apply_actions_to_player_state(Player_State *state, Player_Action *actions, int num_actions, double world_t, ROOM *room, S__User *user)
 {
+    Function_Profile();
+    
     for(int i = 0; i < num_actions; i++) {
         auto *act = &actions[i];
 
-        if(!player_action_predicted_possible(act, state, world_t, room, user)) continue;
+        Array<v3, ALLOC_TMP> path = {0}; // @Speed: We should send this in, and player_action should set .n = 0. Instead of allocating new memory every time
+        if(!player_action_predicted_possible(act, state, world_t, room, &path, NULL, user)) continue;
+
+        if(path.n > 0) {
+            Assert(path.n >= 2);
+            state->p = path[path.n-1];
+        }
 
         switch(act->type) {
             case PLAYER_ACT_ENTITY:
@@ -358,7 +452,7 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, ROOM *room
     auto *volumes = (AABB *)alloc(sizeof(AABB) * max_volumes, A);
     *_num = 0;
 
-    Player_State state = player_state_of(player, room);
+    Player_State state = player_state_of(player, world_t, room);
     
     int num_actions_applied_to_state = 0;
     for(int i = 0; i < player_e->action_queue_length; i++)
@@ -421,6 +515,8 @@ bool item_entity_can_be_moved(S__Entity *e)
 //                   before we check the state of entities!
 bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, S__User *user = NULL)
 {
+    Function_Profile();
+    
     Assert(e);
     Assert(player_state);
     Assert(player_state->user_id != NO_USER);
@@ -429,10 +525,15 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
     if(e->type == ENTITY_ITEM) {
         update_entity_item(e, world_t);
     }
+
+    
+    if(e->held_by != NO_ENTITY &&
+       e->held_by != player_state->entity_id) return false;
+
     
     switch(action.type) {
-
         case ENTITY_ACT_PICK_UP: {
+            Scoped_Profile("ENTITY_ACT_PICK_UP");
             
             if(e->type != ENTITY_ITEM) return false;
 
@@ -522,8 +623,8 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
             return true;
         } break;
 
-        case ENTITY_ACT_CHESS_MOVE: {
-            auto *x = &action.chess_move;
+        case ENTITY_ACT_CHESS: {
+            auto *chess_action = &action.chess;
 
             if(e->type != ENTITY_ITEM) return false;
             if(e->item_e.item.type != ITEM_CHESS_BOARD) return false;
@@ -532,7 +633,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
 
             auto *board = &e->item_e.chess_board;
 
-            return chess_move_possible(board, x->from, x->to); 
+            return chess_action_possible(chess_action, player_state->user_id, board);
         };
 
         default: Assert(false); return false;
@@ -542,34 +643,55 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
     return true;
 }
 
-
 // NOTE: See notes for entity_action_predicted_possible().
 template<typename ROOM>
-bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, ROOM *room, S__User *user = NULL)
+bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, ROOM *room, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, S__User *user = NULL)
 {
+    Function_Profile();
+    
     Assert(player_state);
     Assert(player_state->user_id != NO_USER);
 
-    // @Norelease: Should we pathfind?
+    bool needs_walking = false;
+    Array<v3, ALLOC_TMP> possible_p1s = {0};
     
     switch(action->type) { // @Jai: #complete
 
         case PLAYER_ACT_ENTITY: {
+            Scoped_Profile("PLAYER_ACT_ENTITY");
+            
             auto *entity_act = &action->entity;
 
             S__Entity *e = find_entity(entity_act->target, room);
             if(!e) return false;
 
-            return entity_action_predicted_possible(entity_act->action, e, player_state, world_t, user);
-        };
+            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, user)) return false;
 
-        case PLAYER_ACT_WALK: return true;
+            if(e->held_by == NO_ENTITY) {
+                possible_p1s = entity_action_positions(e, &entity_act->action, world_t, room);
+                needs_walking = true;
+            }
+            
+        } break;
+
+        case PLAYER_ACT_WALK: {
+            Scoped_Profile("PLAYER_ACT_WALK");
+            
+            array_add(possible_p1s, action->walk.p1);
+            needs_walking = true;
+        } break;
 
         case PLAYER_ACT_PUT_DOWN: {
+            Scoped_Profile("PLAYER_ACT_PUT_DOWN");
+            
             auto *put_down = &action->put_down;
 
             if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
 
+            v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item);
+            
+            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, world_t, Q_IDENTITY /* @Norelease: Have q in PUT_DOWN action */);
+            
             // @Norelease: Check that the put down entity won't collide with anything.
 
             // If we just do can_place_item_at(), these statements are true:
@@ -579,9 +701,26 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             //             So it is possible to put down two entities in the same spot right now.
 
             // This is @Temporary (See comments above).
-            return true;
+
+
+            // @Cleanup @Hack !!!
+            Entity_Action dummy_action = {0};
+            dummy_action.type = ENTITY_ACT_PICK_UP;
+            
+            // @Cleanup: action parameter should not be optional. PUT_DOWN should work differently... Should probably be an entity action.
+            possible_p1s = entity_action_positions(&held_entity_replica, &dummy_action, world_t, room);
+            needs_walking = true;
         } break;
             
         default: Assert(false); return false;
     };
+
+    if(!needs_walking) {
+        if (_found_path) Zero(*_found_path);
+        if(_found_path_duration) *_found_path_duration = 0;
+        return true;
+    }
+    if(possible_p1s.n == 0) return false;
+
+    return find_path_to_any(player_state->p, possible_p1s.e, possible_p1s.n, &room->walk_map, true, _found_path, _found_path_duration);
 }

@@ -750,6 +750,21 @@ bool write_Chat_Message(Chat_Message message, Network_Node *node)
     return true;
 }
 
+// Chess (@Cleanup: Move to some chess file?) //
+// @Norelease TODO: Check that it is a valid type.
+bool read_Chess_Action_Type(Chess_Action_Type *_type, Network_Node *node)
+{
+    Read(u8, type, node);
+    *_type = (Chess_Action_Type)type;
+    return true;
+}
+
+bool write_Chess_Action_Type(Chess_Action_Type type, Network_Node *node)
+{
+    Write(u8, type, node);
+    return true;
+}
+
 
 // Entity //
 // @Norelease TODO: Check that it is a valid type.
@@ -805,12 +820,21 @@ bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
             Read_To_Ptr(bool, &x->set_to_on, node);
         } break;
 
-        case ENTITY_ACT_CHESS_MOVE: {
-            auto *x = &_action->chess_move;
+        case ENTITY_ACT_CHESS: {
+            auto *x = &_action->chess;
 
-            // @Norelease: Check that square indices are in range!
-            Read_To_Ptr(u8, &x->from, node);
-            Read_To_Ptr(u8, &x->to, node);
+            Read_To_Ptr(Chess_Action_Type, &x->type, node);
+            switch(x->type) {
+                case CHESS_ACT_MOVE: {
+                    // @Norelease: Check that square indices are in range!
+                    Read_To_Ptr(u8, &x->move.from, node);
+                    Read_To_Ptr(u8, &x->move.to, node);
+                } break;
+
+                case CHESS_ACT_JOIN: {
+                    Read_To_Ptr(bool, &x->join.as_black, node);
+                } break;
+            }
         } break;
     }
     
@@ -827,11 +851,21 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
             Write(bool, x->set_to_on, node);
         } break;
 
-        case ENTITY_ACT_CHESS_MOVE: {
-            auto *x = &action.chess_move;
+        case ENTITY_ACT_CHESS: {
+            auto *x = &action.chess;
 
-            Write(u8, x->from, node);
-            Write(u8, x->to, node);
+            Write(Chess_Action_Type, x->type, node);
+            switch(x->type) {
+                case CHESS_ACT_MOVE: {
+                    Write(u8, x->move.from, node);
+                    Write(u8, x->move.to, node);
+                } break;
+
+                case CHESS_ACT_JOIN: {
+                    Write(bool, x->join.as_black, node);
+                } break;
+            }
+            
         } break;
     }
     
@@ -908,6 +942,62 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
     return true;
 }
 
+// @Norelease: Check that it is a valid value.
+bool read_Chess_Player_Flags(Chess_Player_Flags *_flags, Network_Node *node)
+{
+    Read(u8, flags, node);
+    *_flags = (Chess_Player_Flags)flags;
+    return true;
+}
+
+bool write_Chess_Player_Flags(Chess_Player_Flags flags, Network_Node *node)
+{
+    Write(u8, flags, node);
+    return true;
+}
+
+bool read_Chess_Player(Chess_Player *_player, Network_Node *node)
+{
+    Read_To_Ptr(User_ID,            &_player->user, node);
+    Read_To_Ptr(Chess_Player_Flags, &_player->flags, node);
+    return true;
+};
+
+bool write_Chess_Player(Chess_Player player, Network_Node *node)
+{
+    Write(User_ID,            player.user, node);
+    Write(Chess_Player_Flags, player.flags, node);
+    return true;
+};
+
+
+bool read_Chess_Move(Chess_Move *_move, Network_Node *node)
+{
+    Read_To_Ptr(u8, &_move->from, node);
+    Read_To_Ptr(u8, &_move->to,   node);
+    return true;
+}
+
+bool write_Chess_Move(Chess_Move move, Network_Node *node)
+{
+    Write(u8, move.from, node);
+    Write(u8, move.to,   node);
+    return true;
+}
+
+// @Norelease: Check that it is a valid value.
+bool read_Chess_Special_Move(Chess_Special_Move *_special, Network_Node *node)
+{
+    Read(u8, special, node);
+    *_special = (Chess_Special_Move)special;
+    return true;
+}
+
+bool write_Chess_Special_Move(Chess_Special_Move special, Network_Node *node)
+{
+    Write(u8, special, node);
+    return true;
+}
 
 // @Norelease: Check that all squares have valid values.
 bool read_Chess_Board(Chess_Board *_board, Network_Node *node)
@@ -915,16 +1005,36 @@ bool read_Chess_Board(Chess_Board *_board, Network_Node *node)
     static_assert(sizeof(_board->squares[0]) == 1);
     static_assert(sizeof(_board->squares)    == 8*8);
     
+    Read_To_Ptr(Chess_Player, &_board->white_player, node);
+    Read_To_Ptr(Chess_Player, &_board->black_player, node);
+    
+    Read_To_Ptr(bool, &_board->black_players_turn, node);
+
+    Read_To_Ptr(u32, &_board->num_moves, node);
+    Read_To_Ptr(Chess_Move,         &_board->last_move, node);
+    Read_To_Ptr(Chess_Special_Move, &_board->last_move_special, node);
+    
     Read_Bytes(_board->squares, 8*8, node);
+    
     return true;
 }
 
-bool write_Chess_Board(Chess_Board *_board, Network_Node *node)
+bool write_Chess_Board(Chess_Board *board, Network_Node *node)
 {
-    static_assert(sizeof(_board->squares[0]) == 1);
-    static_assert(sizeof(_board->squares)    == 8*8);
+    static_assert(sizeof(board->squares[0]) == 1);
+    static_assert(sizeof(board->squares)    == 8*8);
     
-    Write_Bytes(_board->squares, 8*8, node);
+    Write(Chess_Player, board->white_player, node);
+    Write(Chess_Player, board->black_player, node);
+    
+    Write(bool, board->black_players_turn, node);
+
+    Write(u32, board->num_moves, node);
+    Write(Chess_Move,         board->last_move, node);
+    Write(Chess_Special_Move, board->last_move_special, node);
+    
+    Write_Bytes(board->squares, 8*8, node);
+    
     return true;
 }
 

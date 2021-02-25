@@ -29,7 +29,15 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 case TILE_GRASS: color = &grass; break;
                 case TILE_STONE: color = &stone; break;
                 case TILE_WATER: color = &stone; z = -1; break;
-                case TILE_WALL:  color = &wall;  z = 7;  break;
+                case TILE_WALL:  {
+                    color = &wall;
+
+                    if(x >= room_size_x-2 || y >= room_size_y-2)
+                        z = 7;
+                    else
+                        z = 1.25f;
+                    
+                } break;
                 default: Assert(false); break;
             }
 
@@ -60,11 +68,17 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
 
                 // X
-                if(x == 0 || tiles[y * room_size_x + x - 1] != tile)
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color * shadow_factor, gfx);
+                if(x == 0 || tiles[y * room_size_x + x - 1] != tile || x >= room_size_x-2) {
+                    auto cc = *color;
+                    cc.rgb *= shadow_factor;
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, cc, gfx);
+                }
                 // Y
-                if(y == 0 || tiles[(y-1) * room_size_x + x] != tile)
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color * (1.0f/shadow_factor), gfx);                
+                if(y == 0 || tiles[(y-1) * room_size_x + x] != tile || y >= room_size_y-2) {
+                    auto cc = *color;
+                    cc.rgb *= 1.0f/shadow_factor;
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, cc, gfx);
+                }
             }
             else if(color){
                 draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
@@ -179,7 +193,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         if(item->type == ITEM_WATERING_CAN) {
             fill = item->watering_can.water_level;
         }
-        
     }
     else if(e->type == ENTITY_PLAYER)
     {
@@ -262,14 +275,29 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         
         draw_cube_ps(head_p, V3_ONE * head_size, head_color, gfx);
     }
-    else if(e->type == ENTITY_ITEM && e->item_e.item.type == ITEM_CHESS_BOARD)
+    else if(e->type == ENTITY_ITEM)
     {
-        auto *board = &e->item_e.chess_board;
+        if(e->item_e.item.type == ITEM_CHESS_BOARD)
+        {
+            auto *board = &e->item_e.chess_board;
 
-        Scoped_Push(gfx->transform, translation_matrix(V3_Z * (origin.z + volume.z + 0.001f)));
+            Scoped_Push(gfx->transform, translation_matrix(V3_Z * (origin.z + volume.z + 0.001f)));
 
-        Rect a = { origin.xy, volume.xy };        
-        draw_chess_board(board->squares, a, gfx);
+            Rect a = { origin.xy, volume.xy };        
+            draw_chess_board(board, a, gfx);
+        }
+        
+        if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
+            if(e->id == room->selected_entity) {
+                Entity_Action dummy_action = {0};
+                dummy_action.type = ENTITY_ACT_PICK_UP;
+                auto action_positions = entity_action_positions(e, &dummy_action, world_t, room);
+                for(int i = 0; i < action_positions.n; i++) {
+                    auto p = action_positions[i] + V3_Z * 0.05f;
+                    draw_quad(p - V3_XY * 0.15f, V3_X * 0.3f, V3_Y * 0.3f, C_MAGENTA, gfx);
+                }
+            }
+        }
     }
 }
 

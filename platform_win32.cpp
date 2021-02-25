@@ -365,8 +365,7 @@ LPARAM LParam
     return Result;
 }
 
-//NOTE: Returns false if the window should close.
-bool platform_receive_next_input_message(Window *window, bool *_should_quit, bool sleep_if_no_messages = false)
+bool platform_receive_next_input_message(Window *window, bool *_should_quit)
 {
     bool any_message = false;
     
@@ -380,12 +379,7 @@ bool platform_receive_next_input_message(Window *window, bool *_should_quit, boo
 
     *_should_quit = window->CloseButtonClicked;
 
-    if(!any_message) {
-        if(sleep_if_no_messages) Sleep(2);
-        return false;
-    }
-
-    return true;
+    return any_message;
 }
 
 bool platform_make_gpu_context_current(Window *window)

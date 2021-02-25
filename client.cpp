@@ -68,6 +68,68 @@ bool action_of_type_in_queue(C_RS_Action_Type type, Client *client)
 }
 
 
+void request(Player_Action *action, Client *client)
+{
+    C_RS_Action c_rs_act = {0};
+    c_rs_act.type = C_RS_ACT_PLAYER_ACTION;
+    c_rs_act.player_action = *action;
+
+    array_add(client->connections.room_action_queue, c_rs_act);
+}
+
+bool predicted_possible(Player_Action *action, double world_t, Client *client)
+{
+    Entity *player = find_current_player_entity(client);
+    if(player == NULL) return false;
+
+    User *user = current_user(client);
+    if(!user) return false;
+
+    Assert(player->type == ENTITY_PLAYER);
+    return player_action_predicted_possible(action, &player->player_local.state_after_completed_action_queue,
+                                            world_t, &client->room, NULL, NULL, user);
+}
+
+bool request_if_predicted_possible(Player_Action *action, double world_t, Client *client)
+{
+    if(!predicted_possible(action, world_t, client)) return false;
+    request(action, client);
+    return true;
+}
+
+// @Jai: #scope_file ?
+Player_Action make_player_entity_action(Entity_Action *action, Entity_ID target)
+{
+    Assert(target != NO_ENTITY);
+    
+    Player_Action player_action = {0};
+    player_action.type = PLAYER_ACT_ENTITY;
+
+    player_action.entity.action = *action;
+    player_action.entity.target =  target;
+
+    return player_action;
+}
+
+void request(Entity_Action *action, Entity_ID target, Client *client)
+{
+    Player_Action player_action = make_player_entity_action(action, target);
+    request(&player_action, client);
+}
+
+bool predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Client *client)
+{
+    Player_Action player_action = make_player_entity_action(action, target);
+    return predicted_possible(&player_action, world_t, client);
+}
+
+bool request_if_predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Client *client)
+{
+    Player_Action player_action = make_player_entity_action(action, target);
+    return request_if_predicted_possible(&player_action, world_t, client);
+}
+
+
 void user_window(UI_Context ctx, Client *client)
 {
     U(ctx);
@@ -99,7 +161,7 @@ void user_window(UI_Context ctx, Client *client)
 
     auto *user = &client->user;
     
-    bool connected  = client->connections.user.connected; // @Cleanup
+    bool connected  = client->connections.user.connected;
     bool connecting = client->connections.user_connect_requested;
 
     _WINDOW_(P(ctx), user->username, true, opt(user->color, connected));
@@ -110,7 +172,7 @@ void user_window(UI_Context ctx, Client *client)
 
         { _BOTTOM_CUT_(72);
             Money available = user->money - user->reserved_money;
-            ui_text(P(ctx), concat_tmp("MONEY [ Available: ¤", available, ", Total: ¤", user->money, " ]", ctx.manager->string_builder));
+            ui_text(P(ctx), concat_tmp("MONEY [ Available: ¤", available, ", Total: ¤", user->money, " ]"));
         }
 
         int cols = 8;
@@ -213,7 +275,8 @@ void market_article_view(UI_Context ctx, Market_View *view, bool controls_enable
                 bool do_enqueue_action = false;
 
                 bool place_order_buttons_enabled = (order_controls_enabled &&
-                                                    article_id != ITEM_NONE_OR_NUM);
+                                                    article_id != ITEM_NONE_OR_NUM &&
+                                                    !action_of_type_in_queue(C_MS_PLACE_ORDER, client));
 
                 // BUY BUTTON //
                 { _CELL_();
@@ -253,7 +316,7 @@ void market_article_view(UI_Context ctx, Market_View *view, bool controls_enable
                 }
 
                 if(do_enqueue_action) {
-// We changed this rule but I don't know yet if it was a good idea: Assert(!action_of_type_in_queue(C_MS_PLACE_ORDER, client)); @Cleanup
+                    Assert(!action_of_type_in_queue(C_MS_PLACE_ORDER, client));
                     array_add(client->connections.market_action_queue, action); // @Norelease: IMPORTANT: Any time we want to enqueue a C_MS_Action, we should check that we're connected to a market server!
                 }
             }
@@ -294,7 +357,7 @@ void market_article_view(UI_Context ctx, Market_View *view, bool controls_enable
                 cut_bottom(2, ctx.layout); // To get it to line up with the name
 
                 Money price = (article_view->num_prices == 0) ? 0 : article_view->prices[article_view->num_prices-1];
-                String price_str = concat_tmp("¤", price, ctx.manager->string_builder);
+                String price_str = concat_tmp("¤", price);
                 ui_text(P(ctx), price_str, FS_28, FONT_BODY, HA_RIGHT, VA_BOTTOM);
             }
             cut_right(window_default_padding * 1.5f, ctx.layout);
@@ -564,7 +627,13 @@ String entity_action_label(Entity_Action action)
             }
         } break;
         case ENTITY_ACT_WATER:      return STRING("WATER"); break;
-        case ENTITY_ACT_CHESS_MOVE: return STRING("CHESS MOVE"); break;
+        case ENTITY_ACT_CHESS: {
+            auto *chess_action = &action.chess;
+            switch(chess_action->type) {
+                case CHESS_ACT_MOVE: return STRING("CHESS MOVE"); break;
+                default:             return STRING("CHESS ???"); break;
+            }
+        }
 
         default: Assert(false); return STRING("???"); break;
     }
@@ -573,10 +642,224 @@ String entity_action_label(Entity_Action action)
     return EMPTY_STRING;
 }
 
+void chess_player(UI_Context ctx, Chess_Player *cp)
+{
+    U(ctx);
+    
+    String str = concat_tmp(cp->user, " | KING: ", (cp->flags & KING_MOVED), ", BL: ", (cp->flags & BOTTOM_LEFT_MODIFIED), ", BR:", (cp->flags & BOTTOM_RIGHT_MODIFIED));
+    ui_text(P(ctx), str);
+}
+
+void item_chess_tab(UI_Context ctx, Item *item, bool controls_enabled, Entity *e, Entity *player, double world_t, Client *client)
+{
+    U(ctx);
+
+    Assert(item->type == ITEM_CHESS_BOARD);
+    Assert(e);
+    Assert(player);
+
+    User_ID user_id = current_user_id(client);
+            
+    auto *board = &e->item_e.chess_board;
+    auto *local = &e->item_local.chess;
+
+    { _TOP_CUT_(42);
+        _GRID_(2, 1, window_default_padding);
+
+        for(int j = 0; j < 2; j++)
+        {
+            _CELL_();
+            auto *cp = (j == 0) ? &board->white_player : &board->black_player;
+
+            if(cp->user != NO_USER) chess_player(PC(ctx, j), cp);
+            else {
+                
+                Entity_Action action = {0};
+                action.type = ENTITY_ACT_CHESS;
+                action.chess.type = CHESS_ACT_JOIN;
+                action.chess.join.as_black = (cp == &board->black_player);
+
+                bool selected = false;
+                            
+                // FIND JOIN ACTION // @Cleanup: Macro? Or wait for @Jai.
+                for(int i = 0; i < player->player_e.action_queue_length; i++)
+                {
+                    auto *player_action = &player->player_e.action_queue[i];
+        
+                    if(player_action->type != PLAYER_ACT_ENTITY) continue;
+                    auto *entity_action = &player_action->entity;
+        
+                    if(entity_action->target      != e->id) continue;
+                    if(entity_action->action.type != ENTITY_ACT_CHESS) continue;
+        
+                    auto *chess_action = &entity_action->action.chess;
+                    if(chess_action->type != CHESS_ACT_JOIN) continue;
+                    if(chess_action->join.as_black != action.chess.join.as_black) continue;
+
+                    selected = true;
+                    break;
+                }
+
+                bool enabled  = controls_enabled && predicted_possible(&action, e->id, world_t, client);
+                // @Norelease: Check if another player has this action queued.
+                if(button(PC(ctx, j), STRING("JOIN"), enabled, selected) & CLICKED_ENABLED)
+                {
+                    request(&action, e->id, client);
+                }
+            }
+        }
+        
+    }
+    cut_top(window_default_padding, ctx.layout);
+    
+    _TOP_SQUARE_CUT_();
+
+    
+    // FIND QUEUED MOVE // @Cleanup: Macro? Or wait for @Jai.
+    Chess_Move *queued_move = NULL;
+    for(int i = 0; i < player->player_e.action_queue_length; i++)
+    {
+        auto *player_action = &player->player_e.action_queue[i];
+        
+        if(player_action->type != PLAYER_ACT_ENTITY) continue;
+        auto *entity_action = &player_action->entity;
+        
+        if(entity_action->target      != e->id) continue;
+        if(entity_action->action.type != ENTITY_ACT_CHESS) continue;
+        
+        auto *chess_action = &entity_action->action.chess;
+        if(chess_action->type != CHESS_ACT_MOVE) continue;
+
+        Assert(!queued_move); // We should have at most one queued chess move!
+        queued_move = &chess_action->move;
+    }
+
+
+    
+    UI_Chess_Board *ui_board = ui_chess_board(P(ctx), board, /*enabled = */controls_enabled,
+                                              local->selected_square_ix_plus_one - 1, queued_move);
+
+    if(ui_board->clicked_square_ix >= 0) {
+
+        bool do_select = true;
+        
+        if(local->selected_square_ix_plus_one > 0)
+        {
+            Chess_Move move = {0};
+            move.from = local->selected_square_ix_plus_one-1;
+            move.to   = ui_board->clicked_square_ix;
+
+            bool would_be_possible_if_our_turn;
+            if(chess_move_possible_for_user(move, player->player_e.user_id, board, &would_be_possible_if_our_turn))
+            {
+                // ENQUEUE CHESS MOVE ACTION
+                Entity_Action act = {0};
+                act.type = ENTITY_ACT_CHESS;
+                act.chess.type = CHESS_ACT_MOVE;
+                act.chess.move = move;
+
+                request_if_predicted_possible(&act, e->id, world_t, client);
+                // /////////////////////// //
+
+                local->selected_square_ix_plus_one = 0;    
+                do_select = false;
+            }
+            else if(would_be_possible_if_our_turn) {
+                do_select = false;
+            }
+        }
+
+        if(do_select) {
+            local->selected_square_ix_plus_one = ui_board->clicked_square_ix + 1;
+        }
+                        
+    }
+}
+
+
+void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *client, Entity *e = NULL, Entity *player = NULL, double world_t = 0)
+{
+    U(ctx);
+        
+    Assert(item != NULL);
+    Assert(item->type != ITEM_NONE_OR_NUM);
+
+    auto *type = &item_types[item->type];
+
+    
+    // ACTIONS //
+    if(e && player) {
+
+        Assert(player->type == ENTITY_PLAYER);            
+        Assert(e->type == ENTITY_ITEM);
+
+        auto *player_local = &player->player_local;
+
+        Array<Entity_Action, ALLOC_TMP> actions = {0};
+        get_available_actions_for_entity(e, &actions);
+
+        for(int i = 0; i < actions.n; i++) {
+
+            if(i > 0) { _BOTTOM_CUT_(window_default_padding); }
+                
+            _BOTTOM_CUT_(32);
+
+            auto entity_action = actions[i];
+                
+            bool enabled = controls_enabled && predicted_possible(&entity_action, e->id, world_t, client);
+                
+            if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED)
+            {
+                request_if_predicted_possible(&entity_action, e->id, world_t, client);
+            }
+        }
+    }
+
+    auto image_s = area(ctx.layout).w * (1 - 0.61803);
+    { _TOP_CUT_(image_s);
+        
+        { _LEFT_CUT_(image_s);
+            button(P(ctx));
+        }
+
+        _SHRINK_(window_default_padding);
+
+        { _TOP_CUT_(20);
+            v3s vol = type->volume;
+            String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z);
+            ui_text(P(ctx), volume_str);
+        }
+            
+        { _TOP_CUT_(20);
+            String owner_str = concat_tmp("Owner: ", item->owner);
+            ui_text(P(ctx), owner_str);
+        }
+
+#if DEBUG
+        { _TOP_CUT_(20);
+            String id_str = concat_tmp("ID: ", item->id.origin, ":", item->id.number);
+            ui_text(P(ctx), id_str);
+        }
+#endif
+    }
+
+    switch(item->type) {
+        case ITEM_PLANT: {
+            auto *plant = &item->plant;
+                    
+            { _TOP_CUT_(20);   
+                float grow_progress = plant->grow_progress;
+                String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%");
+                ui_text(P(ctx), grow_str);
+            }
+        } break;
+    }    
+}
+
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
 // REMEMBER: world_t is local to the Room Server we're on. User Server has no world_t.
 //           So passing a world_t but no entity does not make sense... -EH, 2021-01-30
-void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL, double world_t = 0)
+void item_window(UI_Context ctx, Item *item, Item_UI *iui, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL, double world_t = 0)
 {
     U(ctx);
     
@@ -598,145 +881,47 @@ void item_window(UI_Context ctx, Item *item, Client *client, UI_Click_State *_cl
             player = find_player_entity(user_id, &client->room);
         }
 
-        // ACTIONS //
-        if(e && player) {
+        // TABS //
+        { _RIGHT_(40); _TRANSLATE_(V2_X * 44);
 
-            Assert(player->type == ENTITY_PLAYER);            
-            Assert(e->type == ENTITY_ITEM);
-
-            auto *player_local = &player->player_local;
-
-            Array<Entity_Action_Type, ALLOC_TMP> actions = {0};
-            get_available_actions_for_entity(e, &actions);
-
-            for(int i = 0; i < actions.n; i++) {
-
-                if(i > 0) { _BOTTOM_CUT_(window_default_padding); }
-                
-                _BOTTOM_CUT_(32);
-                
-                Entity_Action entity_action = {0};
-                entity_action.type = actions[i];
-
-                // @Cleanup: This should be done somewhere else...
-                //           Should get_available_actions_for_entity return Entity_Actions instead of Entity_Action_Types?
-                //           But some actions we want the user to decide parameters for.
-                switch(entity_action.type) {
-                    case ENTITY_ACT_SET_POWER_MODE: {
-                        Assert(e->item_e.item.type == ITEM_MACHINE);
-                        auto *machine_e = &e->item_e.machine;
-                        entity_action.set_power_mode.set_to_on = (machine_e->stop_t >= machine_e->start_t);
-                    } break;
-                }
-    
-                bool enabled = controls_enabled && entity_action_predicted_possible(entity_action, e, &player_local->state_after_completed_action_queue, world_t, &client->user);
-                
-                if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED) {
-
-                    C_RS_Action action = {0};
-                    action.type = C_RS_ACT_ENTITY_ACTION;                    
-                    auto &act = action.entity_action;
-
-                    act.entity = e->id;
-                    act.action = entity_action;
-
-                    array_add(client->connections.room_action_queue, action);
-                }
-            }
-        }
-
-        auto image_s = area(ctx.layout).w * (1 - 0.61803);
-        { _TOP_CUT_(image_s);
-        
-            { _LEFT_CUT_(image_s);
-                button(P(ctx));
-            }
-
-            _SHRINK_(window_default_padding);
-
-            { _TOP_CUT_(20);
-                v3s vol = type->volume;
-                String volume_str = concat_tmp("Dimensions: ", vol.x, "x", vol.y, "x", vol.z, ctx.manager->string_builder);
-                ui_text(P(ctx), volume_str);
-            }
+            bool current_tab_exists = false;
             
-            { _TOP_CUT_(20);
-                String owner_str = concat_tmp("Owner: ", item->owner, ctx.manager->string_builder);
-                ui_text(P(ctx), owner_str);
-            }
+            for(int i = 0; i < ITEM_TAB_NONE_OR_NUM; i++)
+            {
+                auto tab = (Item_Window_Tab)i;
 
-#if DEBUG
-            { _TOP_CUT_(20);
-                String id_str = concat_tmp("ID: ", item->id.origin, ":", item->id.number, ctx.manager->string_builder);
-                ui_text(P(ctx), id_str);
-            }
-#endif
-        }
-
-        switch(item->type) {
-            case ITEM_PLANT: {
-                auto *plant = &item->plant;
-                    
-                { _TOP_CUT_(20);   
-                    float grow_progress = plant->grow_progress;
-                    String grow_str = concat_tmp("Grow progress: ", (int)(grow_progress * 100.0f), "%", ctx.manager->string_builder);
-                    ui_text(P(ctx), grow_str);
+                // Should this tab be shown?
+                if(tab == ITEM_TAB_CHESS) {
+                    if(item->type != ITEM_CHESS_BOARD || !e || !player) continue;
                 }
-            } break;
+                //--
+
+                if(i > 0) slide_top(window_default_padding, ctx.layout);
+
+                if(tab == iui->tab) current_tab_exists = true;
+                
+                { _TOP_SQUARE_SLIDE_();
+                    
+                    bool enabled  = true;
+                    bool selected = iui->tab == tab;
+                    
+                    if(button(PC(ctx, i), item_window_tab_labels[tab], enabled, selected, opt(C_WINDOW_BORDER_DEFAULT)) & CLICKED_ENABLED)
+                        iui->tab = tab;
+                }
+            }
+
+            if(!current_tab_exists) {
+                iui->tab = ITEM_TAB_INFO;
+            }
         }
         
-        // IF ITEM IS ENTITY //
-        if(e)
+
+        switch(iui->tab)
         {
-            cut_top(window_default_padding, ctx.layout);
-            
-            switch(item->type) {
-                // @Norelease: @Temporary: I think we want the chess game to be in a separate window,
-                //                         that is only open when the character sits by the board.
-                case ITEM_CHESS_BOARD: {
-                    auto *board = &e->item_e.chess_board;
-                    auto *local = &e->item_local.chess;
-                    _TOP_SQUARE_CUT_();
-
-                    UI_Chess_Board *ui_board = ui_chess_board(P(ctx), board, local->selected_square_ix_plus_one - 1);
-
-                    if(ui_board->clicked_square_ix >= 0) {
-
-                        if(local->selected_square_ix_plus_one > 0)
-                        {
-                           // @Norelease: Check move possibility
-                            
-                            u8 from = local->selected_square_ix_plus_one-1;
-                            u8 to   = ui_board->clicked_square_ix;
-
-                            // ENQUEUE CHESS MOVE ACTION
-                            C_RS_Action action = {0};
-                            action.type = C_RS_ACT_ENTITY_ACTION;                    
-                            auto &act = action.entity_action;
-
-                            Entity_Action entity_action = {0};
-                            entity_action.type = ENTITY_ACT_CHESS_MOVE;
-                            entity_action.chess_move.from = from;
-                            entity_action.chess_move.to   = to;
-
-                            act.entity = e->id;
-                            act.action = entity_action;
-
-                            array_add(client->connections.room_action_queue, action);
-                            // /////////////////////////
-                            
-                            local->selected_square_ix_plus_one = 0;
-                        }
-                        else {
-                            local->selected_square_ix_plus_one = ui_board->clicked_square_ix + 1;
-                        }
-                        
-                    }
-                    
-                } break;
-            }
+            case ITEM_TAB_INFO:  { item_info_tab(P(ctx), item, controls_enabled, client, e, player, world_t); } break;
+            case ITEM_TAB_CHESS: { item_chess_tab(P(ctx), item, controls_enabled, e, player, world_t, client); } break;
         }
-
+        
     }
     end_window(window_id, ctx.manager, _close_button_state);
 }
@@ -746,9 +931,6 @@ void room_window(UI_Context ctx, Client *client)
     U(ctx);
 
     float room_button_h = 40;
-
-    // @Temporary
-    String_Builder sb = {0};
     
     const int num_rooms = 14;
 
@@ -767,7 +949,7 @@ void room_window(UI_Context ctx, Client *client)
                 if(requested_room != -1) selected = (requested_room == r);
                 else                     selected = (current_room   == r);
 
-                if(button(PC(ctx, r), concat_tmp("", r, sb), (requested_room == -1), selected) & CLICKED_ENABLED)
+                if(button(PC(ctx, r), concat_tmp("", r), (requested_room == -1), selected) & CLICKED_ENABLED)
                 {
                     request_connection_to_room((Room_ID)r, client);
                 }
@@ -816,11 +998,32 @@ void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
 
 void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 {
+    Function_Profile();
+    
     U(ctx);
 
     Client_UI *cui = &client->cui;
 
     Rect a = area(ctx.layout);
+
+#if DEVELOPER
+    if(cui->dev.window_open)
+    { _AREA_COPY_();
+        if(cui->user_window_open) cut_right(320 + 64, ctx.layout);
+        _RIGHT_(320); _BOTTOM_(480);
+        
+        client_developer_window(P(ctx), input, &cui->dev, client);
+    }
+#endif
+
+#if DEBUG
+    // PROFILER //
+    if(tweak_bool(TWEAK_SHOW_PROFILER)) {
+        _BOTTOM_HALF_();
+        ui_profiler(P(ctx), PROFILER, input);
+    }
+#endif
+    
 
     auto *room = &client->room;
     auto world_t = world_time_for_room(room, t);
@@ -872,8 +1075,8 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 #if DEVELOPER
             // DEVELOPER BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("DEV"), true, cui->dev_window_open) & CLICKED_ENABLED) {
-                    cui->dev_window_open = !cui->dev_window_open;
+                if(button(P(ctx), STRING("DEV"), true, cui->dev.window_open) & CLICKED_ENABLED) {
+                    cui->dev.window_open = !cui->dev.window_open;
                 }
             }
 #endif
@@ -886,14 +1089,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     { _RIGHT_CUT_(64);
         
     }
-
-        
-#if DEVELOPER
-    if(cui->dev_window_open)
-    { _RIGHT_(640); _BOTTOM_(480);
-        client_developer_window(P(ctx), input, client);
-    }
-#endif
 
 
     // ROOM WINDOW //
@@ -916,11 +1111,11 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     }
 
     
-    { _SHRINK_(16); _LEFT_(240); _BOTTOM_(424);
+    { _SHRINK_(16); _LEFT_(240); _BOTTOM_(400);
         
         Item *selected_item = get_selected_inventory_item(&client->user);
         if(selected_item) {
-            item_window(P(ctx), selected_item, client);
+            item_window(P(ctx), selected_item, &cui->item, client);
         }
 
         
@@ -933,7 +1128,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     update_entity_item(e, world_t);
 
                     UI_Click_State close_button_state;
-                    item_window(P(ctx), &e->item_e.item, client, &close_button_state, e, world_t);
+                    item_window(P(ctx), &e->item_e.item, &cui->item, client, &close_button_state, e, world_t);
                     if(close_button_state & CLICKED_ENABLED) {
                         room->selected_entity = NO_ENTITY;
                     }
@@ -1008,7 +1203,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             const Font_ID font = FONT_BODY;
             
             float max_w = 160;
-            Body_Text bt = create_body_text(chat->text, {0, 0, max_w, 0}, fs, font, &client->fonts);
+            Body_Text bt = create_body_text(chat->text, max_w, fs, font, &client->fonts);
 
             float w = max_w;
             if(bt.lines.n == 1) w = body_text_line_width(0, &bt, &client->fonts);
@@ -1029,7 +1224,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(player_entity != NULL) {
                 Assert(player_entity->type == ENTITY_PLAYER);
 
-                Player_State player_state = player_state_of(player_entity, &client->room);
+                Player_State player_state = player_state_of(player_entity, world_t, &client->room);
                 
                 auto *player_e = &player_entity->player_e;
                 for(int i = 0; i < player_e->action_queue_length; i++)
@@ -1135,6 +1330,22 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     {
                         inventory_deselect(user);
                     }
+                }
+                else {
+#if DEBUG
+                    if(client->cui.dev.waiting_for_path_to_debug) {
+                        if(!player_entity) Debug_Print("There is no player entity, so can't debug path.\n");
+                        else {
+                            auto start = V3S(entity_position(player_entity, world_t, room));
+                            auto end   = V3S(tp);
+                            
+                            Array<v3, ALLOC_MALLOC> unused_path = {0};
+                            defer(clear(&unused_path););
+                            
+                            find_path(start, end, &room->walk_map, true, &unused_path);
+                        }
+                    }
+#endif
                 }
             
                 ok_to_select_entity = false;
@@ -1279,6 +1490,37 @@ void update_client(Client *client, Input_Manager *input)
             request_connection_to_market(client);
         }
     }
+
+
+    // @Cleanup: This is a thing to find random paths (for profiling)
+    #if 0
+    {
+        v3 p1s[] = {
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
+            { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 }
+        };
+
+        Array<v3, ALLOC_TMP> path = {0};
+        double dur;
+        if(find_path_to_any({12, 12, 0}, p1s, ARRLEN(p1s), &client->room.walk_map, true, &path, &dur)) {
+            Entity *e = find_current_player_entity(client);
+            if(e)
+            {
+                if(e->player_e.walk_path)
+                    dealloc(e->player_e.walk_path, ALLOC_MALLOC);
+                e->player_e.walk_path = (v3 *)alloc(sizeof(v3) * path.n, ALLOC_MALLOC);
+                memcpy(e->player_e.walk_path, path.e, sizeof(v3) * path.n);
+                e->player_e.walk_path_length = path.n;
+            }
+        }
+    }
+    #endif
+    
 }
 
 int client_entry_point(int num_args, char **arguments)
@@ -1302,7 +1544,6 @@ int client_entry_point(int num_args, char **arguments)
                              
     platform_init_socket_use();
     
-    String_Builder sb = {0};
     Debug_Print("I am a client.\n");
     
     // INIT CLIENT //
@@ -1319,7 +1560,7 @@ int client_entry_point(int num_args, char **arguments)
 
     // @Norelease: Doing Developer stuff in release build...
     init_developer(&client.developer);
-    load_tweaks(client.developer.user_id, &sb);
+    load_tweaks(client.developer.user_id);
 #if OS_WINDOWS
     setup_tweak_hotloading();
 #endif
@@ -1427,18 +1668,16 @@ int client_entry_point(int num_args, char **arguments)
 
         Cursor_Icon cursor;
 
+        int num_input_messages_received = 0;
+        
         { Scoped_Lock(client.mutex);
-
-#if DEBUG
-            auto pcounter0 = platform_performance_counter();
-#endif
             
             // MAYBE RELOAD TWEAKS //
 #if OS_WINDOWS
             {
                 bool old_color_tiles_by_position = tweak_bool(TWEAK_COLOR_TILES_BY_POSITION);
                 {
-                    maybe_reload_tweaks(client.developer.user_id, &sb);
+                    maybe_reload_tweaks(client.developer.user_id);
                 }
                 bool new_color_tiles_by_position = tweak_bool(TWEAK_COLOR_TILES_BY_POSITION);
 
@@ -1458,14 +1697,19 @@ int client_entry_point(int num_args, char **arguments)
             while(true) {
                 // RECEIVE NEXT INPUT MESSAGE //
                 new_input_frame(input);
-                bool any_input_message = platform_receive_next_input_message(main_window, &should_quit, true);
+                bool any_input_message = platform_receive_next_input_message(main_window, &should_quit);
 
                 if(should_quit) break;
                 if(!any_input_message && num_ui_loops > 0) break;
-
+                
+                if(any_input_message) num_input_messages_received++;
                 num_ui_loops++;
                 ////////////////////////////////
-            
+                
+                defer(next_profiler_frame(PROFILER););
+                Scoped_Profile("Update");
+                //--
+
                 client.main_window_a = window_a;
                 
                 update_client(&client, input);
@@ -1478,13 +1722,14 @@ int client_entry_point(int num_args, char **arguments)
                     client_ui(P(ui_ctx), input, t, &client);
             
                     pop_layout(layout);
-
                 }
+                    
                 double t = platform_get_time(); // @Robustness: This is safe to do, right?
                 end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &cursor);
                 // //////// //
 
                 reset_temporary_memory();
+                
             }
 
             
@@ -1492,8 +1737,9 @@ int client_entry_point(int num_args, char **arguments)
             if(second != last_second) {
                 ups = updates_this_second;
 
-                char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ", sb);
-                title = concat_cstring_tmp(title, triangles_this_frame, " tris", sb);
+                char *title = concat_cstring_tmp("Citrus | ", fps, " FPS | ", ups, " UPS | ", draw_calls_last_frame, " draws | ");
+                title = concat_cstring_tmp(title, triangles_this_frame, " tris");
+                
                 platform_set_window_title(main_window, title);
                     
                 updates_this_second = 0;
@@ -1501,13 +1747,11 @@ int client_entry_point(int num_args, char **arguments)
             updates_this_second++;
 #endif
             
-#if DEBUG
-            auto pcounter1 = platform_performance_counter();
-            register_frame_time(pcounter1 - pcounter0);
-#endif
-            
             if(should_quit) break;
+            
         }
+
+        if(num_input_messages_received == 0) platform_sleep_milliseconds(2);
 
 #if DEBUG || true
         last_second = second;

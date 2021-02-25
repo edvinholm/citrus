@@ -1,5 +1,20 @@
 
 
+void move_to_back(UI_ID id, UI_Manager *ui, s64 *_old_depth_index = NULL)
+{
+    s64 old_depth_index;
+    if(!in_array(ui->elements_in_depth_order, id, &old_depth_index)) {
+        Assert(false);
+        if(_old_depth_index) *_old_depth_index = 0; 
+        return;
+    }
+
+    if(_old_depth_index) *_old_depth_index = old_depth_index;
+
+    array_add(ui->elements_in_depth_order, id);
+    array_ordered_remove(ui->elements_in_depth_order, old_depth_index);
+}
+
 // IMPORTANT: Callers assume strings pushed after each other will end up after each other in UI_Manager.string_data. (Except if there is a reset inbetween the calls).
 inline
 UI_String push_ui_string(String string, UI_Manager *ui)
@@ -247,6 +262,10 @@ void clear_ui_element(UI_Element *e)
         case UI_CHESS_BOARD:
 
         case WORLD_VIEW:
+            
+#if DEBUG
+        case UI_PROFILER:
+#endif
             break;
 
         default: Assert(false); break;
@@ -738,7 +757,7 @@ Rect textfield_inner_rect(UI_Textfield *tf)
 
 Body_Text create_textfield_body_text(String text, Rect inner_a, Font_Table *fonts)
 {
-    return create_body_text(text, inner_a, FS_16, FONT_INPUT, fonts);
+    return create_body_text(text, inner_a.w, FS_16, FONT_INPUT, fonts);
 }
 
 
@@ -1480,7 +1499,7 @@ Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool 
     ui_set(e, &win->title, title, ui);
     ui_set(e, &win->border_color,     get_or_default(custom_border_color,     theme->window_border));
     ui_set(e, &win->background_color, get_or_default(custom_background_color, theme->window_background));
-    ui_set(e, &win->min_size,         get_or_default(custom_min_size,         {250, 250}));
+    ui_set(e, &win->min_size,         get_or_default(custom_min_size,         win->initial_a.s));
 
     // NOTE: We do this when we begin the window, instead of in the UI update phase.
     //       Because we don't want the children of the window to lag behind. This
@@ -1516,17 +1535,11 @@ void end_window(UI_ID id, UI_Manager *ui, UI_Click_State *_close_button_state = 
         win->close_button_state = IDLE;
         win->has_close_button = false;
     }
-    
 
     s64 old_depth_index;
-    if(!in_array(ui->elements_in_depth_order, id, &old_depth_index)) {
-        Assert(false);
-    }
-
+    move_to_back(id, ui, &old_depth_index);
+        
     win->num_children_above = (ui->elements_in_depth_order.n-1) - old_depth_index;
-
-    array_add(ui->elements_in_depth_order, id);
-    array_ordered_remove(ui->elements_in_depth_order, old_depth_index);
 }
 
 void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_ID hovered_element_id, UI_Manager *ui)
@@ -1580,8 +1593,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
             if(point_inside_rect(mouse.p, right_border)) win->resize_dir_x += 1;
                 
-            if(point_inside_rect(mouse.p, top_border))    win->resize_dir_y -= 1;
-            if(point_inside_rect(mouse.p, bottom_border)) win->resize_dir_y += 1;
+            if(point_inside_rect(mouse.p, top_border))    win->resize_dir_y += 1;
+            if(point_inside_rect(mouse.p, bottom_border)) win->resize_dir_y -= 1;
             
             if(point_inside_rect(mouse.p, title_a)) {
                 // Move Start //
@@ -1721,7 +1734,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
 }
 
-UI_Chess_Board *ui_chess_board(UI_Context ctx, Chess_Board *board, s8 selected_square_ix = -1)
+UI_Chess_Board *ui_chess_board(UI_Context ctx, Chess_Board *board, bool enabled, s8 selected_square_ix = -1, Chess_Move *queued_move = NULL)
 {
     U(ctx);
 
@@ -1737,12 +1750,18 @@ UI_Chess_Board *ui_chess_board(UI_Context ctx, Chess_Board *board, s8 selected_s
         ui_board->clicked_square_ix = -1;
     }
         
-    String squares = { (u8 *)board->squares, sizeof(board->squares) };
+    String board_str = { (u8 *)board, sizeof(*board) };
+
+    Chess_Move qmv = {0};
+    if(queued_move) qmv = *queued_move;
     
     ui_set(e, &ui_board->a, a);
-    ui_set(e, &ui_board->squares, squares, ctx.manager);
+    ui_set(e, &ui_board->board, board_str, ctx.manager);
+    
+    ui_set(e, &ui_board->enabled, enabled);
     
     ui_set(e, &ui_board->selected_square_ix, selected_square_ix);
+    ui_set(e, &ui_board->queued_move,        qmv);
 
     return ui_board;
 }
@@ -1756,7 +1775,7 @@ void update_ui_chess_board(UI_Element *e, Input_Manager *input, UI_Element *hove
     cb->clicked_square_ix = -1;
 
     bool hovered = (e == hovered_element);
-    ui_set(e, &cb->click_state, evaluate_click_state(cb->click_state, hovered, input));
+    ui_set(e, &cb->click_state, evaluate_click_state(cb->click_state, hovered, input, cb->enabled));
 
     s32 hovered_square_ix = -1;
     if(hovered)
@@ -1785,6 +1804,93 @@ void update_ui_chess_board(UI_Element *e, Input_Manager *input, UI_Element *hove
         cb->pressed_square_ix = -1;
 }
 
+#if DEBUG
+void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
+{
+    U(ctx);
+    
+    Rect a = area(ctx.layout);
+
+    UI_ID id = ctx.get_id();
+    bool was_created;
+    UI_Element *e = find_or_create_ui_element(id, UI_PROFILER, ctx.manager, &was_created);
+    auto *prof = &e->profiler;
+
+    ui_set(e, &prof->a, a);
+
+    int sel0 = prof->selection_start;
+    int sel1 = prof->selection_end;
+    int selected_frame = prof->selected_frame;
+    int selected_node  = prof->selected_node;
+
+    if(was_created) {
+        sel0 = 128;
+        sel1 = 128 * 4;
+        selected_frame = 256;
+        selected_node = 6;
+    }
+    
+    
+    // PAUSE BUTTON //
+    { _TOP_(32); _LEFT_(128);
+        auto *paused = &profiler->paused;
+            
+        String label = (*paused) ? STRING("RESUME") : STRING("PAUSE");
+        bool selected = *paused;
+        if(button(P(ctx), label, true, selected) & CLICKED_ENABLED) {
+            *paused = !(*paused);
+        }
+    }
+
+    Rect node_a, frame_a, zoom_a, all_a;
+    get_profiler_rects(a, &node_a, &frame_a, &zoom_a, &all_a);
+
+    // RANGE SELECTION HANDLES //
+    Rect selection_a = profiler_selection_rect(sel0, sel1, all_a, profiler);
+    { _AREA_(selection_a);
+        
+        { _TOP_(20); _LEFT_(20);
+            if(button(P(ctx)) & PRESSED) {
+                sel0 = (input->mouse.p.x - 10 - all_a.x)/(all_a.w/ARRLEN(profiler->frames));
+                sel0 = clamp<int>(sel0, 0, sel1);
+            }
+        }
+        
+        { _BOTTOM_(20); _RIGHT_(20);
+            if(button(P(ctx)) & PRESSED) {
+                sel1 = (input->mouse.p.x + 10 - all_a.x)/(all_a.w/ARRLEN(profiler->frames));
+                sel1 = clamp<int>(sel1, sel0, ARRLEN(profiler->frames));
+            }
+        }
+    }
+
+    // FRAME SELECTION HANDLE //
+    float zoom_frame_w = zoom_a.w / (sel1 - sel0);
+    
+    Rect selected_frame_a  = left_of(zoom_a, zoom_frame_w);
+    selected_frame_a.x    += zoom_frame_w * (selected_frame - sel0);
+
+    Rect selected_frame_handle_a = top_of(selected_frame_a, 20);
+    selected_frame_handle_a.x -= (20 - selected_frame_handle_a.w) / 2.0f;
+    selected_frame_handle_a.w  = 20;
+    
+    { _AREA_(selected_frame_handle_a);
+        if(button(P(ctx)) & PRESSED) {
+            selected_frame = sel0 + (input->mouse.p.x - zoom_a.x) / zoom_frame_w;
+        }
+    }
+    selected_frame = clamp<int>(selected_frame, sel0, sel1-1);
+    // ////////// //
+
+    ui_set(e, &prof->selection_start, sel0);
+    ui_set(e, &prof->selection_end,   sel1);
+    ui_set(e, &prof->selected_frame,  selected_frame);
+    ui_set(e, &prof->selected_node,  selected_node);
+
+    move_to_back(id, ctx.manager);
+}
+#endif
+
 
 Rect ui_element_rect(UI_Element *e)
 {
@@ -1800,6 +1906,10 @@ Rect ui_element_rect(UI_Element *e)
         case UI_INVENTORY_SLOT: return e->inventory_slot.a;
 
         case WORLD_VIEW: return e->world_view.a;
+
+#if DEBUG
+        case UI_PROFILER: return e->profiler.a;
+#endif
 
         default: Assert(false); break;
     }
@@ -1968,6 +2078,10 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             case UI_CHESS_BOARD: mouse_over = point_inside_rect(mouse.p, e->chess_board.a); break;
 
             case UI_TEXT:
+
+#if DEBUG
+            case UI_PROFILER:
+#endif
                 break;
                 
             default: Assert(false); break;
@@ -2035,6 +2149,10 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             case PANEL:
             case UI_TEXT:
             case UI_CHAT:
+
+#if DEBUG
+            case UI_PROFILER:
+#endif
                 break;
                 
             default: Assert(false); break;

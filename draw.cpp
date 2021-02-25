@@ -130,15 +130,6 @@ void draw_render_object(Render_Object *obj, Vertex_Buffer<A> vertices, bool do_d
                   do_dynamic_draw_now);
 }
 
-// TODO @Cleanup: Move this
-template<typename T>
-void swap(T *a, T *b)
-{
-    T tmp = *a;
-    *a = *b;
-    *b = tmp;
-}
-
 void reset_render_object_buffer(Render_Object_Buffer *buffer)
 {
     reset(&buffer->vertices);

@@ -30,7 +30,6 @@ const u16 MARKET_SERVER_PORT = 50999;
 #endif
 
 #include "debug.h"
-#include "profile.h"
 
 // --
 
@@ -96,6 +95,12 @@ App_Version APP_version = {{
 #include "platform_win32.cpp"
 #endif
 
+
+
+#if DEBUG
+#include "profile.h"
+#endif
+
 // --
 
 #include "tweaks.h"
@@ -116,6 +121,10 @@ App_Version APP_version = {{
 
 #include "developer.cpp"
 #include "tweaks.cpp"
+
+#if DEBUG
+#include "profile.cpp"
+#endif
 
 #include "thread.cpp"
 

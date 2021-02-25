@@ -35,7 +35,13 @@ struct Network_Loop
 bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_MALLOC> *action_queue,
                          bool *_server_said_goodbye)
 {
+    *_server_said_goodbye = false;
+
     auto *room = &client->room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
+
+    // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+    // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+    // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
     
     // WRITE //
     // @Robustness: Since the room can be updated many times
@@ -57,9 +63,9 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place, ct.default_action_is_put_down);
                 } break;
                     
-                case C_RS_ACT_ENTITY_ACTION: {
-                    auto &ea = action.entity_action;
-                    Enqueue(RSB_ENTITY_ACTION, node, ea.entity, ea.action);
+                case C_RS_ACT_PLAYER_ACTION: {
+                    auto &act = action.player_action;
+                    Enqueue(RSB_PLAYER_ACTION, node, act);
                 } break;
 
                 case C_RS_ACT_CHAT: {                    
@@ -103,35 +109,55 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
             case RCB_ROOM_INIT: {
                 auto *p = &header.room_init;
 
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+
                 // NOTE: We only read the *shared* part of the entitites here, leaving the rest of the structs zeroed.
-
-                Array<Entity, ALLOC_TMP> entities = {0};
-                array_add_uninitialized(entities, p->num_entities);
                 
-                for(int i = 0; i < p->num_entities; i++) {
-                    Zero(entities[i]);
-                    Read_To_Ptr(Entity, &entities[i], node);
-                }
 
-                for (int i = 0; i < entities.n; i++) {
-                    auto *e = &entities[i];
 
-                    if (e->type == ENTITY_PLAYER)
-                    {
-                        // @Volatile
-                        // Copy path because it's temporary memory.
-                        
-                        size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
-                        v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
-                        memcpy(path_copy, e->player_e.walk_path, path_size);
+                { Scoped_Lock(client->mutex);
 
-                        e->player_e.walk_path = path_copy;
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    // NOTE: @Norelease: @Temporary: @Speed
+                    //       See comment in ROOM_UPDATE.
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+
+                    Array<Entity, ALLOC_MALLOC> entities = { 0 }; // @Speed: Reuse some buffer.
+                    array_add_uninitialized(entities, p->num_entities);
+                    defer(clear(&entities););
+
+                    for (int i = 0; i < p->num_entities; i++) {
+                        Zero(entities[i]);
+                        Read_To_Ptr(Entity, &entities[i], node);
                     }
 
-                }
+                    for (int i = 0; i < entities.n; i++) {
+                        auto *e = &entities[i];
 
-                lock_mutex(client->mutex);
-                {
+                        if (e->type == ENTITY_PLAYER)
+                        {
+                            // @Volatile
+                            // Copy path because it's temporary memory.
+
+                            size_t path_size = sizeof(*e->player_e.walk_path) * e->player_e.walk_path_length;
+                            v3 *path_copy = (v3 *)alloc(path_size, ALLOC_MALLOC);
+                            memcpy(path_copy, e->player_e.walk_path, path_size);
+
+                            e->player_e.walk_path = path_copy;
+                        }
+
+                    }
+
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+
+
                     double t       = platform_get_time();
                     double world_t = world_time_for_room(room, t);
                     
@@ -139,8 +165,11 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     room->time_offset = room->t - t;
                     Debug_Print("Room time offset: %f\n", room->time_offset);
                     
-                    Assert(sizeof(Tile) == 1);
+                    static_assert(sizeof(Tile) == 1);
                     memcpy(room->tiles, p->tiles, room_size_x * room_size_y);
+                    
+                    static_assert(sizeof(room->walk_map.nodes[0]) == 1);
+                    memcpy(room->walk_map.nodes, p->walk_map.nodes, room_size_x * room_size_y);
 
                     Assert(room->entities.n == 0);
 
@@ -149,33 +178,59 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     update_local_data_for_room(room, world_t, client);
                     room->static_geometry_up_to_date = false;
                 }
-                unlock_mutex(client->mutex);
+                
             
             } break;
         
             case RCB_ROOM_UPDATE: {
                 auto *p = &header.room_update;
-            
+
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+                // REMEMBER NOT TO USE TEMPORARY MEMORY BEFORE LOCKING THE MUTEX!!!
+
                 Fail_If_True(p->tile0 >= p->tile1);
             
-                // NOTE: We only read the *shared* part of the entitites here, leaving the rest of the structs zeroed.
-                Array<S__Entity, ALLOC_TMP> s_entities = {0};
-                array_add_uninitialized(s_entities, p->num_entities);
                 
-                for(int i = 0; i < p->num_entities; i++) {
-                    Read_To_Ptr(Entity, &s_entities[i], node);
-                }
+                
+                { Scoped_Lock(client->mutex);
 
-                Fail_If_True(p->num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
-                Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
-                for(int i = 0; i < p->num_chat_messages; i++)
-                {
-                    auto *c = &chat_messages[i];
-                    Read_To_Ptr(Chat_Message, c, node);
-                }
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    // NOTE: @Norelease: @Temporary: @Speed
+                    //       We can read everything from the node before locking the mutex.
+                    //       But we want to be able to use temporary memory. So for now,
+                    //       we read inside the mutex lock. We might want for @Jai before
+                    //       changing this. We could maybe use the context in some way or
+                    //       something. Or we make some memory buffer that the read code always 
+                    //       uses...
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+
+                    // NOTE: We only read the *shared* part of the entitites here, leaving the rest of the structs zeroed.
+                    Array<S__Entity, ALLOC_MALLOC> s_entities = {0}; // @Speed: Reuse some buffer.
+                    array_add_uninitialized(s_entities, p->num_entities);
+                    defer(clear(&s_entities););
                 
-                lock_mutex(client->mutex);
-                {
+                    for(int i = 0; i < p->num_entities; i++) {
+                        Read_To_Ptr(Entity, &s_entities[i], node);
+                        Assert(s_entities[i].type == ENTITY_PLAYER || s_entities[i].type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
+                    }
+
+                    Fail_If_True(p->num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
+                    Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
+                    for(int i = 0; i < p->num_chat_messages; i++)
+                    {
+                        auto *c = &chat_messages[i];
+                        Read_To_Ptr(Chat_Message, c, node);
+                    }
+
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+                    ///////////////////////////////////////////////
+
+
                     double t       = platform_get_time();
                     double world_t = world_time_for_room(room, t);
                     
@@ -190,11 +245,17 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     for(int t = p->tile0; t < p->tile1; t++) {
                         tiles[t] = p->tiles[t - p->tile0];
                     }
+                    
+                    static_assert(sizeof(room->walk_map.nodes[0]) == 1);
+                    memcpy(room->walk_map.nodes, p->walk_map.nodes, room_size_x * room_size_y);
 
                     for(int i = 0; i < s_entities.n; i++) {
                         
                         auto *e = find_or_add_entity(s_entities[i].id, room);
                         auto *s_e = static_cast<S__Entity *>(e);
+
+                        Assert(s_entities[i].type == ENTITY_PLAYER || s_entities[i].type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
+                        Assert(s_e->type == ENTITY_PLAYER || s_e->type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
 
                         if(s_entities[i].type == ENTITY_PLAYER)
                         {
@@ -250,7 +311,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
 
                     update_local_data_for_room(room, world_t, client);
                 }
-                unlock_mutex(client->mutex);
+
+
             } break;
             
             default: {
@@ -279,6 +341,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
 
 bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_server_said_goodbye)
 {
+    *_server_said_goodbye = false;
+
     // READ //
     while(true) {
         
@@ -361,6 +425,8 @@ bool talk_to_user_server(Network_Node *node, Mutex &mutex, User *user, bool *_se
 bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action, ALLOC_MALLOC> *action_queue,
                            bool *_server_said_goodbye)
 {
+    *_server_said_goodbye = false;
+
     // WRITE //
     lock_mutex(client->mutex); // @Speed: We might not need to lock the mutex here, but can do it only for the actions that need it, inside the loop. Because the passed action_queue is a copy of the shared one (2021-02-08).
     {
@@ -529,7 +595,7 @@ DWORD network_loop(void *loop_)
     // ROOM SERVER
     bool room_connect_requested;
     Room_ID requested_room;
-    Array<C_RS_Action, allocator> room_action_queue;
+    Array<C_RS_Action, allocator> room_action_queue = { 0 };
     //
 
     // USER SERVER
@@ -539,7 +605,7 @@ DWORD network_loop(void *loop_)
     
     // MARKET SERVER
     bool market_connect_requested;
-    Array<C_MS_Action, allocator> market_action_queue;
+    Array<C_MS_Action, allocator> market_action_queue = { 0 };
     //
     
     while(true) {
@@ -697,7 +763,7 @@ DWORD network_loop(void *loop_)
                !did_connect_to_room_this_loop)
             {
                 // NOTE: talk_to_room_server might lock client->mutex.
-                bool server_said_goodbye;
+                bool server_said_goodbye = false;
                 bool talk = talk_to_room_server(&rs_connection.node, client,
                                                 &room_action_queue, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
@@ -713,7 +779,7 @@ DWORD network_loop(void *loop_)
             if(us_connection.connected &&
                !did_connect_to_user_this_loop)
             {
-                bool server_said_goodbye;
+                bool server_said_goodbye = false;
                 bool talk = talk_to_user_server(&us_connection.node, client->mutex, &client->user, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
                 {

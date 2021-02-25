@@ -351,6 +351,17 @@ void draw_line(v3 a, v3 b, v3 n, float w, v4 color, Graphics *gfx, v2 *uvs = NUL
     draw_quad(p0, ortho * w, (b - a), color, gfx, uvs, tex);
 }
 
+void draw_line(v2 a, v2 b, float w, v4 color, Graphics *gfx, float z_3d = 0, v2 *uvs = NULL, Texture_ID tex = TEX_NONE_OR_NUM)
+{
+    Draw_Mode draw_mode = current(gfx->draw_mode);
+    
+    float z = 0;
+    if     (draw_mode == DRAW_2D) z = eat_z_for_2d(gfx);
+    else if(draw_mode == DRAW_3D) z = z_3d;
+
+    draw_line({ a.x, a.y, z }, { b.x, b.y, z }, V3_Z, w, color, gfx, uvs, tex);
+}
+
 #if 0
 // @Incomplete!! Can't pass null as tex to triangles()
 void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)
@@ -385,7 +396,7 @@ void draw_triangle(v2 p0, v2 p1, v2 p2, Graphics *gfx, v2 *uvs = NULL)
 
 void draw_rect(Rect a, v4 color, Graphics *gfx, float z_3d = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
-    Draw_Mode draw_mode = current(gfx->draw_mode); // @Volatile: Should not pass default here, should be defined where stack is defined.
+    Draw_Mode draw_mode = current(gfx->draw_mode);
 
     float z = 0;
     if     (draw_mode == DRAW_2D) z = eat_z_for_2d(gfx);

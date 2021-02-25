@@ -9,6 +9,7 @@ const int MAX_CHAT_MESSAGES_PER_ROOM = 32;
 
 typedef double World_Time;
 
+
 // TODO @Robustness, @Norelease: We should be able to skip values here, so ITEM_NONE_OR_NUM would not be guaranteed to be correct.
 enum Item_Type_ID
 {
@@ -44,7 +45,7 @@ enum Entity_Action_Type
     ENTITY_ACT_SET_POWER_MODE = 5,
 
     // Chess
-    ENTITY_ACT_CHESS_MOVE = 6
+    ENTITY_ACT_CHESS = 6
 };
 
 struct Entity_Action
@@ -56,10 +57,7 @@ struct Entity_Action
             bool set_to_on;
         } set_power_mode;
 
-        struct {
-            u8 from; // square index
-            u8 to;
-        } chess_move;
+        Chess_Action chess;
     };
 };
 
@@ -202,7 +200,7 @@ struct S__Entity
             v3 *walk_path;
 
             u8 action_queue_length;
-            Player_Action action_queue[16];
+            Player_Action action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
             
         } player_e;
     };
@@ -219,8 +217,11 @@ void clear(S__Entity *e)
 // action will be possible after a given queue of actions has been performed.
 struct Player_State
 {
-    User_ID user_id; // Don't change this :)
+    User_ID   user_id; // Don't change this :)
+    Entity_ID entity_id; // Don't change this :)
+    // --
     
+    v3 p;
     Item held_item; // No item if .type == ITEM_NONE_OR_NUM.
 };
 
@@ -245,10 +246,6 @@ struct Chat_Message {
 };
 
 
-const s32 room_size_x = 32;
-const s32 room_size_y = 32;
-const s32 room_size   = room_size_x * room_size_y;
-
 typedef s32 Room_ID; // Only positive numbers are allowed room IDs.
 
 // Contains what's shared between client and server.
@@ -256,9 +253,11 @@ struct S__Room
 {
     World_Time t; // t should only be on server. Client computes this (system_time + time_offset). Send this only in INIT_ROOM
     Tile tiles[room_size_x * room_size_y];
+    Walk_Map walk_map;
     
     int num_chat_messages;
     Chat_Message chat_messages[MAX_CHAT_MESSAGES_PER_ROOM];
+    
 };
 void clear(S__Room *room) {
     

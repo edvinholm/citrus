@@ -1,15 +1,34 @@
 
 
 
-// IMPORTANT: squares must be at least ARRLEN(Chess_Board::squares) long.
-void draw_chess_board(Chess_Square *squares, Rect a, Graphics *gfx, s8 highlighted_square_ix = -1)
+// @Cleanup: Should send in which squares to highlight here, and not a user.
+
+void draw_chess_board(Chess_Board *board, Rect a, Graphics *gfx,
+                      User_ID user = NO_USER, s8 selected_square_ix = -1, Chess_Move *queued_move = NULL)
 {
     auto draw_mode = current(gfx->draw_mode);
     
     static_assert(ARRLEN(Chess_Board::squares) == 8*8);
 
-    Rect square_a = a; square_a.s /= 8;
-    bool square_is_black = false; // @Norelease: This depends on if you're playing white or black.... (And the order in which we draw the squares also depends on it...)
+    Assert(selected_square_ix < (s8)ARRLEN(Chess_Board::squares));
+
+    
+    bool white_king_in_check, black_king_in_check;
+    bool check = false;
+    
+    bool did_check_for_check = false;
+    if(draw_mode == DRAW_2D)
+    {
+        check = is_check(board, &white_king_in_check, &black_king_in_check);
+        did_check_for_check = true;
+    }
+
+    Rect first_square_a = a;
+    first_square_a.s /= 8;
+
+    // SQUARES //
+    Rect square_a = first_square_a;
+    bool square_is_black = true;
     for(int y = 0; y < 8; y++)
     {
         for(int x = 0; x < 8; x++)
@@ -18,13 +37,78 @@ void draw_chess_board(Chess_Square *squares, Rect a, Graphics *gfx, s8 highlight
             if(square_is_black) square_color = { 0.33,0.30,0.29, 1 }; //{ 0.18, 0.11, 0.11, 1 };
             else                square_color = { 0.76, 0.73, 0.65, 1 }; //{ 0.96, 0.93, 0.87, 1 };
 
-            if(highlighted_square_ix == (y * 8 + x)) {
-                square_color.r += 0.2f;
+            u8 square_ix = (y * 8 + x);
+            
+            if(selected_square_ix == square_ix) {
+                square_color.b += 0.2f;
+            }
+            
+            if(user != NO_USER && 
+               (user == board->white_player.user || user == board->black_player.user))
+            {
+                bool is_black_player = (user == board->black_player.user);
+                
+                if(selected_square_ix >= 0)
+                {
+                    Chess_Move move = {0};
+                    move.from = selected_square_ix;
+                    move.to   = square_ix;
+                    if(chess_move_possible(move, is_black_player, board)) // @SpeedMini
+                        square_color.g += 0.2f;
+                }
+            }
+
+            auto piece = extract_chess_piece(board->squares[square_ix]);
+            
+            if(did_check_for_check && check && piece.type == CHESS_KING)
+            {
+                if((piece.is_black  && black_king_in_check) ||
+                   (!piece.is_black && white_king_in_check))
+                {
+                    square_color.r += 0.2f;
+                }
             }
             
             draw_rect(square_a, square_color, gfx);
+            
+            square_a.x += square_a.w;
+            square_is_black = !square_is_black;
+        }
+        
+        square_a.y += square_a.h;
+        square_a.x  = a.x;
+        square_is_black = !square_is_black;
+    }
 
-            auto piece = extract_chess_piece(squares[y * 8 + x]);
+    if(queued_move && draw_mode == DRAW_2D)
+    {
+        u8 from_x = queued_move->from % 8;
+        u8 from_y = queued_move->from / 8;
+        
+        u8 to_x = queued_move->to % 8;
+        u8 to_y = queued_move->to / 8;
+
+        v2 p0 = { (float)from_x, (float)from_y };
+        v2 p1 = { (float)to_x,   (float)to_y };
+
+        p0 = compmul(p0, first_square_a.s);
+        p1 = compmul(p1, first_square_a.s);
+
+        p0 += first_square_a.p + first_square_a.s * 0.5f;
+        p1 += first_square_a.p + first_square_a.s * 0.5f;
+
+        draw_line(p0, p1, first_square_a.w * 0.2f, C_RED, gfx);
+    }
+
+    // PIECES //
+    square_a = first_square_a;
+    for(int y = 0; y < 8; y++)
+    {
+        for(int x = 0; x < 8; x++)
+        {
+            u8 square_ix = (y * 8 + x);
+            auto piece = extract_chess_piece(board->squares[square_ix]);
+            
             if(piece.type != CHESS_NONE) {
 
                 const v4 black_piece_color = C_BLACK;
@@ -65,14 +149,12 @@ void draw_chess_board(Chess_Square *squares, Rect a, Graphics *gfx, s8 highlight
                     
                 }
             }
-            
+
             square_a.x += square_a.w;
-            square_is_black = !square_is_black;
         }
         
         square_a.y += square_a.h;
         square_a.x  = a.x;
-        square_is_black = !square_is_black;
     }
         
 }

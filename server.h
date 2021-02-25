@@ -9,3 +9,5 @@ struct Server {
 
 double get_time();
 
+
+String socket_to_string(Socket socket);

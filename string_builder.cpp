@@ -247,6 +247,53 @@ void string_append(T a, U b, V c, W d, X e, Y f, Z g, A h, String_Builder &build
 }
 
 
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B>
+void string_append(T a, U b, V c, W d, X e, Y f, Z g, A h, B i, String_Builder &builder)
+{
+    string_append(a, builder);
+    string_append(b, builder);
+    string_append(c, builder);
+    string_append(d, builder);
+    string_append(e, builder);
+    string_append(f, builder);
+    string_append(g, builder);
+    string_append(h, builder);
+    string_append(i, builder);
+}
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B, typename C>
+void string_append(T a, U b, V c, W d, X e, Y f, Z g, A h, B i, C j, String_Builder &builder)
+{
+    string_append(a, builder);
+    string_append(b, builder);
+    string_append(c, builder);
+    string_append(d, builder);
+    string_append(e, builder);
+    string_append(f, builder);
+    string_append(g, builder);
+    string_append(h, builder);
+    string_append(i, builder);
+    string_append(j, builder);
+}
+
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B, typename C, typename D>
+void string_append(T a, U b, V c, W d, X e, Y f, Z g, A h, B i, C j, D k, String_Builder &builder)
+{
+    string_append(a, builder);
+    string_append(b, builder);
+    string_append(c, builder);
+    string_append(d, builder);
+    string_append(e, builder);
+    string_append(f, builder);
+    string_append(g, builder);
+    string_append(h, builder);
+    string_append(i, builder);
+    string_append(j, builder);
+    string_append(k, builder);
+}
+
+
 
 //IMPORTANT: This also resets the string builder.
 char *copy_built_string_as_cstring(String_Builder &builder, Allocator_ID allocator)
@@ -296,57 +343,90 @@ String built_string(String_Builder &builder)
 }
 
 
-
+//
+// OMG WE NEED @JAI!!!
+//
 
 //@JAI
 template<typename T, typename U>
-String concat_tmp(T a, U b, String_Builder &builder)
+String concat_tmp(T a, U b)
 {
+    String_Builder builder = {0};
     string_append(a, b, builder);
     return built_string(builder);
 }
 
 //@JAI
 template<typename T, typename U, typename V>
-String concat_tmp(T a, U b, V c, String_Builder &builder)
+String concat_tmp(T a, U b, V c)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, builder);
     return built_string(builder);
 }
 
 //@JAI
 template<typename T, typename U, typename V, typename W>
-String concat_tmp(T a, U b, V c, W d, String_Builder &builder)
+String concat_tmp(T a, U b, V c, W d)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, builder);
     return built_string(builder);
 }
 
 template<typename T, typename U, typename V, typename W, typename X>
-String concat_tmp(T a, U b, V c, W d, X e, String_Builder &builder)
+String concat_tmp(T a, U b, V c, W d, X e)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, builder);
     return built_string(builder);
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y>
-String concat_tmp(T a, U b, V c, W d, X e, Y f, String_Builder &builder)
+String concat_tmp(T a, U b, V c, W d, X e, Y f)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, builder);
     return built_string(builder);
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z>
-String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, String_Builder &builder)
+String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, g, builder);
     return built_string(builder);
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A>
-String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, String_Builder &builder)
+String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, g, h, builder);
+    return built_string(builder);
+}
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B>
+String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, B i)
+{
+    String_Builder builder = {0};
+    string_append(a, b, c, d, e, f, g, h, i, builder);
+    return built_string(builder);
+}
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B, typename C>
+String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, B i, C j)
+{
+    String_Builder builder = {0};
+    string_append(a, b, c, d, e, f, g, h, i, j, builder);
+    return built_string(builder);
+}
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B, typename C, typename D>
+String concat_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, B i, C j, D k)
+{
+    String_Builder builder = {0};
+    string_append(a, b, c, d, e, f, g, h, i, j, k, builder);
     return built_string(builder);
 }
 
@@ -469,8 +549,9 @@ char *concat_cstring_new(T a, U b, V c, W d, X e, Y f, Z g, A h, String_Builder 
 
 //@JAI
 template<typename T, typename U>
-char *concat_cstring_tmp(T a, U b, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b)
 {
+    String_Builder builder = {0};
     string_append(a, b, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
@@ -478,8 +559,9 @@ char *concat_cstring_tmp(T a, U b, String_Builder &builder)
 
 //@JAI
 template<typename T, typename U, typename V>
-char *concat_cstring_tmp(T a, U b, V c, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
@@ -487,41 +569,56 @@ char *concat_cstring_tmp(T a, U b, V c, String_Builder &builder)
 
 //@JAI
 template<typename T, typename U, typename V, typename W>
-char *concat_cstring_tmp(T a, U b, V c, W d, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c, W d)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
 }
 
 template<typename T, typename U, typename V, typename W, typename X>
-char *concat_cstring_tmp(T a, U b, V c, W d, X e, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c, W d, X e)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y>
-char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z>
-char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, Z g, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, Z g)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, g, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
 }
 
 template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A>
-char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, String_Builder &builder)
+char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h)
 {
+    String_Builder builder = {0};
     string_append(a, b, c, d, e, f, g, h, builder);
+    string_append_char(0, builder);
+    return (char *)built_string(builder).data;
+}
+
+
+template<typename T, typename U, typename V, typename W, typename X, typename Y, typename Z, typename A, typename B>
+char *concat_cstring_tmp(T a, U b, V c, W d, X e, Y f, Z g, A h, B i)
+{
+    String_Builder builder = {0};
+    string_append(a, b, c, d, e, f, g, h, i, builder);
     string_append_char(0, builder);
     return (char *)built_string(builder).data;
 }

@@ -3,14 +3,23 @@
   SERVER INCLUDES
 */
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+//--
+
 
 #include "random.cpp"
 
+#include "game_shared_pre.h"
+
 #include "pathfinding.h"
 
-#include "chess.h"
-
 #include "user_pre.h"
+
+//--
+#include "chess.h"
+//--
+
 #include "game_shared.h"
 #include "game_server.h"
 using namespace Server_Game;
@@ -21,10 +30,13 @@ using namespace Server_User;
 #include "market.h"
 using namespace Server_Market;
 
+//--
 #include "chess.cpp"
+//--
 
 #include "user_shared.cpp"
 #include "world_shared.cpp"
+#include "pathfinding_shared.cpp"
 
 #include "log.cpp"
 

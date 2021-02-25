@@ -12,8 +12,6 @@ FILE *open_file(char *filename, bool for_writing)
     return fopen(filename, (for_writing) ? "wb" : "rb");
 }
 
-
-// @Cleanup @Robustness: Don't close the file in this proc. Makes more sense to both open and close the file outside of it.
 bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, strlength *_Length = NULL)
 {
     Assert(File);
@@ -33,20 +31,19 @@ bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, strlength 
     }
 
     (*_Data)[FileSize] = 0;
-
-    close_file(File);
     
     if(_Length) *_Length = FileSize;
     
     return true;
 }
 
-bool read_entire_file(char *Filename, u8 **_Data, Allocator_ID allocator, strlength *_Length = 0)
+bool read_entire_file(char *filename, u8 **_data, Allocator_ID allocator, strlength *_length = 0)
 {
-    FILE *File = fopen(Filename, "rb");
-    if(!File) return false;
+    FILE *file = open_file(filename, false);
+    if(!file) return false;
+    defer(if(!close_file(file)) { Debug_Print("[read_entire_file] Failed to close '%s'.\n", filename); });
 
-    return read_entire_file(File, _Data, allocator, _Length);
+    return read_entire_file(file, _data, allocator, _length);
 }
 
 inline
@@ -157,12 +154,11 @@ bool read_entire_resource(char *filename, u8 **_data, Allocator_ID allocator,
                           strlength *_length = NULL, String_Builder *builder = NULL)
 {   
     Resource_Handle resource = open_resource(filename, false, builder);
-
     if(!resource.file) return false;
+    defer(close_resource(resource););
+    
     
 #if OS_ANDROID
-    
-    defer(close_resource(resource););
     
     Assert(resource.file);
 

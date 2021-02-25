@@ -34,6 +34,7 @@ struct RCB_Packet_Header
             World_Time time;
             u32 num_entities;
             Tile *tiles;
+            Walk_Map walk_map;
         } room_init;
         
         struct {
@@ -42,6 +43,7 @@ struct RCB_Packet_Header
             u32 num_entities;
             u16 num_chat_messages;
             Tile *tiles;
+            Walk_Map walk_map;
         } room_update;
     };
 };
@@ -101,8 +103,14 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(u32, &p.num_entities, node);
             Fail_If_True(p.num_entities > MAX_ENTITIES_PER_ROOM);
 
-            Assert(sizeof(Tile) == 1);
+            static_assert(sizeof(Tile)    == 1);
+            static_assert(sizeof(*p.tiles) == 1);
             Data_Ptr(p.tiles, room_size_x * room_size_y, node);
+          
+            static_assert(sizeof(p.walk_map.nodes[0]) == 1);
+            static_assert(ARRLEN(p.walk_map.nodes) == room_size_x * room_size_y);
+            Data_Ptr(p.walk_map.nodes, room_size_x * room_size_y, node);
+            
         } break;
             
         case RCB_ROOM_UPDATE: {
@@ -120,8 +128,13 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(u16, &p.num_chat_messages, node);
             Fail_If_True(p.num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
 
+            static_assert(sizeof(Tile)    == 1);
             static_assert(sizeof(*p.tiles) == 1);
             Data_Ptr(p.tiles, p.tile1 - p.tile0, node);
+
+            static_assert(sizeof(p.walk_map.nodes[0]) == 1);
+            static_assert(ARRLEN(p.walk_map.nodes) == room_size_x * room_size_y);
+            Data_Ptr(p.walk_map.nodes, room_size_x * room_size_y, node);
         } break;
     }
 
@@ -167,7 +180,7 @@ bool send_RCB_GOODBYE_packet_now(Network_Node *node)
     return true;
 }
 
-bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_entities, Entity *entities, Tile *tiles)
+bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_entities, Entity *entities, Tile *tiles, Walk_Map *walk_map)
 {
     begin_outbound_packet(node);
     {
@@ -179,7 +192,12 @@ bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_e
         Write(u32, num_entities, node);
     
         Assert(sizeof(Tile) == 1);
+        static_assert(sizeof(*RCB_Packet_Header::room_init.tiles) == 1);
         Write_Bytes(tiles, room_size_x * room_size_y, node);
+
+        static_assert(ARRLEN(RCB_Packet_Header::room_init.walk_map.nodes) == room_size_x * room_size_y);
+        static_assert(sizeof(RCB_Packet_Header::room_init.walk_map.nodes[0]) == 1);
+        Write_Bytes(walk_map->nodes, room_size_x * room_size_y, node);
                 
         for(int i = 0; i < num_entities; i++) {
             Write(Entity, &entities[i], node);
@@ -191,7 +209,7 @@ bool enqueue_RCB_ROOM_INIT_packet(Network_Node *node, World_Time time, u32 num_e
 
 // NOTE: tiles should point to all_tiles + tile0
 bool enqueue_RCB_ROOM_UPDATE_packet(Network_Node *node,
-                                    u32 tile0, u32 tile1, Tile *tiles,
+                                    u32 tile0, u32 tile1, Tile *tiles, Walk_Map *walk_map,
                                     u32 num_entities, Entity *entities,
                                     u16 num_chat_messages, Chat_Message *chat_messages)
 {
@@ -205,8 +223,14 @@ bool enqueue_RCB_ROOM_UPDATE_packet(Network_Node *node,
         Write(u32, num_entities,      node);
         Write(u16, num_chat_messages, node);
 
-        Assert(sizeof(Tile) == 1);
+        static_assert(sizeof(Tile) == 1);
+        static_assert(sizeof(*RCB_Packet_Header::room_update.tiles) == 1);
         Write_Bytes(tiles, (tile1 - tile0), node);
+
+        static_assert(ARRLEN(RCB_Packet_Header::room_update.walk_map.nodes) == room_size_x * room_size_y);
+        static_assert(sizeof(RCB_Packet_Header::room_update.walk_map.nodes[0]) == 1);
+        Write_Bytes(walk_map->nodes, room_size_x * room_size_y, node);
+        
 
         Entity *at_entity  = entities;
         Entity *end_entity = entities + num_entities;

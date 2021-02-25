@@ -22,10 +22,17 @@ scroll_to_caret_repeat_interval 0.1  # In seconds
 show_player_paths       false
 color_tiles_by_position false
 
-
 startup_user 0    # 0 means no user.
 startup_room 0    # 0 means no room.
 
 show_window_sizes false
 
-show_profiler false
+
+# This shows the positions for a PICK_UP action always.
+# We might make it possible to choose which action later.  -EH, 2021-02-25
+show_entity_action_positions false
+
+
+run_profiler    false
+show_profiler   false
+profiler_yscale 100.0

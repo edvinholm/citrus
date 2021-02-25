@@ -1,6 +1,9 @@
 
 #define STRING_BUILDER_INITIAL_BUFFER_SIZE 256
 
+
+// IMPORTANT @Norelease: @Speed: Make a new String_Builder. Should have multiple buffers and the first one should be static!
+
 //IMPORTANT: :StringBuilderResetResponsability
 //           You are responsible for resetting the builder
 //           when you are done with it - you should not need

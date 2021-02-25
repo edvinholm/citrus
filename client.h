@@ -23,6 +23,25 @@ void reset(Market_UI *mui)
     
 }
 
+enum Item_Window_Tab
+{
+    ITEM_TAB_INFO = 0,
+    ITEM_TAB_CHESS,
+
+    ITEM_TAB_NONE_OR_NUM
+};
+
+String item_window_tab_labels[] = {
+    STRING("i"),
+    STRING("GAME")
+};
+static_assert(ARRLEN(item_window_tab_labels) == ITEM_TAB_NONE_OR_NUM);
+
+struct Item_UI
+{
+    Item_Window_Tab tab;
+};
+
 struct Client_UI
 {
     bool room_window_open;
@@ -30,9 +49,10 @@ struct Client_UI
     bool market_window_open;
 
     Market_UI market;
+    Item_UI   item;
     
 #if DEVELOPER
-    bool dev_window_open;
+    Developer_UI dev;
 #endif
 
     Bottom_Panel_Tab open_bottom_panel_tab;
@@ -46,9 +66,13 @@ void init_client_ui(Client_UI *cui)
 
     // @Norelease: @Temporary, I think. 
     cui->market.order_draft.price = 10;
+
+
+#if DEVELOPER
+    
+#endif
 }
 
-// @Cleanup: Make an S__Market_Article maybe. To have as the watched article here.
 struct Market
 {
     bool initialized;

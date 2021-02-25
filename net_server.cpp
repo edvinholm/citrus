@@ -3,10 +3,14 @@ const int DEFAULT_SOCKET_BACKLOG_LENGTH = 1024;
 
 bool setup_listening_socket(Socket *_sock, u16 port, bool blocking, int max_backlog_length)
 {
-    if(!platform_create_tcp_socket(_sock, blocking)) return false;
+    Fail_If_True(!platform_create_tcp_socket(_sock, blocking));
     
-    if(!platform_bind_socket(_sock, port)) return false;
-    if(!platform_start_listening_to_socket(_sock, max_backlog_length)) return false;
+    if(!platform_bind_socket(_sock, port)) {
+        Debug_Print("Unable to bind listening socket to port %u. Error: %d.\n", port, WSAGetLastError());
+        return false;
+    }
+    
+    Fail_If_True(!platform_start_listening_to_socket(_sock, max_backlog_length));
     
     return true;
 }

@@ -3,6 +3,7 @@
   Client Game
 */
 
+
 namespace Client_Game
 {
     struct Entity: public S__Entity
@@ -18,7 +19,7 @@ namespace Client_Game
             struct {
                 struct {
                     s8 selected_square_ix_plus_one;
-                } chess;
+                } chess;                
             } item_local;
         };
 

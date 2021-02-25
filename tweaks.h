@@ -25,8 +25,11 @@ enum Tweak_ID {
     TWEAK_STARTUP_USER,
     TWEAK_STARTUP_ROOM,
     TWEAK_SHOW_WINDOW_SIZES,
+    TWEAK_SHOW_ENTITY_ACTION_POSITIONS,
 
+    TWEAK_RUN_PROFILER,
     TWEAK_SHOW_PROFILER,
+    TWEAK_PROFILER_YSCALE,
     //
 
     TWEAK_NONE_OR_NUM
@@ -70,8 +73,11 @@ struct Tweaks
         { "startup_user",            TWEAK_TYPE_UINT, 1 },
         { "startup_room",            TWEAK_TYPE_UINT, 1 },
         { "show_window_sizes",       TWEAK_TYPE_BOOL, 1 },
+        { "show_entity_action_positions", TWEAK_TYPE_BOOL, 1 },
         
-        { "show_profiler",           TWEAK_TYPE_BOOL, 1 }
+        { "run_profiler",            TWEAK_TYPE_BOOL,  1 },
+        { "show_profiler",           TWEAK_TYPE_BOOL,  1 },
+        { "profiler_yscale",         TWEAK_TYPE_FLOAT, 1 }
         //
     };
     static_assert(ARRLEN(infos) == TWEAK_NONE_OR_NUM);

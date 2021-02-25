@@ -270,7 +270,9 @@ void add_new_market_clients(Market_Server *server)
             set_view_target(client, view_target);
                  
             client = array_add(server->clients, *client);
-            MS_Log("Added client (socket = %lld) to market server.\n", client->node.socket.handle);
+
+            String socket_str = socket_to_string(client->node.socket);
+            MS_Log("Added client (socket = %.*s).\n", (int)socket_str.length, socket_str.data);
 
             if(client->type == MS_CLIENT_PLAYER)
             {

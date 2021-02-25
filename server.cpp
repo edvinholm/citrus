@@ -21,6 +21,21 @@ void stop_market_server(Market_Server *server, Thread *thread, s32 timeout_ms)
     platform_join_thread(*thread, timeout_ms);
 }
 
+// Returned string is allocated with ALLOC_TMP or constant.
+String socket_to_string(Socket socket)
+{
+    sockaddr_in addr = {0};
+    int         addr_size = sizeof(addr);
+    bool addr_valid = getpeername(socket.handle, (sockaddr *)&addr, &addr_size);
+    
+    auto wsa_error = WSAGetLastError();
+
+    auto &ip = addr.sin_addr.S_un.S_un_b;
+    String ip_str = concat_tmp(ip.s_b1, ".", ip.s_b2, ".", ip.s_b3, ".", ip.s_b4);
+    
+    return concat_tmp("(", socket.handle, " | ", ip_str, ":", addr.sin_port, " | E: ", wsa_error, ")");
+}
+
 int server_entry_point(int num_args, char **arguments)
 {
     Debug_Print("I am a server.\n");

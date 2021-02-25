@@ -1,7 +1,5 @@
 
 
-
-
 template<typename T, Allocator_ID A>
 T &Array<T, A>::operator [] (const s64 index)
 {
@@ -21,16 +19,19 @@ bool ensure_capacity(Array<T, A> &array, s64 capacity)
     }
     if(new_allocated != array.allocated)
     {
-        T *new_e = (T *)alloc(new_allocated * sizeof(T), A);
-        Release_Assert_Args(new_e,    "new_allocated", new_allocated, "sizeof(T)", sizeof(T), "A", A, "array.allocated", array.allocated, "array.n", array.n, "array.e", (s64)array.e);
-        if(!new_e) return false;
-
-        if(array.n)
-        {
-            Assert(array.e);
-            memcpy(new_e, array.e, sizeof(T)*array.n);
+        size_t new_size = new_allocated * sizeof(T);
+        T *new_e = NULL;
+        
+        if(array.e == NULL) {
+            new_e = (T *)alloc(new_size, A);
+        } else {
+            new_e = (T *)realloc(array.e, array.allocated * sizeof(T), new_size, A);
         }
-        if(array.e) dealloc_if_legal(array.e, A);
+        
+        if(!new_e) {
+            Assert(false);
+            return false;
+        }
         
         array.e = new_e;
         array.allocated = new_allocated;
@@ -84,7 +85,7 @@ void array_set(Array<T, A> &dest, Array<T, B> &src)
 
 template<typename T, Allocator_ID A>
 T *array_insert(Array<T, A> &array, T *elements, s64 index, s64 num_elements = 1)
-{
+{   
     Assert(index <= array.n);
     Assert(index >= 0);
 
@@ -151,20 +152,22 @@ bool merge_arrays(Array<T, A> &array, Array<T, A> &other_array)
 template<typename T, Allocator_ID A>
 inline
 void array_unordered_remove(Array<T, A> &array, s64 index, s64 n /* = 1*/)
-{
+{   
     Assert(n <= array.n - index);
-    
-    s64 to_copy = min(n, array.n - (index + n));
-    memcpy(array.e + index, array.e + array.n - to_copy, sizeof(T)*to_copy);
+
+    if(index < array.n-1) {
+        array.e[index] = array.e[array.n-1];
+    }
     array.n -= n;
 }
 
 template<typename T, Allocator_ID A>
 inline
 void array_ordered_remove(Array<T, A> &array, s64 index, s64 n /* = 1*/)
-{
-    Assert(index >= 0 && index < array.n);
-    memcpy(array.e + index, array.e + index + n, sizeof(T) * (array.n - (index + n)));
+{   
+    Assert(index >= 0 && index <= array.n - n);
+
+    memmove(array.e + index, array.e + index + n, sizeof(T) * (array.n - (index + n)));
     array.n -= n;
 }
 
@@ -347,10 +350,13 @@ T *last_element_pointer(Static_Array<T, Size> &array)
 template<typename T, int Size>
 void array_unordered_remove(Static_Array<T, Size> &array, s64 index, s64 n/* = 1*/)
 {
-    Assert(n <= array.n - index);
-    
-    s64 to_copy = min(n, array.n - (index + n));
-    memcpy(array.e + index, array.e + array.n - to_copy, sizeof(T) * to_copy);
+    Assert(index <= array.n - n);
+    Assert(index < Size);
+    Assert(index >= 0);
+
+    if(index < array.n-1) {
+        array.e[index] = array.e[array.n-1];
+    }
     array.n -= n;
 }
     

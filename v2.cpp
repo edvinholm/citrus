@@ -135,8 +135,15 @@ void operator+=(v2 &V, v2 U)
 inline
 float magnitude(v2 v)
 {
-    return sqrt(pow(v.x, 2) + pow(v.y, 2));
+    return sqrtf(v.x*v.x + v.y*v.y);
 }
+
+inline
+float magnitude_xy(float x, float y)
+{
+    return sqrtf(x*x + y*y);
+}
+
 
 inline
 v2 normalized(v2 v)

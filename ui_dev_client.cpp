@@ -1,10 +1,9 @@
 
-
-void client_developer_window(UI_Context ctx, Input_Manager *input, Client *client)
+void client_developer_window(UI_Context ctx, Input_Manager *input, Developer_UI *dui, Client *client)
 {
     U(ctx);
     
-    _WINDOW_(P(ctx), STRING("DEV TOOLS"));
+    _WINDOW_(P(ctx), STRING("DEVELOPER"));
 
-    if(button(P(ctx)) & CLICKED_ENABLED) Assert(false);
+    
 }

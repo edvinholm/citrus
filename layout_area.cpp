@@ -301,6 +301,48 @@ Rect cut_right_square(Layout_Manager *manager)
 
 
 
+inline
+Rect slide_top_square(Layout_Manager *manager)
+{
+    Rect a = area(manager);
+    return slide_top(a.w, manager);
+}
+
+inline
+Rect slide_bottom_square(Layout_Manager *manager)
+{
+    Rect a = area(manager);
+    return slide_bottom(a.w, manager);
+}
+
+inline
+Rect slide_left_square(Layout_Manager *manager)
+{
+    Rect a = area(manager);
+    return slide_left(a.h, manager);
+}
+
+inline
+Rect slide_right_square(Layout_Manager *manager)
+{
+    Rect a = area(manager);
+    return slide_right(a.h, manager);
+}
+
+#define _TOP_SQUARE_SLIDE_() \
+    _AREA_(slide_top_square(ctx.layout));
+
+#define _BOTTOM_SQUARE_SLIDE_() \
+    _AREA_(slide_bottom_square(ctx.layout));
+
+#define _LEFT_SQUARE_SLIDE_() \
+    _AREA_(slide_left_square(ctx.layout));
+
+#define _RIGHT_SQUARE_SLIDE_() \
+    _AREA_(slide_right_square(ctx.layout));
+
+
+
 #define _REST_AFTER_TOP_SQUARE_() \
     _AREA_(removed_top_square(area()));
 

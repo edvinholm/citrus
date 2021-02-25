@@ -900,7 +900,9 @@ void add_new_user_clients(User_Server *server)
                  
             auto *clients = &server->clients[user_index];
             client = array_add(*clients, *client);
-            US_Log("Added client (socket = %lld) to user (username = %.*s).\n", client->node.socket.handle, (int)user->username.length, user->username.data);
+
+            String socket_str = socket_to_string(client->node.socket);
+            US_Log("User (username = %.*s): Added client (socket = %.*s).\n", (int)user->username.length, user->username.data, (int)socket_str.length, socket_str.data);
 
             if(client->type == US_CLIENT_PLAYER)
             {

@@ -426,11 +426,8 @@ void draw_body_text(Body_Text *bt, v2 top_left, v4 color, Graphics *gfx, H_Align
     }
 }
 
-// TODO @Cleanup: Take a size instead of a rect
-Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID font_id, Font_Table *fonts, float start_x/* = 0*/, bool multiline/* = true*/)
+Body_Text create_body_text(String text, float w, Font_Size font_size, Font_ID font_id, Font_Table *fonts, float start_x/* = 0*/, bool multiline/* = true*/)
 {
-    float a_x1 = a.x + a.w;
-
     Font *font = &(*fonts)[font_id];
     
     // SETUP THINGS WE ALREADY KNOW ABOUT OUR Body_Text //
@@ -438,7 +435,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
     bt.text = text;
 
     bt.start_x = start_x;
-    bt.w = a.w;
+    bt.w = w;
     
     bt.font = font_id;
     bt.font_size = font_size;
@@ -465,7 +462,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
     u8 *at  = text.data;
     u8 *end = text.data + text.length;
 
-    v2 start_p = a.p + V2_Y * a.h;
+    v2 start_p = V2_ZERO;
     v2 pp = start_p;
     pp.x += start_x;
 
@@ -501,12 +498,12 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
                 whitespace_or_hyphen_end      = cp_end;
             }
             
-            // Calculate where the glyph would end up, and see if its x1 > the rect's x1.
+            // Calculate where the glyph would end up, and see if its x1 > w.
             // if so, add a line break before it.
             float x0 = pp.x;
             float x1 = codepoint_x1(cp, pp, font_size, font, bt.glyph_scale, &pp, prev_cp);
 
-            if(x1 > a_x1)
+            if(x1 > w)
             {
                 if(whitespace_or_hyphen_cp_index != -1) // Break at last whitespace
                 {
@@ -533,7 +530,7 @@ Body_Text create_body_text(String text, Rect a, Font_Size font_size, Font_ID fon
             array_add(bt.lines, new_line);
 
             // Prepare position for next line //
-            pp.x = a.x;
+            pp.x  = 0;
             pp.y -= bt.line_height;
 
             // Reset line state //
@@ -622,19 +619,19 @@ float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx)
 void draw_body_text(String text, Font_Size font_size, Font_ID font, Rect a, v4 color, Graphics *gfx, H_Align h_align = HA_LEFT, Rect *clip_rect = NULL,
                     Body_Text *_bt = NULL, V_Align v_align = VA_TOP, float start_x = 0)
 {
-    Body_Text body_text = create_body_text(text, a, font_size, font, gfx->fonts, start_x);
+    Body_Text body_text = create_body_text(text, a.w, font_size, font, gfx->fonts, start_x);
 
-    v2 p = a.p;
+    v2 top_left = a.p;
     if(v_align == VA_BOTTOM)
-        p.y += body_text_height(&body_text);
+        top_left.y += body_text_height(&body_text);
     else if(v_align == VA_CENTER)
-        p.y += a.h * 0.5f - body_text_height(&body_text) * 0.5f;
+        top_left.y += a.h * 0.5f + body_text_height(&body_text) * 0.5f;
     else {
         Assert(v_align == VA_TOP);
-        p.y += a.h;
+        top_left.y += a.h;
     }
     
-    draw_body_text(&body_text, p, color, gfx, h_align, clip_rect); //TODO @Robustness: @Incomplete: h_align should be taken into account in create_body_text
+    draw_body_text(&body_text, top_left, color, gfx, h_align, clip_rect); //TODO @Robustness: @Incomplete: h_align should be taken into account in create_body_text
 
     if(_bt) *_bt = body_text;
 }

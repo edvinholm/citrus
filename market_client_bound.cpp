@@ -3,7 +3,7 @@
 #define MARKET_CLIENT_BOUND_INCLUDED
 
 
-enum Market_Connect_Status: u64 // @Cleanup: This does not need to be 64 bits (Change this here and in network code)
+enum Market_Connect_Status: u8
 {
     MARKET_CONNECT__CONNECTED              = 1,
     MARKET_CONNECT__INCORRECT_CREDENTIALS  = 2

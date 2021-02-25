@@ -262,6 +262,7 @@ bool load_tweaks(char *filename)
         Debug_Print("Unable to open %s.\n", filename);
         return false;
     }
+    defer(close_file(file););
 
     u8 *contents;
     strlength length;
@@ -280,14 +281,12 @@ bool load_tweaks(char *filename)
 
 
 // NOTE: If you pass a dev_user_id with length > 0, sb can not be NULL.
-bool load_tweaks(String dev_user_id = EMPTY_STRING,
-                 String_Builder *sb = NULL) {
+bool load_tweaks(String dev_user_id = EMPTY_STRING) {
 
     load_tweaks("tweaks\\global.tweaks");
 
     if(dev_user_id.length != 0) {
-        Assert(sb);
-        load_tweaks(concat_cstring_tmp("tweaks\\", dev_user_id, ".tweaks", *sb));
+        load_tweaks(concat_cstring_tmp("tweaks\\", dev_user_id, ".tweaks"));
     }
 
     load_tweaks("tweaks\\local.tweaks");
@@ -320,13 +319,13 @@ void setup_tweak_hotloading()
 }
 
 // NOTE: If you pass a dev_user_id with length > 0, sb can not be NULL.
-void maybe_reload_tweaks(String dev_user_id, String_Builder *sb)
+void maybe_reload_tweaks(String dev_user_id)
 {
     if(tweaks.dir_change_notif == 0) return;
     
     if(WaitForSingleObject(tweaks.dir_change_notif, 0) != WAIT_OBJECT_0) return;
 
-    load_tweaks(dev_user_id, sb);
+    load_tweaks(dev_user_id);
 
     if(!FindNextChangeNotification(tweaks.dir_change_notif))
     {

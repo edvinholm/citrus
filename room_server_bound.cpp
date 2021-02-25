@@ -8,7 +8,7 @@ enum RSB_Packet_Type
     RSB_GOODBYE = 2,
 
     RSB_CLICK_TILE = 3,
-    RSB_ENTITY_ACTION = 4,
+    RSB_PLAYER_ACTION = 4,
     RSB_CHAT = 5
 };
 
@@ -36,10 +36,7 @@ struct RSB_Packet_Header
             
         } click_tile;
 
-        struct {
-            Entity_ID entity;
-            Entity_Action action;
-        } entity_action;
+        Player_Action player_action;
 
         struct {
             String message_text;
@@ -92,10 +89,9 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
             Read_To_Ptr(bool,    &p->default_action_is_put_down, node);
         } break;
 
-        case RSB_ENTITY_ACTION: {
-            auto *p = &_header->entity_action;
-            Read_To_Ptr(Entity_ID,     &p->entity, node);
-            Read_To_Ptr(Entity_Action, &p->action, node);
+        case RSB_PLAYER_ACTION: {
+            auto *p = &_header->player_action;
+            Read_To_Ptr(Player_Action, p, node);
         } break;
 
         case RSB_CHAT: {
@@ -155,15 +151,14 @@ bool enqueue_RSB_CLICK_TILE_packet(Network_Node *node, u64 tile_ix, Item_ID item
     return true;
 }
 
-bool enqueue_RSB_ENTITY_ACTION_packet(Network_Node *node, Entity_ID entity, Entity_Action action)
+bool enqueue_RSB_PLAYER_ACTION_packet(Network_Node *node, Player_Action action)
 {
     begin_outbound_packet(node);
     {
-        Write(RSB_Packet_Type, RSB_ENTITY_ACTION, node);
+        Write(RSB_Packet_Type, RSB_PLAYER_ACTION, node);
         //--
 
-        Write(Entity_ID,     entity, node);
-        Write(Entity_Action, action, node);
+        Write(Player_Action, action, node);
     }
     end_outbound_packet(node);
     return true;

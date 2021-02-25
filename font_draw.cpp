@@ -284,7 +284,7 @@ Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4
     int default_previous_codepoint = 0;
     if(!previous_codepoint) previous_codepoint = &default_previous_codepoint;
 
-    if(h_align == HA_LEFT)
+    if(h_align == HA_LEFT && v_align == VA_TOP)
     {
         // Don't need to calculate string size.
     }

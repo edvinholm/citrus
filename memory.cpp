@@ -144,6 +144,8 @@ u8 *allocate_in_page(size_t size, Memory_Page *page, Allocator *allocator)
 
 u8 *allocate(size_t size, Allocator *allocator)
 {
+    Function_Profile();
+    
 #if DEBUG
     allocator->num_allocs++;
 #endif
@@ -262,11 +264,7 @@ void reset_linear_allocator(Linear_Allocator *allocator)
     {
         if(i >= MAX_NUM_LINEAR_ALLOCATOR_PAGES_AFTER_RESET)
         {
-#if DEBUG
-            dealloc(allocator->pages[i].start, ALLOC_MALLOC, true);
-#else
             dealloc(allocator->pages[i].start, ALLOC_MALLOC);
-#endif
             continue;
         }
         
@@ -283,11 +281,6 @@ void reset_temporary_memory()
     reset_linear_allocator(&temporary_memory);
 }
 
-#if DEBUG
-
-int DEBUG_num_allocs = 0;
-
-#endif
 
 //@BadName maybe. Does not give NEXT multiple if remainder is 0.
 u64 next_multiple(u64 x, u64 factor)
@@ -358,7 +351,9 @@ u8 *linear_realloc(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *
         return old;
     }
 
-    return linear_alloc(new_size, allocator);
+    auto *new_ = linear_alloc(new_size, allocator);
+    memcpy(new_, old, old_size);
+    return new_;
 }
 
 
@@ -375,6 +370,30 @@ u8 *tmp_realloc(u8 *old, size_t old_size, size_t new_size)
 }
 
 
+// @Cleanup: @ErrorProne: @Robustness If we pass the wrong number of arguments,
+//                                    we might call the standard realloc.
+inline
+u8 *realloc(void *ptr, size_t old_size, size_t size, Allocator_ID allocator)
+{
+    //void *result = allocate(size, default_allocator);
+
+    Assert(ARRLEN(allocators) == ALLOC_NONE_OR_NUM);
+    Assert(allocator != ALLOC_NONE_OR_NUM);
+    Assert(allocator < ARRLEN(allocators));
+
+    switch(allocator)
+    {
+        case ALLOC_MALLOC: {
+            auto *result = (u8 *)realloc(ptr, size);
+            return result;
+        } break;
+            
+        case ALLOC_TMP: return tmp_realloc((u8 *)ptr, old_size, size);
+
+        default: Assert(false); return NULL;
+    }
+}
+
 
 inline
 u8 *alloc(size_t size, Allocator_ID allocator)
@@ -384,11 +403,6 @@ u8 *alloc(size_t size, Allocator_ID allocator)
     Assert(ARRLEN(allocators) == ALLOC_NONE_OR_NUM);
     Assert(allocator != ALLOC_NONE_OR_NUM);
     Assert(allocator < ARRLEN(allocators));
-
-#if DEBUG
-    if(allocator != ALLOC_TMP)
-        DEBUG_num_allocs++;
-#endif
 
     switch(allocator)
     {
@@ -414,24 +428,10 @@ T *alloc_elements(int n, Allocator_ID allocator)
 }
 
 inline
-void dealloc(void *ptr, Allocator_ID allocator
-#if DEBUG
-    , bool DEBUG_ignore_temporary_memory_test/* = false*/
-#endif
-    )
+void dealloc(void *ptr, Allocator_ID allocator)
 {   
     Assert(ptr);
 
-#if DEBUG
-    if(!DEBUG_ignore_temporary_memory_test)
-    {
-        for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
-        {
-            Linear_Allocator_Page &pg = temporary_memory.pages[p];
-            Assert(!(ptr >= pg.start && ptr < pg.start + LINEAR_ALLOCATOR_PAGE_SIZE));
-        }
-    }
-#endif
 
 #if DEBUG
 
@@ -447,8 +447,6 @@ void dealloc(void *ptr, Allocator_ID allocator
         now_doing_allocs_deallocs_debug_stuff = false;
     }
 #endif
-    
-    DEBUG_num_allocs--;
     
 #endif
 
