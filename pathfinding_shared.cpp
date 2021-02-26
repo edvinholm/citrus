@@ -89,7 +89,6 @@ bool in_tree(Pathfinding_Node *node, Pathfinding_Node *root)
 }
 
 
-// NOTE: Calling this function with start == end will result in return value = false.
 // IMPORTANT: *_path needs to be in a valid state, and _path->n should be set to zero.
 template<Allocator_ID A>
 bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Array<v3, A> *_path)
@@ -114,7 +113,12 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
     
     Assert(_path->n == 0);
 
-    if (start == end) return false;
+    if (start == end) {
+        array_add_uninitialized(*_path, 2);
+        (*_path)[0] = V3(start);
+        (*_path)[1] = V3(end);
+        return true;
+    }
     
     v2 end_p = { (float)end.x, (float)end.y };
 
@@ -545,8 +549,8 @@ bool find_path_to_any(v3 p0, v3 *possible_p1s, int num_possible_p1s, Walk_Map *w
 
         v3 p1 = possible_p1s[i];
     
-        v3s start_tile = { (s32)roundf(p0.x), (s32)roundf(p0.y), (s32)roundf(p0.z) };
-        v3s end_tile   = { (s32)roundf(p1.x), (s32)roundf(p1.y), (s32)roundf(p1.z) };
+        v3s start_tile = tile_from_p(p0);
+        v3s end_tile   = tile_from_p(p1);
 
         if(start_tile == end_tile) {
             array_add_uninitialized(path, 2);

@@ -262,14 +262,35 @@ void update_local_data_for_room(Room *room, double world_t, Client *client)
         {
             auto *local = &e->player_local;
             local->is_me = (e->player_e.user_id == user_id);
+
+            auto state = player_state_of(e, world_t, room);
+            for(int j = 0; j < e->player_e.action_queue_length; j++)
+            {
+                auto *act = e->player_e.action_queue + j;
+
+                // NOTE: Here we could also cache whether the action is predicted possible or not....
+                
+                apply_actions_to_player_state(&state, act, 1, world_t, room, user);
+                local->state_after_action_in_queue[j] = state;
+            }
             
-            local->state_after_completed_action_queue = player_state_of(e, world_t, room);
-            apply_actions_to_player_state(&local->state_after_completed_action_queue,
-                                          e->player_e.action_queue, e->player_e.action_queue_length,
-                                          world_t, room, user);
         }
     }       
 }
+
+Player_State player_state_after_completed_action_queue(Entity *player, double world_t, Room *room)
+{
+    Assert(player->type == ENTITY_PLAYER);
+    auto *player_e = &player->player_e;
+    
+    if(player_e->action_queue_length > 0) {
+        return player->player_local.state_after_action_in_queue[player_e->action_queue_length-1];
+    } else {
+        return player_state_of(player, world_t, room);
+    }
+}
+
+
 
 bool item_entity_can_be_at_tp(Entity *e, v3 tp, double world_t, Room *room)
 {
@@ -285,7 +306,7 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
 
 // IMPORTANT: The *_actions array should be in a valid state before calling this proc!
 template<Allocator_ID A>
-void get_available_actions_for_entity(Entity *e, Array<Entity_Action, A> *_actions)
+void get_available_actions_for_entity(Entity *e, Player_State *player_state, Array<Entity_Action, A> *_actions)
 {
     _actions->n = 0;
     
@@ -324,6 +345,14 @@ void get_available_actions_for_entity(Entity *e, Array<Entity_Action, A> *_actio
             act1.type = ENTITY_ACT_CHESS;
             act1.chess.type = CHESS_ACT_JOIN;
 
+            array_add(*_actions, act1);
+        } break;
+
+        case ITEM_CHAIR: {
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_SIT_OR_UNSIT;
+            act1.sit_or_unsit.unsit = (player_state->sitting_on == e->id);
+            
             array_add(*_actions, act1);
         } break;
     }

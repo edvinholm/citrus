@@ -247,7 +247,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     }
                     
                     static_assert(sizeof(room->walk_map.nodes[0]) == 1);
-                    memcpy(room->walk_map.nodes, p->walk_map.nodes, room_size_x * room_size_y);
+                    memcpy(room->walk_map.nodes, p->walk_map_nodes, room_size_x * room_size_y);
 
                     for(int i = 0; i < s_entities.n; i++) {
                         

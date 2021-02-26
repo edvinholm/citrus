@@ -1,5 +1,5 @@
 
-static_assert(room_size_x * room_size_y < U16_MAX); // Because we use u16:s to reference tiles in pathfinding. < and not <= because we use U16_MAX as no tile..
+static_assert(room_size_x * room_size_y < U32_MAX); // Because we use u32:s to reference tiles in pathfinding. < and not <= because we use U32_MAX as no tile..
 
 enum Walk_Flag_
 {
@@ -23,7 +23,7 @@ struct Pathfinding_Node
     };
     Pathfinding_List_Status list_status;
     
-    u16 came_from;
+    u32 came_from;
 
     // Open List Binary Tree:
     Pathfinding_Node *o_parent; 

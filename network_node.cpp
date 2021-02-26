@@ -819,6 +819,11 @@ bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
             auto *x = &_action->set_power_mode;
             Read_To_Ptr(bool, &x->set_to_on, node);
         } break;
+            
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            auto *x = &_action->sit_or_unsit;
+            Read_To_Ptr(bool, &x->unsit, node);
+        } break;
 
         case ENTITY_ACT_CHESS: {
             auto *x = &_action->chess;
@@ -849,6 +854,11 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
             Write(bool, x->set_to_on, node);
+        } break;
+                        
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            auto *x = &action.sit_or_unsit;
+            Write(bool, x->unsit, node);
         } break;
 
         case ENTITY_ACT_CHESS: {
@@ -1108,6 +1118,8 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             for(int i = 0; i < x->action_queue_length; i++) {
                 Read_To_Ptr(Player_Action, &x->action_queue[i], node);
             }
+
+            Read_To_Ptr(Entity_ID, &x->sitting_on, node);
         } break;
 
         default: Assert(false); return false;
@@ -1180,6 +1192,8 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             for(int i = 0; i < x->action_queue_length; i++) {
                 Write(Player_Action, x->action_queue[i], node);
             }
+            
+            Write(Entity_ID, x->sitting_on, node);
         } break;
 
         default: Assert(false); return false;

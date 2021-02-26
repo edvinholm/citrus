@@ -86,8 +86,37 @@ bool predicted_possible(Player_Action *action, double world_t, Client *client)
     if(!user) return false;
 
     Assert(player->type == ENTITY_PLAYER);
-    return player_action_predicted_possible(action, &player->player_local.state_after_completed_action_queue,
-                                            world_t, &client->room, NULL, NULL, user);
+
+    auto *room = &client->room;
+
+    Player_State player_state = player_state_after_completed_action_queue(player, world_t, room);
+    while(true) {
+        Optional<Player_Action> action_needed_before = {0};
+        if(player_action_predicted_possible(action, &player_state,
+                                            world_t, room, &action_needed_before,
+                                            NULL, NULL, user)) {
+            return true;
+        }
+        else {
+            Player_Action act;
+            if(get(action_needed_before, &act)) {
+        
+                if(player->player_e.action_queue_length >= ARRLEN(player->player_e.action_queue)-1) return false;
+
+                // NOTE: @Cleanup Unclear: apply_actions_to_player_state returns true if the action
+                //                         is predicted possible. This is so we don't need to do
+                //                         predicted_possible() first, and then apply_actions().
+                //                         This is for @Speed.
+                if(!apply_actions_to_player_state(&player_state, &act, 1, world_t, room, user))
+                    return false;
+                
+                continue;
+            }
+        }
+        break;
+    }
+    
+    return false;
 }
 
 bool request_if_predicted_possible(Player_Action *action, double world_t, Client *client)
@@ -95,20 +124,6 @@ bool request_if_predicted_possible(Player_Action *action, double world_t, Client
     if(!predicted_possible(action, world_t, client)) return false;
     request(action, client);
     return true;
-}
-
-// @Jai: #scope_file ?
-Player_Action make_player_entity_action(Entity_Action *action, Entity_ID target)
-{
-    Assert(target != NO_ENTITY);
-    
-    Player_Action player_action = {0};
-    player_action.type = PLAYER_ACT_ENTITY;
-
-    player_action.entity.action = *action;
-    player_action.entity.target =  target;
-
-    return player_action;
 }
 
 void request(Entity_Action *action, Entity_ID target, Client *client)
@@ -634,6 +649,11 @@ String entity_action_label(Entity_Action action)
                 default:             return STRING("CHESS ???"); break;
             }
         }
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            auto *x = &action.sit_or_unsit;
+            if(x->unsit) return STRING("STAND UP");
+            else         return STRING("SIT");
+        } break;
 
         default: Assert(false); return STRING("???"); break;
     }
@@ -790,13 +810,14 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     // ACTIONS //
     if(e && player) {
 
-        Assert(player->type == ENTITY_PLAYER);            
+        Assert(player->type == ENTITY_PLAYER);  
         Assert(e->type == ENTITY_ITEM);
 
         auto *player_local = &player->player_local;
 
         Array<Entity_Action, ALLOC_TMP> actions = {0};
-        get_available_actions_for_entity(e, &actions);
+        auto state = player_state_after_completed_action_queue(player, world_t, &client->room);
+        get_available_actions_for_entity(e, &state, &actions);
 
         for(int i = 0; i < actions.n; i++) {
 
@@ -1224,8 +1245,8 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(player_entity != NULL) {
                 Assert(player_entity->type == ENTITY_PLAYER);
 
-                Player_State player_state = player_state_of(player_entity, world_t, &client->room);
-                
+                auto *player_local = &player_entity->player_local;
+
                 auto *player_e = &player_entity->player_e;
                 for(int i = 0; i < player_e->action_queue_length; i++)
                 {
@@ -1267,11 +1288,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     bool enabled = false;
                     button(PC(ctx, i), label, enabled);
 
-                    apply_actions_to_player_state(&player_state, player_e->action_queue + i, 1, world_t, room, current_user(client));
-                    if(player_state.held_item.type != ITEM_NONE_OR_NUM) {
+                    auto *state_after = &player_local->state_after_action_in_queue[i];
+                    if(state_after->held_item.type != ITEM_NONE_OR_NUM) {
                         _TRANSLATE_({-48, -24});
-                        button(PC(ctx, i), item_types[player_state.held_item.type].name);
+                        button(PC(ctx, i), item_types[state_after->held_item.type].name);
                     }
+                    
                 }
             }
         }

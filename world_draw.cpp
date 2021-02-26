@@ -199,11 +199,16 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         auto *player_e = &e->player_e;
         
         volume = { 1.2, 1.2, 3.4 };
-        
-        if(e->player_local.is_me) {
-            base_color = { 0.93, 0.52, 0.33, 1.0 };
+
+        if(player_e->sitting_on != NO_ENTITY) {
+            base_color = { 0.93, 0.52, 0.72, 1.0 };
         } else {
             base_color = { 0.93, 0.72, 0.52, 1.0 };
+        }
+
+        if(e->player_local.is_me) {
+            adjust_saturation(&base_color, 2.0f);
+            base_color.rgb *= 0.8f;
         }
 
         int num_put_down_volumes;

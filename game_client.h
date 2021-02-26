@@ -13,7 +13,7 @@ namespace Client_Game
         union {
             struct {
                 bool is_me;
-                Player_State state_after_completed_action_queue;
+                Player_State state_after_action_in_queue[ARRLEN(S__Entity::player_e.action_queue)];
             } player_local;
 
             struct {

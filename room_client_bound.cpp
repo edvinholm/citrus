@@ -43,7 +43,7 @@ struct RCB_Packet_Header
             u32 num_entities;
             u16 num_chat_messages;
             Tile *tiles;
-            Walk_Map walk_map;
+            Walk_Map_Node *walk_map_nodes;
         } room_update;
     };
 };
@@ -132,9 +132,8 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Network_Node *node)
             static_assert(sizeof(*p.tiles) == 1);
             Data_Ptr(p.tiles, p.tile1 - p.tile0, node);
 
-            static_assert(sizeof(p.walk_map.nodes[0]) == 1);
-            static_assert(ARRLEN(p.walk_map.nodes) == room_size_x * room_size_y);
-            Data_Ptr(p.walk_map.nodes, room_size_x * room_size_y, node);
+            static_assert(sizeof(p.walk_map_nodes[0]) == 1);
+            Data_Ptr(p.walk_map_nodes, room_size_x * room_size_y, node);
         } break;
     }
 
@@ -227,8 +226,7 @@ bool enqueue_RCB_ROOM_UPDATE_packet(Network_Node *node,
         static_assert(sizeof(*RCB_Packet_Header::room_update.tiles) == 1);
         Write_Bytes(tiles, (tile1 - tile0), node);
 
-        static_assert(ARRLEN(RCB_Packet_Header::room_update.walk_map.nodes) == room_size_x * room_size_y);
-        static_assert(sizeof(RCB_Packet_Header::room_update.walk_map.nodes[0]) == 1);
+        static_assert(sizeof(RCB_Packet_Header::room_update.walk_map_nodes[0]) == 1);
         Write_Bytes(walk_map->nodes, room_size_x * room_size_y, node);
         
 

@@ -45,7 +45,10 @@ enum Entity_Action_Type
     ENTITY_ACT_SET_POWER_MODE = 5,
 
     // Chess
-    ENTITY_ACT_CHESS = 6
+    ENTITY_ACT_CHESS = 6,
+
+    // Chair
+    ENTITY_ACT_SIT_OR_UNSIT = 7
 };
 
 struct Entity_Action
@@ -56,6 +59,10 @@ struct Entity_Action
         struct {
             bool set_to_on;
         } set_power_mode;
+
+        struct {
+            bool unsit;
+        } sit_or_unsit;
 
         Chess_Action chess;
     };
@@ -201,6 +208,8 @@ struct S__Entity
 
             u8 action_queue_length;
             Player_Action action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
+
+            Entity_ID sitting_on;
             
         } player_e;
     };
@@ -223,6 +232,7 @@ struct Player_State
     
     v3 p;
     Item held_item; // No item if .type == ITEM_NONE_OR_NUM.
+    Entity_ID sitting_on;
 };
 
 enum Tile_Type: s8 {

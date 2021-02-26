@@ -1,4 +1,15 @@
 
+
+v3s tile_from_p(v3 p) {
+    return { (s32)roundf(p.x), (s32)roundf(p.y), (s32)roundf(p.z) };
+}
+
+s32 tile_index_from_p(v3 tp)
+{
+    auto tile = tile_from_p(tp);
+    return tp.y * room_size_x + tp.x;
+}
+
 v3 tp_from_index(s32 tile_index)
 {
     int y = tile_index / room_size_x;
@@ -55,6 +66,20 @@ v3 item_entity_tp_from_p(v3 p, Item *item)
     return volume_tp_from_p(p, item_types[item->type].volume);
 }
 
+
+
+Player_Action make_player_entity_action(Entity_Action *action, Entity_ID target)
+{
+    Assert(target != NO_ENTITY);
+    
+    Player_Action player_action = {0};
+    player_action.type = PLAYER_ACT_ENTITY;
+
+    player_action.entity.action = *action;
+    player_action.entity.target =  target;
+
+    return player_action;
+}
 
 S__Entity create_item_entity(Item *item, v3 p, double world_t, Quat q = Q_IDENTITY)
 {
@@ -115,6 +140,14 @@ void get_entity_transform(ENTITY *e, double world_t, ROOM *room, v3 *_p, Quat *_
                 Assert(e->player_e.walk_path_length >= 2);
 
                 auto *player_e = &e->player_e;
+
+                if(player_e->sitting_on != NO_ENTITY) {
+                    auto *sittee = find_entity(player_e->sitting_on, room);
+                    if(sittee) {
+                        get_entity_transform(sittee, world_t, room, _p, _q);
+                        return;
+                    }
+                }
 
                 // Find current path section
                 double tt = e->player_e.walk_t0;
@@ -200,7 +233,7 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
         
         switch(action->type) {
 
-            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP.
+            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP. 
             case ENTITY_ACT_PICK_UP: {
 
                 v3 tp0  = p;
@@ -226,6 +259,13 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
                         else if(y == volume.y) array_add(positions, pp + forward * offs);
                     }
                 }
+            } break;
+
+            case ENTITY_ACT_SIT_OR_UNSIT: {
+                array_add(positions, p + forward * (volume.y * 0.5f + 1));
+                array_add(positions, p - right   * (volume.x * 0.5f + 1));
+                array_add(positions, p + right   * (volume.x * 0.5f + 1));
+                array_add(positions, p - forward * (volume.y * 0.5f + 1));
             } break;
 
             case ENTITY_ACT_CHESS: {
@@ -293,6 +333,9 @@ AABB entity_aabb(ENTITY *e, double world_t, ROOM *room)
 
         case ENTITY_PLAYER: {
             bbox.s = V3(player_entity_volume);
+
+            // @Hack for raycasting
+            bbox.s *= 0.8f;
         } break;
 
         default: Assert(false); break;
@@ -375,28 +418,51 @@ Player_State player_state_of(S__Entity *player, double world_t, ROOM *room)
         }
     }
     else state.held_item.type = ITEM_NONE_OR_NUM;
+
+    state.sitting_on = player_e->sitting_on;
     
     return state;
 }
 
 
 // Pass user = NULL if you're a Room Server.
+// NOTE: If check_possible = false, we assume the caller has already checked that the actions are possible.
+// NOTE: Returns true if all actions are predicted possible.
 template<typename ROOM>
-void apply_actions_to_player_state(Player_State *state, Player_Action *actions, int num_actions, double world_t, ROOM *room, S__User *user)
+bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, int num_actions, double world_t, ROOM *room, S__User *user)
 {
     Function_Profile();
+
+    bool all_actions_predicted_possible = true;
     
     for(int i = 0; i < num_actions; i++) {
         auto *act = &actions[i];
 
+        bool possible = true;
+        
         Array<v3, ALLOC_TMP> path = {0}; // @Speed: We should send this in, and player_action should set .n = 0. Instead of allocating new memory every time
-        if(!player_action_predicted_possible(act, state, world_t, room, &path, NULL, user)) continue;
+        Optional<Player_Action> action_needed_before;
+        while(!player_action_predicted_possible(act, state, world_t, room, &action_needed_before, &path, NULL, user)) {
+
+            Player_Action needed_act;
+            if(get(action_needed_before, &needed_act)) {
+                if(apply_actions_to_player_state(state, &needed_act, 1, world_t, room, user)) continue;
+            }
+        
+            possible = false;
+            break;
+        }
+
+        if(!possible) {
+            all_actions_predicted_possible = false;
+            continue;
+        }
 
         if(path.n > 0) {
             Assert(path.n >= 2);
             state->p = path[path.n-1];
         }
-
+        
         switch(act->type) {
             case PLAYER_ACT_ENTITY:
             {    
@@ -405,15 +471,15 @@ void apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                 auto *e = find_entity(entity_act->target, room);
                 if(!e) continue;
                 
+                Assert(e->type == ENTITY_ITEM);
+                
                 switch(entity_act->action.type)
                 {
                     case ENTITY_ACT_PICK_UP: {
-                        Assert(e->type == ENTITY_ITEM);
                         state->held_item = e->item_e.item;
                     } break;
 
                     case ENTITY_ACT_PLACE_IN_INVENTORY: {
-                        Assert(e->type == ENTITY_ITEM);
                         if(state->held_item.type != ITEM_NONE_OR_NUM &&
                            state->held_item.id   == e->item_e.item.id)
                         {
@@ -429,6 +495,18 @@ void apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                         can->water_level -= 0.25f; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
 
                     } break;
+
+                    case ENTITY_ACT_SIT_OR_UNSIT: {
+                        auto *sit = &entity_act->action.sit_or_unsit;
+                        if(sit->unsit) {
+                            Assert(state->sitting_on == e->id);
+                            state->sitting_on = NO_ENTITY;
+                        } else {
+                            Assert(state->sitting_on == NO_ENTITY);
+                            state->sitting_on = e->id;
+                            state->p          = entity_position(e, world_t, room); // @Speed
+                        }
+                    } break;
                 }
             }
             break;
@@ -439,6 +517,8 @@ void apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
         }
         
     }
+
+    return all_actions_predicted_possible;
 }
 
 // NOTE: Pass NULL if calling this from for example the Room Server. See note for entity_action_predicted_possible(). -EH, 2021-02-11
@@ -513,13 +593,15 @@ bool item_entity_can_be_moved(S__Entity *e)
 // NOTE: @Norelease: We can't yet pass another world_t than the room's t. If we want
 //                   to do that, we need to simulate the room up to that t (temporarily)
 //                   before we check the state of entities!
-bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, S__User *user = NULL)
+bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, bool *_sitting_allowed, S__User *user = NULL)
 {
     Function_Profile();
     
     Assert(e);
     Assert(player_state);
     Assert(player_state->user_id != NO_USER);
+
+    *_sitting_allowed = true;
 
     // Update the entity's item so we can check its state.
     if(e->type == ENTITY_ITEM) {
@@ -634,7 +716,27 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
             auto *board = &e->item_e.chess_board;
 
             return chess_action_possible(chess_action, player_state->user_id, board);
-        };
+            
+        } break;
+
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            auto *sit = &action.sit_or_unsit;
+            
+            if(e->type != ENTITY_ITEM) return false;
+            
+            auto *item = &e->item_e.item;
+            if(item->type != ITEM_CHAIR) return false;
+
+            if(sit->unsit  && player_state->sitting_on != e->id) return false; // Can't unsit when we don't sit.
+            if(!sit->unsit && player_state->sitting_on == e->id) return false; // Can't sit when we already sit.
+
+            *_sitting_allowed = sit->unsit; // We can't already be sitting when we do the sit action.
+            
+            // @Norelease: Check if someone else sits here. @Continue
+
+            return true;
+            
+        } break;
 
         default: Assert(false); return false;
     }
@@ -644,16 +746,28 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
 }
 
 // NOTE: See notes for entity_action_predicted_possible().
+// IMPORTANT: You can't pass _found_path_duration without passing _found_path.
 template<typename ROOM>
-bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, ROOM *room, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, S__User *user = NULL)
+bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, ROOM *room, Optional<Player_Action> *_action_needed_before = NULL, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, S__User *user = NULL)
 {
     Function_Profile();
+
+    if(_action_needed_before) _action_needed_before->present = false;
     
     Assert(player_state);
     Assert(player_state->user_id != NO_USER);
 
-    bool needs_walking = false;
+
+    enum Transport_Mode {
+        WALK,
+        TELEPORT,
+        NONE
+    };
+
+    Transport_Mode transport_needed = NONE;
     Array<v3, ALLOC_TMP> possible_p1s = {0};
+
+    bool sitting_allowed = true;
     
     switch(action->type) { // @Jai: #complete
 
@@ -665,11 +779,17 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             S__Entity *e = find_entity(entity_act->target, room);
             if(!e) return false;
 
-            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, user)) return false;
-
+            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, &sitting_allowed, user)) return false;
+                        
             if(e->held_by == NO_ENTITY) {
                 possible_p1s = entity_action_positions(e, &entity_act->action, world_t, room);
-                needs_walking = true;
+
+                if(entity_act->action.type == ENTITY_ACT_SIT_OR_UNSIT &&
+                   entity_act->action.sit_or_unsit.unsit == true) {
+                    transport_needed = TELEPORT;
+                } else {
+                    transport_needed = WALK;
+                }
             }
             
         } break;
@@ -678,7 +798,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             Scoped_Profile("PLAYER_ACT_WALK");
             
             array_add(possible_p1s, action->walk.p1);
-            needs_walking = true;
+            transport_needed = WALK;
         } break;
 
         case PLAYER_ACT_PUT_DOWN: {
@@ -709,18 +829,93 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             
             // @Cleanup: action parameter should not be optional. PUT_DOWN should work differently... Should probably be an entity action.
             possible_p1s = entity_action_positions(&held_entity_replica, &dummy_action, world_t, room);
-            needs_walking = true;
+            transport_needed = WALK;
         } break;
             
         default: Assert(false); return false;
     };
 
-    if(!needs_walking) {
-        if (_found_path) Zero(*_found_path);
-        if(_found_path_duration) *_found_path_duration = 0;
-        return true;
-    }
-    if(possible_p1s.n == 0) return false;
 
-    return find_path_to_any(player_state->p, possible_p1s.e, possible_p1s.n, &room->walk_map, true, _found_path, _found_path_duration);
+    if(transport_needed != NONE && player_state->sitting_on != NO_ENTITY)
+    {
+        // Do we need to unsit first?
+
+        bool need_to_move = true;
+        // We don't need to unsit if we're already on one
+        // of the available action positions.
+        for(int i = 0; i < possible_p1s.n; i++)
+        {
+            if(possible_p1s[i] == player_state->p) {
+                need_to_move = false;
+                break;
+            }
+        }
+
+        bool action_is_unsit = (action->type == PLAYER_ACT_ENTITY &&
+                                action->entity.action.type == ENTITY_ACT_SIT_OR_UNSIT &&
+                                action->entity.action.sit_or_unsit.unsit);
+
+        if((need_to_move || !sitting_allowed) && !action_is_unsit) {
+            // We need to unsit first.
+            if(_action_needed_before)
+            {
+                Entity_Action e_act = {0};
+                e_act.type = ENTITY_ACT_SIT_OR_UNSIT;
+                e_act.sit_or_unsit.unsit = true;
+            
+                auto p_act = make_player_entity_action(&e_act, player_state->sitting_on);
+                *_action_needed_before = p_act;
+            }
+        
+            return false;
+        }
+    }
+    
+    switch(transport_needed)
+    {
+        case WALK: {
+            if(possible_p1s.n == 0) return false;
+            return find_path_to_any(player_state->p, possible_p1s.e, possible_p1s.n, &room->walk_map, true, _found_path, _found_path_duration);
+        } break;
+
+        case TELEPORT: {
+
+            if(possible_p1s.n == 0) return false;
+
+            for(int i = 0; i < possible_p1s.n; i++)
+            {
+                v3 p = possible_p1s[i];
+                s32 tile_ix = tile_index_from_p(p);
+                
+                if(!(room->walk_map.nodes[tile_ix].flags & UNWALKABLE)) {
+
+                    if(_found_path) {
+                        _found_path->n = 0;
+                        array_add_uninitialized(*_found_path, 2);
+                        
+                        (*_found_path)[0] = p;
+                        (*_found_path)[1] = p;
+                        
+                        if(_found_path_duration) *_found_path_duration = 0;
+                    }
+                    return true;
+                }
+            }
+            return false;
+            
+        } break;
+
+        case NONE: {
+            if (_found_path) {
+                Zero(*_found_path);
+                if(_found_path_duration) *_found_path_duration = 0;
+            }
+            
+            return true;
+        } break;
+
+        default: Assert(false); return false;
+    }
+
+    
 }

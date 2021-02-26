@@ -778,12 +778,12 @@ void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room 
                     Assert(player->type == ENTITY_PLAYER);
                     auto *player_e = &player->player_e;
 
-                    auto *state = &player->player_local.state_after_completed_action_queue;
+                    Player_State state = player_state_after_completed_action_queue(player, world_t, room);
                     
-                    if(state->held_item.type != ITEM_NONE_OR_NUM) {
+                    if(state.held_item.type != ITEM_NONE_OR_NUM) {
                         // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
                         
-                        Entity preview_entity = create_preview_item_entity(&state->held_item, tp, world_t, Q_IDENTITY);
+                        Entity preview_entity = create_preview_item_entity(&state.held_item, tp, world_t, Q_IDENTITY);
                         draw_entity(&preview_entity, world_t, room, client, gfx);
 
                         // @Norelease: Draw shadow and show if placement is possible

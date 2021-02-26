@@ -56,9 +56,9 @@ Item create_item(Item_Type_ID type, User_ID owner, Room_Server *server)
 void create_dummy_entities(Room *room, Room_Server *server)
 {   
     v3 pp = { room_size_x/2 + 8, room_size_y/2 };
-    for(int i = 0; i < 1; i++)
+    for(int i = 0; i < 2; i++)
     {
-        Item_Type_ID item_type_id = ITEM_CHESS_BOARD;
+        Item_Type_ID item_type_id = (i == 0) ? ITEM_CHESS_BOARD : ITEM_CHAIR;
         Item_Type *item_type = item_types + item_type_id;
         
         Item item = {0};
@@ -72,7 +72,7 @@ void create_dummy_entities(Room *room, Room_Server *server)
         Assert(room->num_entities < ARRLEN(room->entities));
         room->entities[room->num_entities++] = { e };
 
-        pp.x += item_type->volume.x + 1;
+        pp.x += item_type->volume.x + 4;
     }
 }
 
@@ -915,7 +915,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
     Assert(player->type == ENTITY_PLAYER);
 
     Player_State player_state = player_state_of(player, room->t, room);
-    if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL)) return false;
+    if(!player_action_predicted_possible(action, &player_state, room->t, room)) return false;
     
     switch(action->type) { // @Jai: #complete
         
@@ -1023,11 +1023,31 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(target->item_e.item.type == ITEM_CHESS_BOARD);
                     auto *board = &target->item_e.chess_board;
 
-                    if(perform_chess_action_if_possible(chess_action, player_state.user_id, board)) {
+                    if(perform_chess_action_if_possible(chess_action, player_state.user_id, board)) {    
                         room->did_change = true;
                         return true;
                     }
                     return false;
+                } break;
+
+                case ENTITY_ACT_SIT_OR_UNSIT: {
+                    auto *sit = &entity_action->sit_or_unsit;
+                    
+                    Assert(target->type == ENTITY_ITEM);
+
+                    Assert(target->item_e.item.type == ITEM_CHAIR);
+
+                    if(sit->unsit) {
+                        Assert(player->player_e.sitting_on == target->id);
+                        player->player_e.sitting_on = NO_ENTITY;
+                    } else {
+                        Assert(player->player_e.sitting_on != target->id);
+                        player->player_e.sitting_on = target->id;
+                    }
+
+                    room->did_change = true;                    
+                    return true;
+
                 } break;
 
                 default: Assert(false); return false;
@@ -1108,9 +1128,9 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
 
     Array<v3, ALLOC_TMP> path = {0};
     double path_duration;
-    
+
     Player_State player_state = player_state_of(e, room->t, room);
-    if (!player_action_predicted_possible(action, &player_state, room->t, room, &path, &path_duration)) return false;
+    if (!player_action_predicted_possible(action, &player_state, room->t, room, NULL, &path, &path_duration)) return false;
 
     if (path.n == 0) player_stop_walking(e, room);
     else             player_set_walk_path(path.e, path.n, e, room);
@@ -1164,19 +1184,22 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
     room->did_change = true;
 }
 
-bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Server *server)
+// NOTE: Will apply the action to player_state.
+bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server)
 {
     Assert(e->type == ENTITY_PLAYER);
     auto *player_e = &e->player_e;
-
+    
+    Optional<Player_Action> action_needed_before = {0};
+    while(!player_action_predicted_possible(action, player_state, room->t, room, &action_needed_before))
+    {
+        Player_Action act;
+        if(!get(action_needed_before, &act)) return false;
+        if(!enqueue_player_action_(e, &act, player_state, room, server)) return false;    
+    }
+    
     if(player_e->action_queue_length >= ARRLEN(player_e->action_queue))
         return false;
-
-    Player_State player_state = player_state_of(e, room->t, room);
-    apply_actions_to_player_state(&player_state, player_e->action_queue, player_e->action_queue_length, room->t, room, NULL);
-    if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL))
-        return false;
-    
 
     bool first_in_queue = (player_e->action_queue_length == 0);
 
@@ -1190,8 +1213,21 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
         }
     }
 
-    
+    apply_actions_to_player_state(player_state, action, 1, room->t, room, NULL);
+
     return true;
+}
+
+bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Server *server)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    auto *player_e = &e->player_e;
+    
+    // @Speed: Cache state_after_completed_action_queue as we do on the client. -EH, 2021-02-26
+    Player_State player_state = player_state_of(e, room->t, room);
+    apply_actions_to_player_state(&player_state, player_e->action_queue, player_e->action_queue_length, room->t, room, NULL);
+    
+    return enqueue_player_action_(e, action, &player_state, room, server);
 }
 
 
