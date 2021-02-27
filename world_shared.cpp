@@ -1,5 +1,10 @@
 
 
+
+
+
+
+
 v3s tile_from_p(v3 p) {
     return { (s32)roundf(p.x), (s32)roundf(p.y), (s32)roundf(p.z) };
 }
@@ -207,6 +212,7 @@ v3 entity_position(ENTITY *e, double world_t, ROOM *room)
     get_entity_transform(e, world_t, room, &p, &q);
     return p;
 }
+
 
 template<typename ENTITY, typename ROOM>
 Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, double world_t, ROOM *room)
@@ -569,12 +575,20 @@ bool item_entity_can_be_moved(S__Entity *e)
             
     auto *item_e = &e->item_e;
     auto *item   = &e->item_e.item;
-    
-    if(item->type == ITEM_MACHINE) {
-        auto *machine = &item_e->machine;
-        if(machine->start_t > machine->stop_t) return false;
-    }
 
+    switch(item->type) {
+        case ITEM_MACHINE: {
+            auto *machine = &item_e->machine;
+            if(machine->start_t > machine->stop_t) return false;
+        } break;
+
+        case ITEM_CHESS_BOARD: {
+            auto *chess = &item_e->chess_board;
+            if(chess->white_player.user != NO_USER) return false;
+            if(chess->black_player.user != NO_USER) return false;
+        } break;
+    }
+    
     return true;
 }
 
@@ -869,12 +883,51 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
         
             return false;
         }
+        else if (!need_to_move) {
+            transport_needed = NONE;
+        }
     }
     
     switch(transport_needed)
     {
         case WALK: {
             if(possible_p1s.n == 0) return false;
+
+            if(sitting_allowed) {
+
+                bool no_walkable_p1s = true;
+                for(int i = 0; i < possible_p1s.n; i++) {
+                    v3 p = possible_p1s[i];
+                    s32 tile_ix = tile_index_from_p(p);
+                        
+                    if(!(room->walk_map.nodes[tile_ix].flags & UNWALKABLE)) {
+                        no_walkable_p1s = false;
+                        break;
+                    }
+                }
+
+                if(no_walkable_p1s) {
+                    for(int i = 0; i < possible_p1s.n; i++) {
+                
+                        Entity *chair = item_entity_of_type_at(ITEM_CHAIR, possible_p1s[i], world_t, room);
+                        if(chair) {
+                            // We can make this action possible by sitting on chair first.
+                            if(_action_needed_before)
+                            {
+                                Entity_Action e_act = {0};
+                                e_act.type = ENTITY_ACT_SIT_OR_UNSIT;
+                                e_act.sit_or_unsit.unsit = false;
+            
+                                auto p_act = make_player_entity_action(&e_act, chair->id);
+                                *_action_needed_before = p_act;
+                            }
+        
+                            return false;
+                        }
+                    }
+                }
+            }
+                
             return find_path_to_any(player_state->p, possible_p1s.e, possible_p1s.n, &room->walk_map, true, _found_path, _found_path_duration);
         } break;
 

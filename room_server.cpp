@@ -653,6 +653,24 @@ Entity *find_player_entity(User_ID user_id, Room *room)
 }
 
 
+// @Speed @Speed @Speed @Norelease
+// IMPORTANT: There is one implementation for this for the client, and one for the room server.
+//            Because C++ sucks. @Jai
+Entity *item_entity_of_type_at(Item_Type_ID type, v3 p, double world_t, Room *room)
+{
+    for(int i = 0; i < room->num_entities; i++) {
+        auto *e = room->entities + i;
+        if(e->type != ENTITY_ITEM) continue;
+        if(e->item_e.item.type != type) continue;
+
+        if(entity_position(e, world_t, room) == p) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+
 void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server);
 
 
@@ -1185,7 +1203,7 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
 }
 
 // NOTE: Will apply the action to player_state.
-bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server)
+bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server, int depth = 0)
 {
     Assert(e->type == ENTITY_PLAYER);
     auto *player_e = &e->player_e;
@@ -1195,10 +1213,11 @@ bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *play
     {
         Player_Action act;
         if(!get(action_needed_before, &act)) return false;
-        if(!enqueue_player_action_(e, &act, player_state, room, server)) return false;    
+        
+        if(!enqueue_player_action_(e, &act, player_state, room, server, depth + 1)) return false;    
     }
     
-    if(player_e->action_queue_length >= ARRLEN(player_e->action_queue))
+    if(player_e->action_queue_length >= ARRLEN(player_e->action_queue) - depth)
         return false;
 
     bool first_in_queue = (player_e->action_queue_length == 0);

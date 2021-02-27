@@ -248,6 +248,24 @@ Entity *find_player_entity(User_ID user_id, Room *room)
     return NULL;
 }
 
+// @Speed @Speed @Speed @Norelease
+// IMPORTANT: There is one implementation for this for the client, and one for the room server.
+//            Because C++ sucks. @Jai
+Entity *item_entity_of_type_at(Item_Type_ID type, v3 p, double world_t, Room *room)
+{
+    for(int i = 0; i < room->entities.n; i++) {
+        auto *e = room->entities.e + i;
+        if(e->type != ENTITY_ITEM) continue;
+        if(e->item_e.item.type != type) continue;
+
+        if(entity_position(e, world_t, room) == p) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+
 
 void update_local_data_for_room(Room *room, double world_t, Client *client)
 {
