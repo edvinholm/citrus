@@ -704,7 +704,7 @@ void player_stop_walking(Entity *e, Room *room)
 
 
 
-bool player_walk_to(v3 p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 = NULL, bool allow_same_start_and_end_tile = true, bool *_was_same_start_and_end_tile = NULL)
+bool player_walk_to(v3s p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 = NULL, bool allow_same_start_and_end_tile = true, bool *_was_same_start_and_end_tile = NULL)
 {
     if (!allow_same_start_and_end_tile) {
         Assert(_was_same_start_and_end_tile);
@@ -756,7 +756,7 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
         Assert(player_e->walk_path_length >= 2);
 
         // NOTE: If the walk path visits the same tile multiple times, this would not always work.
-        v3 p1 = player_e->walk_path[player_e->walk_path_length-1];
+        v3s p1 = tile_from_p(player_e->walk_path[player_e->walk_path_length-1]);
         
         double dur;
         v3 p0; // @Unused
@@ -1438,76 +1438,16 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
             if(client->user != NO_USER)
             {   
-                if(p.item_to_place != NO_ITEM)
-                {            
-                    // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
-                    //            This is so the game client can know when to for example remove preview entities.
-                    // (@Hack)
-                    room->did_change = true;
+                Entity *e = find_player_entity(client->user, room);
+                if(e) {
+                    auto p1 = tp_from_index(p.tile_ix);
 
-                    if(room->num_entities < MAX_ENTITIES_PER_ROOM)
-                    {
-                        bool can_commit = true;
+                    Player_Action action = {0};
+                    action.type = PLAYER_ACT_WALK;
+                    action.walk.p1 = p1;
 
-                        // Get item, ask User Server if it can commit //
-                        Item item;
-                        if(can_commit && !rs_us_inbound_item_transaction_prepare(client->user, p.item_to_place, server, &item)) {
-                            can_commit = false;
-                        }
+                    if(enqueue_player_action(e, &action, room, server)) {
 
-                        // Check if we can commit //
-                        if(can_commit) {
-                            can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room->entities, room->num_entities, room);
-                        }
-
-                        if(can_commit)
-                        {
-                            // Do commit //
-                        
-                            if(!rs_us_transaction_send_decision(true, client->user, server)) {
-                                // @Norelease: Handle com error. This proc should probably not
-                                //             return on error, but instead retry until it succeeds (See comment for the proc.)
-                            }
-
-                            do_place_item_entity_at_tp(&item, tp, room, server);
-                        }
-                        else {
-                            // Do abort //
-                        
-                            if(!rs_us_transaction_send_decision(false, client->user, server)) {
-                                // @Norelease: Handle com error. This proc should probably not
-                                //             return on error, but instead retry until it succeeds (See comment for the proc.)
-                            }
-                        }
-                    
-                    }
-                }
-                else {
-                
-                    Entity *e = find_player_entity(client->user, room);
-                    if(e) {
-                        auto p1 = tp_from_index(p.tile_ix);
-
-                        if(p.default_action_is_put_down)
-                        {   
-                            Player_Action action = {0};
-                            action.type = PLAYER_ACT_PUT_DOWN;
-                            action.put_down.tp = p1;
-
-                            if(enqueue_player_action(e, &action, room, server)) {
-
-                            }
-                        }
-                        else
-                        {
-                            Player_Action action = {0};
-                            action.type = PLAYER_ACT_WALK;
-                            action.walk.p1 = p1;
-
-                            if(enqueue_player_action(e, &action, room, server)) {
-
-                            }
-                        }
                     }
                 }
             }            
@@ -1518,6 +1458,60 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
             Entity *player = NULL;
             if(client->user == NO_USER) return false;
+
+            // @Hack: We don't want to enqueue PLACE_FROM_INVENTORY. It's an instant action.
+            if(player_action->type == PLAYER_ACT_PLACE_FROM_INVENTORY)
+            {
+                auto *p = &player_action->place_from_inventory;
+
+                Item_ID item_id = p->item;
+                v3 tp = p->tp;
+                
+                // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
+                //            This is so the game client can know when to for example remove preview entities.
+                // (@Hack)
+                room->did_change = true;
+
+                if(room->num_entities < MAX_ENTITIES_PER_ROOM)
+                {
+                    bool can_commit = true;
+
+                    // Get item, ask User Server if it can commit //
+                    Item item;
+                    if(can_commit && !rs_us_inbound_item_transaction_prepare(client->user, item_id, server, &item)) {
+                        can_commit = false;
+                    }
+
+                    // Check if we can commit //
+                    if(can_commit) {
+                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room->entities, room->num_entities, room);
+                    }
+
+                    if(can_commit)
+                    {
+                        // Do commit //
+                        
+                        if(!rs_us_transaction_send_decision(true, client->user, server)) {
+                            // @Norelease: Handle com error. This proc should probably not
+                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        }
+
+                        do_place_item_entity_at_tp(&item, tp, room, server);
+                    }
+                    else {
+                        // Do abort //
+                        
+                        if(!rs_us_transaction_send_decision(false, client->user, server)) {
+                            // @Norelease: Handle com error. This proc should probably not
+                            //             return on error, but instead retry until it succeeds (See comment for the proc.)
+                        }
+                    }
+                    
+                }
+                
+                break;
+            }
+            //--
             
             player = find_player_entity(client->user, room);
             if(!player) {

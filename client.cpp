@@ -857,8 +857,14 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
         }
 
 #if DEBUG
+        if(e)
         { _TOP_CUT_(20);
-            String id_str = concat_tmp("ID: ", item->id.origin, ":", item->id.number);
+            String id_str = concat_tmp("Entity: ", e->id);
+            ui_text(P(ctx), id_str);
+        }
+        
+        { _TOP_CUT_(20);
+            String id_str = concat_tmp("Item: ", item->id.origin, ":", item->id.number);
             ui_text(P(ctx), id_str);
         }
 #endif
@@ -1026,6 +1032,19 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     Client_UI *cui = &client->cui;
 
     Rect a = area(ctx.layout);
+
+
+    bool ctrl_is_down  = false;
+    bool shift_is_down = false;
+    bool alt_is_down   = false;
+    for(int i = 0; i < input->keys.n; i++) {
+        switch(input->keys.e[i]) {
+            case VKEY_CONTROL: ctrl_is_down  = true; break;
+            case VKEY_SHIFT:   shift_is_down = true; break;
+            case VKEY_ALT:     alt_is_down   = true; break;
+        }
+    }
+    
 
 #if DEVELOPER
     if(cui->dev.window_open)
@@ -1300,86 +1319,118 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     }
     
     auto *wv = world_view(P(ctx));
-    
 
-    bool ok_to_select_entity = true;
+    auto *user = current_user(client);
+    
+    if(user) {
+    
+        Player_State player_state_after_queue = {0}; // IMPORTANT: Only valid if player != NULL.
+        auto *player = find_current_player_entity(client);
+        if(player) {
+            player_state_after_queue = player_state_after_completed_action_queue(player, world_t, room);
+        }
+    
+        bool ok_to_select_entity = true;
+
+        // Placing Held Item ? //
+        room->placing_held_item = ctrl_is_down;
+        // // //
+    
+        // Placement TP //
+        room->placement_surface_entity = NO_ENTITY;
+        room->placement_tp = tp_from_index(wv->hovered_tile_ix);
+    
+        if(wv->hovered_entity != NO_ENTITY && wv->entity_surface_hovered) {
+            Entity *surface_entity = find_entity(wv->hovered_entity, room);
+            if(surface_entity) {
+                room->placement_surface_entity = surface_entity->id;
+                room->placement_tp             = tp_from_p(wv->hovered_entity_hit_p);
+            }
+        }
+        // // //
+
+        Item *item_to_place = NULL;
         
-    // CLICK TILE //
-    if(wv->clicked_tile_ix >= 0)
-    {
-        auto *user = &client->user;
-        auto *room = &client->room;
-        double world_t = world_time_for_room(room, t);
-        Item *selected_item = get_selected_inventory_item(&client->user);
+        if(room->placing_held_item) {
+            if(player_state_after_queue.held_item.type != ITEM_NONE_OR_NUM) {
+                item_to_place = &player_state_after_queue.held_item;
+            }
+        }
+        else item_to_place = get_selected_inventory_item(user);
+    
+        if(item_to_place) {
+
+            // PLACE FROM INVENTORY OR PUT DOWN //
+
+            if(wv->click_state & CLICKED_ENABLED)
+            {
+                v3 tp = room->placement_tp;
+
+                if (can_place_item_entity_at_tp(item_to_place, tp, world_t, room))
+                {
+                    if(room->placing_held_item) {
+                        Player_Action action = {0};
+                        action.type = PLAYER_ACT_PUT_DOWN;
+                        action.put_down.tp = tp;
+
+                        request(&action, client);
+                        
+                    } else {
+                        Player_Action action = {0};
+                        action.type = PLAYER_ACT_PLACE_FROM_INVENTORY;
+                        action.place_from_inventory.item = item_to_place->id;
+                        action.place_from_inventory.tp   = tp;
+                
+                        request(&action, client);
+
+                        Entity preview_entity = create_preview_item_entity(item_to_place, tp_from_index(wv->clicked_tile_ix), world_t);
+
+                        // NOTE: We add a preview entity and remove the placed item locally, before
+                        //       we know if the operation succeeds.
+                        //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
+                        //       transaction abort so we get our stuff back / know when to remove the
+                        //       preview entity.
+
+                        auto type = item_to_place->type;
+
+                        add_entity(preview_entity, room);
+                        inventory_remove_item_locally(item_to_place->id, user);
+
+                        if (!shift_is_down ||
+                            !select_next_inventory_item_of_type(type, user))
+                        {
+                            inventory_deselect(user);
+                        }
+                    }
+                }
+            }
         
-        if(wv->hovered_entity == NO_ENTITY || selected_item != NULL)
-        {   
+            ok_to_select_entity = false;
+        }
+        else if(wv->clicked_tile_ix >= 0 && wv->hovered_entity == NO_ENTITY) {
+        
+            // WALK //
+        
             C_RS_Action action = {0};
             action.type = C_RS_ACT_CLICK_TILE;
             auto &ct = action.click_tile;
             ct.tile_ix = wv->clicked_tile_ix;
 
-            v3 tp = tp_from_index(ct.tile_ix);
+            // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+            array_add(client->connections.room_action_queue, &action);
+            
+            ok_to_select_entity = false;
+        }
 
-            if(!selected_item || can_place_item_entity_at_tp(selected_item, tp, world_t, room))
+        // CLICK ENTITY //
+        if(wv->clicked_entity != NO_ENTITY) {
+    
+            if(ok_to_select_entity)
             {
-                if(selected_item) {
-                    ct.item_to_place = selected_item->id;
-                } else {
-                    ct.item_to_place = NO_ITEM;
-                    ct.default_action_is_put_down = in_array(input->keys, VKEY_CONTROL); // @Norelease @Robustness :InputFrame We should store the state of the CTRL key when the tile click happens. It could be different than it is later, here.
-                }
-
-                // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
-                array_add(client->connections.room_action_queue, action);
-
-                if(selected_item) {
-                    Entity preview_entity = create_preview_item_entity(selected_item, tp_from_index(wv->clicked_tile_ix), world_t);
-
-                    // NOTE: We add a preview entity and remove the placed item locally, before
-                    //       we know if the operation succeeds.
-                    //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
-                    //       transaction abort so we get our stuff back / know when to remove the
-                    //       preview entity.
-
-                    auto type = selected_item->type;
-            
-                    add_entity(preview_entity, room);
-                    inventory_remove_item_locally(selected_item->id, user);
-
-                    if(!in_array(input->keys, VKEY_SHIFT) ||
-                       !select_next_inventory_item_of_type(type, user))
-                    {
-                        inventory_deselect(user);
-                    }
-                }
-                else {
-#if DEBUG
-                    if(client->cui.dev.waiting_for_path_to_debug) {
-                        if(!player_entity) Debug_Print("There is no player entity, so can't debug path.\n");
-                        else {
-                            auto start = V3S(entity_position(player_entity, world_t, room));
-                            auto end   = V3S(tp);
-                            
-                            Array<v3, ALLOC_MALLOC> unused_path = {0};
-                            defer(clear(&unused_path););
-                            
-                            find_path(start, end, &room->walk_map, true, &unused_path);
-                        }
-                    }
-#endif
-                }
-            
-                ok_to_select_entity = false;
+                // SELECT ENTITY //
+                client->room.selected_entity = wv->clicked_entity;
             }
         }
-    }
-
-    if(ok_to_select_entity &&
-       wv->clicked_entity != NO_ENTITY)
-    {
-        // SELECT ENTITY //
-        client->room.selected_entity = wv->clicked_entity;
     }
 }
 

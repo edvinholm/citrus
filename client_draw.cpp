@@ -743,54 +743,37 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *selected_item, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
     {
-        
-        if(selected_item)
+        if(item_to_place)
         {
-            Entity preview_entity = create_preview_item_entity(selected_item, tp, world_t, Q_IDENTITY);
-            draw_entity(&preview_entity, world_t, room, client, gfx);
+            // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
+            
+            bool can_be_placed = true;
+            
+            v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
+            if(!can_place_item_entity_at_tp(item_to_place, tp, world_t, room->entities.e, room->entities.n, room)) {
+                shadow_color = { 0.4,   0.1,  0.1, 1 };
+                can_be_placed = false;
+            }
+            
+            Entity preview_entity = create_preview_item_entity(item_to_place, tp, world_t, Q_IDENTITY);
+            draw_entity(&preview_entity, world_t, room, client, gfx, false, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             
             v3 p0 = preview_entity.item_e.p;
-            auto vol = item_types[selected_item->type].volume;
+            auto vol = item_types[item_to_place->type].volume;
             p0.xy -= vol.xy * 0.5f;
 
-            v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
-            if(!can_place_item_entity_at_tp(selected_item, tp, world_t, room->entities.e, room->entities.n, room))
-                shadow_color = { 0.4,   0.1,  0.1, 1 };
-            
             draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
         }
         else {
-
-            // Preview PUT_DOWN of held item.
-            if(in_array(input->keys, VKEY_CONTROL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
-            {
-                auto *player = find_current_player_entity(client);
-                if(player) {
-                    Assert(player->type == ENTITY_PLAYER);
-                    auto *player_e = &player->player_e;
-
-                    Player_State state = player_state_after_completed_action_queue(player, world_t, room);
-                    
-                    if(state.held_item.type != ITEM_NONE_OR_NUM) {
-                        // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
-                        
-                        Entity preview_entity = create_preview_item_entity(&state.held_item, tp, world_t, Q_IDENTITY);
-                        draw_entity(&preview_entity, world_t, room, client, gfx);
-
-                        // @Norelease: Draw shadow and show if placement is possible
-                    }
-                }
-            }
-
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             draw_quad(tp + V3(-1, -1, 0.001f), V3_X * 2.0f, V3_Y * 2.0f, { 1, 0, 0, 1 }, gfx);
         }
@@ -824,27 +807,48 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
     auto *wv = &e->world_view;
     
     double world_t = world_time_for_room(room, t);
+    
+    Player_State player_state_after_queue = {0}; // IMPORTANT: Only valid if player != NULL.
+    auto *player = find_current_player_entity(client);
+    if(player) {
+        player_state_after_queue = player_state_after_completed_action_queue(player, world_t, room);
+    }
 
     // BACKGROUND //
-    draw_rect(e->world_view.a, { 0.17, 0.15, 0.14, 1 }, gfx);
+    draw_rect(wv->a, { 0.17, 0.15, 0.14, 1 }, gfx);
 
     // PROJECTION MATRIX //
-    m4x4 projection = world_projection_matrix(e->world_view.a, -0.1 + gfx->z_for_2d);
+    m4x4 projection = world_projection_matrix(wv->a, -0.1 + gfx->z_for_2d);
 
+    { Scoped_Push(gfx->draw_mode, DRAW_3D);
 
-    {
-        Scoped_Push(gfx->draw_mode, DRAW_3D);
+        Item *item_to_place = NULL;
+        
+        if(in_array(input->keys, VKEY_CONTROL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
+        {
+            if(player && player_state_after_queue.held_item.type != ITEM_NONE_OR_NUM) {    
+                // PUT DOWN ITEM //
+                item_to_place = &player_state_after_queue.held_item;
+            }
+        }
+        else {
+            // PLACE FROM INVENTORY //
+            item_to_place = (user) ? get_selected_inventory_item(user) : NULL;
+        }
 
         // DRAW WORLD //
-        draw_world(room, world_t, projection, client, gfx);
+        Entity_ID highlighted_surface_entity = (item_to_place) ? room->placement_surface_entity : NO_ENTITY;
+        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity, highlighted_surface_entity);
 
         // HOVERED TILE, ITEM PREVIEW //
-        v3 hovered_tile_p = { 0 };
-        hovered_tile_p.y = e->world_view.hovered_tile_ix / room_size_x;
-        hovered_tile_p.x = e->world_view.hovered_tile_ix % room_size_x;
+        if(wv->hovered_entity == NO_ENTITY || wv->entity_surface_hovered)
+        {
+            v3 hovered_tp;
+            if(item_to_place) hovered_tp = room->placement_tp;
+            else              hovered_tp = tp_from_index(wv->hovered_tile_ix);
 
-        Item *selected_item = (user) ? get_selected_inventory_item(user) : NULL;
-        draw_tile_hover_indicator(hovered_tile_p, selected_item, world_t, room, input, client, gfx);
+            draw_tile_hover_indicator(hovered_tp, item_to_place, world_t, room, input, client, gfx);
+        }
     }
 
     

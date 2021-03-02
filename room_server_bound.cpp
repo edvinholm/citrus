@@ -26,14 +26,7 @@ struct RSB_Packet_Header
         } goodbye;
         
         struct {
-            u64 tile_ix;
-            Item_ID item_to_place;
-
-            //NOTE: This is only considered if item_to_place == NO_ITEM.
-            //      If default_action_is_put_down is true, a "Put Down"
-            //      action will be queued (if possible). Otherwise, a "Walk" action.
-            bool default_action_is_put_down;
-            
+            u64 tile_ix;            
         } click_tile;
 
         Player_Action player_action;
@@ -85,8 +78,6 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
         case RSB_CLICK_TILE: {
             auto *p = &_header->click_tile;
             Read_To_Ptr(u64,     &p->tile_ix, node);
-            Read_To_Ptr(Item_ID, &p->item_to_place, node);
-            Read_To_Ptr(bool,    &p->default_action_is_put_down, node);
         } break;
 
         case RSB_PLAYER_ACTION: {
@@ -136,7 +127,7 @@ bool send_RSB_GOODBYE_packet_now(Network_Node *node)
 }
 
 
-bool enqueue_RSB_CLICK_TILE_packet(Network_Node *node, u64 tile_ix, Item_ID item_to_place, bool default_action_is_put_down)
+bool enqueue_RSB_CLICK_TILE_packet(Network_Node *node, u64 tile_ix)
 {
     begin_outbound_packet(node);
     {
@@ -144,8 +135,6 @@ bool enqueue_RSB_CLICK_TILE_packet(Network_Node *node, u64 tile_ix, Item_ID item
         //--
 
         Write(u64,  tile_ix, node);
-        Write(Item_ID, item_to_place, node);
-        Write(bool, default_action_is_put_down, node);
     }
     end_outbound_packet(node);
     return true;

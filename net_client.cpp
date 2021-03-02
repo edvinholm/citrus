@@ -60,7 +60,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
             switch(action.type) { // @Jai: #complete
                 case C_RS_ACT_CLICK_TILE: {
                     auto &ct = action.click_tile;
-                    Enqueue(RSB_CLICK_TILE, node, ct.tile_ix, ct.item_to_place, ct.default_action_is_put_down);
+                    Enqueue(RSB_CLICK_TILE, node, ct.tile_ix);
                 } break;
                     
                 case C_RS_ACT_PLAYER_ACTION: {

@@ -84,17 +84,18 @@ double world_time_for_room(Room *room, double system_time)
     return system_time + room->time_offset;
 }
 
-Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL)
+
+Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL, bool *_hit_surface = NULL)
 {
     Entity *closest_hit   = NULL;
     float   closest_ray_t = FLT_MAX;
-    
+
     for(int i = 0; i < room->entities.n; i++)
     {
         auto *e = &room->entities[i];
 
         AABB bbox = entity_aabb(e, world_t, room);
-           
+        
         float ray_t;
         v3 intersection;
         if(ray_intersects_aabb(ray, bbox, &intersection, &ray_t)) {
@@ -103,6 +104,16 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p
                 closest_ray_t = ray_t;
                     
                 if(_hit_p) *_hit_p = intersection;
+
+                if(_hit_surface) {
+                    *_hit_surface = false;
+                    
+                    if(entity_has_surface(e)) {
+                        if(floats_equal(intersection.z, bbox.p.z + bbox.s.z)) {
+                            *_hit_surface = true;
+                        }
+                    }
+                }
             }
         }
     }

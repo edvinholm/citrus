@@ -32,6 +32,9 @@ show_window_sizes false
 # We might make it possible to choose which action later.  -EH, 2021-02-25
 show_entity_action_positions false
 
+# Shows for example the z of player entities' hands.	
+show_player_entity_parts false
+
 
 run_profiler    false
 show_profiler   false

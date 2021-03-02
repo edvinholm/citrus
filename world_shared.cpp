@@ -5,14 +5,24 @@
 
 
 
+v3 tp_from_p(v3 p) {
+    return { roundf(p.x), roundf(p.y), roundf(p.z) };
+}
+
 v3s tile_from_p(v3 p) {
     return { (s32)roundf(p.x), (s32)roundf(p.y), (s32)roundf(p.z) };
 }
 
-s32 tile_index_from_p(v3 tp)
+
+s32 tile_index_from_tile(v3s tile)
 {
-    auto tile = tile_from_p(tp);
-    return tp.y * room_size_x + tp.x;
+    return tile.y * room_size_x + tile.x;
+}
+
+
+s32 tile_index_from_p(v3 p)
+{
+    return tile_index_from_tile(tile_from_p(p));
 }
 
 v3 tp_from_index(s32 tile_index)
@@ -214,16 +224,17 @@ v3 entity_position(ENTITY *e, double world_t, ROOM *room)
 }
 
 
+// NOTE: hands_zoffs is the z offset for the performer entity's hands from their origin.
 template<typename ENTITY, typename ROOM>
-Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, double world_t, ROOM *room)
+Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, float hands_zoffs, double world_t, ROOM *room)
 {
-    Array<v3, ALLOC_TMP> positions = {0};
+    Array<v3s, ALLOC_TMP> positions = {0};
     
-    v3 p  = entity_position(e, world_t, room);
+    v3 p = entity_position(e, world_t, room);
     
     if(e->type != ENTITY_ITEM) {
         Assert(false);
-        array_add(positions, p);
+        array_add(positions, tile_from_p(p));
         return positions;
     }
     auto *item_e = &e->item_e;
@@ -244,34 +255,37 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
 
                 v3 tp0  = p;
                 tp0.xy -= volume.xy * 0.5f;
-                
-                for(int y = 0; y < volume.y+1; y++) {
-                    for(int x = 0; x < volume.x+1; x++) {
 
-                        v3 pp = tp0;
-                        pp.x += x;
-                        pp.y += y;
-                        
-                        // @Speed: Continuing on most squares for big volumes.
-                        if(x > 0 && x < volume.x &&
-                           y > 0 && y < volume.y) continue;
+                for(auto z = -player_entity_hands_zoffs - 2; z <= 0; z++) {
+                    for(int y = 0; y < volume.y+1; y++) {
+                        for(int x = 0; x < volume.x+1; x++) {
 
-                        const float offs = 1.0f;
+                            v3 pp = tp0;
+                            pp.x += x;
+                            pp.y += y;
+                            pp.z += z;
                         
-                        if     (x == 0)        array_add(positions, pp - right * offs);
-                        else if(x == volume.x) array_add(positions, pp + right * offs);
+                            // @Speed: Continuing on most squares for big volumes.
+                            if(x > 0 && x < volume.x &&
+                               y > 0 && y < volume.y) continue;
+
+                            const float offs = 1.0f;
                         
-                        if     (y == 0)        array_add(positions, pp - forward * offs);
-                        else if(y == volume.y) array_add(positions, pp + forward * offs);
+                            if     (x == 0)        array_add(positions, tile_from_p(pp - right * offs));
+                            else if(x == volume.x) array_add(positions, tile_from_p(pp + right * offs));
+                        
+                            if     (y == 0)        array_add(positions, tile_from_p(pp - forward * offs));
+                            else if(y == volume.y) array_add(positions, tile_from_p(pp + forward * offs));
+                        }
                     }
                 }
             } break;
 
             case ENTITY_ACT_SIT_OR_UNSIT: {
-                array_add(positions, p + forward * (volume.y * 0.5f + 1));
-                array_add(positions, p - right   * (volume.x * 0.5f + 1));
-                array_add(positions, p + right   * (volume.x * 0.5f + 1));
-                array_add(positions, p - forward * (volume.y * 0.5f + 1));
+                array_add(positions, tile_from_p(p + forward * (volume.y * 0.5f + 1)));
+                array_add(positions, tile_from_p(p - right   * (volume.x * 0.5f + 1)));
+                array_add(positions, tile_from_p(p + right   * (volume.x * 0.5f + 1)));
+                array_add(positions, tile_from_p(p - forward * (volume.y * 0.5f + 1)));
             } break;
 
             case ENTITY_ACT_CHESS: {
@@ -279,9 +293,12 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
             
                 Assert(item->type == ITEM_CHESS_BOARD);
                 auto *board = &item_e->chess_board;
-
+                
                 v3 white_p = p + forward * (volume.y * 0.5f + 1);
                 v3 black_p = p - forward * (volume.y * 0.5f + 1);
+
+                white_p.z -= hands_zoffs;
+                black_p.z -= hands_zoffs;
 
                 switch(chess_action->type)
                 {
@@ -293,8 +310,8 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
                     
                         if(!found) { Assert(false); break; }
                     
-                        if(piece.is_black) array_add(positions, black_p);
-                        else               array_add(positions, white_p);
+                        if(piece.is_black) array_add(positions, tile_from_p(black_p));
+                        else               array_add(positions, tile_from_p(white_p));
                         
                     } break;
 
@@ -303,8 +320,8 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
                         
                         // @Norelease: We must check if there is already a player on its way to join!
                         
-                        if     (join->as_black) array_add(positions, black_p); // Join as black
-                        else                    array_add(positions, white_p); // Join as white
+                        if     (join->as_black) array_add(positions, tile_from_p(black_p)); // Join as black
+                        else                    array_add(positions, tile_from_p(white_p)); // Join as white
                         
                     } break;
                 }
@@ -313,7 +330,7 @@ Array<v3, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, d
     }
         
     if(positions.n == 0) {
-        array_add(positions, p + forward * (volume.y * 0.5f + 1));
+        array_add(positions, tile_from_p(p + forward * (volume.y * 0.5f + 1)));
     }
     
     return positions;
@@ -353,6 +370,14 @@ AABB entity_aabb(ENTITY *e, double world_t, ROOM *room)
     return bbox;
 }
 
+bool entity_has_surface(S__Entity *e)
+{
+    if(e->type != ENTITY_ITEM) return false;
+    if(e->item_e.item.type != ITEM_TABLE) return false;
+
+    return true;
+}
+
 
 template<typename ENTITY, typename ROOM>
 bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *entities, s64 num_entities, ROOM *room)
@@ -364,6 +389,30 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *e
     copy.held_by = NO_ENTITY;
 
     AABB my_bbox = entity_aabb(&copy, world_t, room);
+
+    bool supported_by_floor = (p.z <= 0);
+    
+    // FIND SUPPORT POINTS //
+    v3   support_points[16*16]; // @Speed: If we would want bigger items than this, we would probably need to do the check in some other way, anyway.
+    bool support_point_satisfied[ARRLEN(support_points)] = {0};
+    int  num_support_points = 0;
+    
+    if(!supported_by_floor) // NOTE: If this is false, we will end up with zero support points, which means 100% of them are satisfied.
+    {
+        float yy = my_bbox.p.y + 0.5f;
+        while(yy < my_bbox.p.y + my_bbox.s.y) {
+            
+            float xx = my_bbox.p.x + 0.5f;
+            while(xx < my_bbox.p.x + my_bbox.s.x) {
+                support_points[num_support_points++] = { xx, yy, my_bbox.p.z - 0.5f };
+                xx += 1;
+            }
+            
+            yy += 1;
+        }
+        Assert(num_support_points <= ARRLEN(support_point_satisfied));
+    }
+    // // //
     
     for(int i = 0; i < num_entities; i++)
     {
@@ -371,11 +420,29 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *e
         if(e->id == my_entity->id) continue;
         
         AABB other_bbox = entity_aabb(e, world_t, room);
-        
+
         if(aabb_intersects_aabb(my_bbox, other_bbox))
             return false;
+
+        if(entity_has_surface(e)) {
+            // Are we supported by this entity?
+            
+            for(int i = 0; i < num_support_points; i++)
+            {
+                if(support_point_satisfied[i]) continue;
+            
+                if(aabb_contains_point(other_bbox, support_points[i]))
+                    support_point_satisfied[i] = true;
+            }
+        }
     }
-    
+
+    // CHECK IF WE ARE FULLY SUPPORTED //
+    for(int i = 0; i < num_support_points; i++) {
+        if(!support_point_satisfied[i]) return false;
+    }
+    // // //
+
     return true;
 }
 
@@ -779,7 +846,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
     };
 
     Transport_Mode transport_needed = NONE;
-    Array<v3, ALLOC_TMP> possible_p1s = {0};
+    Array<v3s, ALLOC_TMP> possible_p1s = {0};
 
     bool sitting_allowed = true;
     
@@ -796,7 +863,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, &sitting_allowed, user)) return false;
                         
             if(e->held_by == NO_ENTITY) {
-                possible_p1s = entity_action_positions(e, &entity_act->action, world_t, room);
+                possible_p1s = entity_action_positions(e, &entity_act->action, player_entity_hands_zoffs, world_t, room);
 
                 if(entity_act->action.type == ENTITY_ACT_SIT_OR_UNSIT &&
                    entity_act->action.sit_or_unsit.unsit == true) {
@@ -811,7 +878,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
         case PLAYER_ACT_WALK: {
             Scoped_Profile("PLAYER_ACT_WALK");
             
-            array_add(possible_p1s, action->walk.p1);
+            array_add(possible_p1s, tile_from_p(action->walk.p1));
             transport_needed = WALK;
         } break;
 
@@ -842,7 +909,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             dummy_action.type = ENTITY_ACT_PICK_UP;
             
             // @Cleanup: action parameter should not be optional. PUT_DOWN should work differently... Should probably be an entity action.
-            possible_p1s = entity_action_positions(&held_entity_replica, &dummy_action, world_t, room);
+            possible_p1s = entity_action_positions(&held_entity_replica, &dummy_action, player_entity_hands_zoffs, world_t, room);
             transport_needed = WALK;
         } break;
             
@@ -854,12 +921,13 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
     {
         // Do we need to unsit first?
 
+        v3s player_state_tp = tile_from_p(player_state->p);
         bool need_to_move = true;
         // We don't need to unsit if we're already on one
         // of the available action positions.
         for(int i = 0; i < possible_p1s.n; i++)
         {
-            if(possible_p1s[i] == player_state->p) {
+            if(possible_p1s[i] == player_state_tp) {
                 need_to_move = false;
                 break;
             }
@@ -897,8 +965,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
 
                 bool no_walkable_p1s = true;
                 for(int i = 0; i < possible_p1s.n; i++) {
-                    v3 p = possible_p1s[i];
-                    s32 tile_ix = tile_index_from_p(p);
+                    v3s tile = possible_p1s[i];
+                    s32 tile_ix = tile_index_from_tile(tile);
                         
                     if(!(room->walk_map.nodes[tile_ix].flags & UNWALKABLE)) {
                         no_walkable_p1s = false;
@@ -909,7 +977,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
                 if(no_walkable_p1s) {
                     for(int i = 0; i < possible_p1s.n; i++) {
                 
-                        Entity *chair = item_entity_of_type_at(ITEM_CHAIR, possible_p1s[i], world_t, room);
+                        Entity *chair = item_entity_of_type_at(ITEM_CHAIR, V3(possible_p1s[i]), world_t, room);
                         if(chair) {
                             // We can make this action possible by sitting on chair first.
                             if(_action_needed_before)
@@ -937,8 +1005,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
 
             for(int i = 0; i < possible_p1s.n; i++)
             {
-                v3 p = possible_p1s[i];
-                s32 tile_ix = tile_index_from_p(p);
+                v3s tile = possible_p1s[i];
+                s32 tile_ix = tile_index_from_tile(tile);
                 
                 if(!(room->walk_map.nodes[tile_ix].flags & UNWALKABLE)) {
 
@@ -946,8 +1014,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
                         _found_path->n = 0;
                         array_add_uninitialized(*_found_path, 2);
                         
-                        (*_found_path)[0] = p;
-                        (*_found_path)[1] = p;
+                        (*_found_path)[0] = V3(tile);
+                        (*_found_path)[1] = V3(tile);
                         
                         if(_found_path_duration) *_found_path_duration = 0;
                     }

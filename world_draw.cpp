@@ -157,7 +157,7 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
-void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx)
+void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool surface_hovered = false, bool cannot_be_placed = false)
 {
     auto *s_e = static_cast<S__Entity *>(e);
 
@@ -193,13 +193,17 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         if(item->type == ITEM_WATERING_CAN) {
             fill = item->watering_can.water_level;
         }
+
+        if(item->type == ITEM_CHESS_BOARD) {
+            volume.z = 0.1f;
+        }
     }
     else if(e->type == ENTITY_PLAYER)
     {
         auto *player_e = &e->player_e;
         
-        volume = { 1.2, 1.2, 3.4 };
-
+        volume = { 1.2, 1.2, player_entity_height };
+        
         if(player_e->sitting_on != NO_ENTITY) {
             base_color = { 0.93, 0.52, 0.72, 1.0 };
         } else {
@@ -239,6 +243,18 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             }
         }
     }
+
+    if(hovered) {
+        adjust_saturation(&base_color, 1.2f);
+        base_color.rgb *= 1.3f;
+    }
+
+    if(cannot_be_placed) {
+        base_color.r *= 1.5f;
+        base_color.g /= 1.5f;
+        base_color.b /= 1.5f;
+    }
+    
     
     _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(q, center));
 
@@ -252,7 +268,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     // ---
 
     if(fill > 0) {
-
         v4 fill_color = { base_color.b * 1.1f, base_color.g * 1.1f, base_color.r * 1.1f, 1.0 };
         
         v3 fill_s = volume;
@@ -263,6 +278,10 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         origin.z += fill_s.z;
     }
     draw_cube_ps(origin, volume, base_color, gfx);
+
+    if(surface_hovered) {
+        draw_quad(origin + V3_Z * (volume.z + 0.01f), V3_X * volume.x, V3_Y * volume.y, C_YELLOW, gfx);
+    }
     
     if(e->type == ENTITY_PLAYER)
     {    
@@ -279,6 +298,15 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         head_color.rgb *= 0.94f;
         
         draw_cube_ps(head_p, V3_ONE * head_size, head_color, gfx);
+
+        // HANDS Z //
+        if(tweak_bool(TWEAK_SHOW_PLAYER_ENTITY_PARTS)) {
+            v3 pp = center;
+            pp.x -= 1.4;
+            pp.y -= 1.4;
+            pp.z += player_entity_hands_zoffs;
+            draw_quad(pp, V3_X * 2.8, V3_Y * 2.8, C_FUCHSIA, gfx);    
+        }
     }
     else if(e->type == ENTITY_ITEM)
     {
@@ -296,9 +324,9 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             if(e->id == room->selected_entity) {
                 Entity_Action dummy_action = {0};
                 dummy_action.type = ENTITY_ACT_PICK_UP;
-                auto action_positions = entity_action_positions(e, &dummy_action, world_t, room);
+                auto action_positions = entity_action_positions(e, &dummy_action, player_entity_hands_zoffs, world_t, room);
                 for(int i = 0; i < action_positions.n; i++) {
-                    auto p = action_positions[i] + V3_Z * 0.05f;
+                    auto p = V3(action_positions[i]) + V3_Z * 0.05f;
                     draw_quad(p - V3_XY * 0.15f, V3_X * 0.3f, V3_Y * 0.3f, C_MAGENTA, gfx);
                 }
             }
@@ -306,7 +334,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     }
 }
 
-void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx)
+void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx, Entity_ID hovered_entity = NO_ENTITY, bool entity_surface_hovered = false)
 {
     maybe_update_static_room_vaos(room, gfx);
     
@@ -327,7 +355,9 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
     {
         for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
-            draw_entity(e, world_t, room, client, gfx);
+            bool hovered = (e->id == hovered_entity);
+            bool surface_hovered = (hovered && entity_surface_hovered);
+            draw_entity(e, world_t, room, client, gfx, hovered, surface_hovered);
         }
     }
 

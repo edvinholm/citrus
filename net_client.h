@@ -12,8 +12,6 @@ struct C_RS_Action
     union {
         struct {
             s64 tile_ix;
-            Item_ID item_to_place;
-            bool default_action_is_put_down;
         } click_tile;
 
         Player_Action player_action;

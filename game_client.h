@@ -33,6 +33,11 @@ namespace Client_Game
         Array<Entity, ALLOC_MALLOC> entities;
         Entity_ID selected_entity;
         
+        v3        placement_tp; // If we for example have a selected inventory item, this is where we would try to put it.
+        Entity_ID placement_surface_entity;
+        bool      placing_held_item;
+        
+        
         bool static_geometry_up_to_date;
     };
     

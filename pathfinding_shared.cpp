@@ -91,7 +91,7 @@ bool in_tree(Pathfinding_Node *node, Pathfinding_Node *root)
 
 // IMPORTANT: *_path needs to be in a valid state, and _path->n should be set to zero.
 template<Allocator_ID A>
-bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Array<v3, A> *_path)
+bool find_path(v3s start, v3s *ends, int num_ends, Walk_Map *walk_map, bool do_reduce_path, Array<v3, A> *_path)
 {
     s32 num_visited_nodes = 0;
     push_profiler_node(PROFILER, __FUNCTION__);
@@ -112,16 +112,7 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
 #endif
     
     Assert(_path->n == 0);
-
-    if (start == end) {
-        array_add_uninitialized(*_path, 2);
-        (*_path)[0] = V3(start);
-        (*_path)[1] = V3(end);
-        return true;
-    }
     
-    v2 end_p = { (float)end.x, (float)end.y };
-
     const auto num_nodes = ARRLEN(walk_map->nodes);
     
     Pathfinding_Node nodes[num_nodes];
@@ -131,7 +122,32 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
     float g_costs[num_nodes];
 
     Pathfinding_Node *start_node = &nodes[start.y * room_size_x + start.x];
-    Pathfinding_Node *end_node   = &nodes[end.y   * room_size_x + end.x];
+
+    // IMPORTANT: These pointers can be null, if we discarded them for being unreachable.
+    Pathfinding_Node **end_nodes = (Pathfinding_Node **)tmp_alloc(sizeof(Pathfinding_Node *) * num_ends); // @Speed: Reuse memory
+
+    bool any_reachable_ends = false;
+    for(int i = 0; i < num_ends; i++) {
+        auto end = ends[i];
+        if(!floats_equal(end.z, 0)) {
+            end_nodes[i] = NULL;
+            continue;
+        }
+
+        any_reachable_ends = true;
+        
+        Pathfinding_Node *end_node = &nodes[end.y * room_size_x + end.x];
+        end_nodes[i] = end_node;
+        
+        if (start_node == end_node) {
+            array_add_uninitialized(*_path, 2);
+            (*_path)[0] = V3(start);
+            (*_path)[1] = V3(end);
+            return true;
+        }
+    }
+
+    if(!any_reachable_ends) return false;
 
 #if DEBUG_PATHFINDING
     for(int k = 0; k < ARRLEN(nodes); k++)
@@ -204,7 +220,15 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
         float current_x = current_xy_div.rem;
         float current_y = current_xy_div.quot;
 
-        if(current == end_node) {
+        bool is_at_end = false;
+        for(int i = 0; i < num_ends; i++) {
+            if(current == end_nodes[i]) { // NOTE: end_nodes[i] might be NULL. See comment at declaration of end_nodes.
+                is_at_end = true;
+                break;
+            }
+        }
+        
+        if(is_at_end) {
             // PATH FOUND //
             PF_Assert_Tree_Valid(open_root, NULL);
 
@@ -308,9 +332,19 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
             float rel_g_cost = (diagonal) ? 1.4f : 1.0f;
             float g_cost = g_costs[current-nodes] + rel_g_cost;
 
-            float dx = end_p.x - neighbour_x;
-            float dy = end_p.y - neighbour_y;
-            float h_cost = sqrtf(dx*dx + dy*dy);
+            float h_cost = FLT_MAX;
+            for(int i = 0; i < num_ends; i++)
+            {
+                auto end = ends[i];
+                if (!floats_equal(end.z, 0)) continue; // @Incomplete We don't support non-zero Z for path nodes yet.
+
+                v2 end_p = { (float)end.x, (float)end.y };
+                float dx = end_p.x - neighbour_x;
+                float dy = end_p.y - neighbour_y;
+                float h  = sqrt(dx*dx + dy*dy);
+
+                if(h < h_cost) h_cost = h;
+            }
 
             float f_cost = g_cost + h_cost;
             
@@ -532,8 +566,12 @@ bool find_path(v3s start, v3s end, Walk_Map *walk_map, bool do_reduce_path, Arra
 }
 
 
+// TODO @Cleanup: Remove this proc. find_path does multiple goals now.
+// TODO @Cleanup: Remove this proc. find_path does multiple goals now.
+// TODO @Cleanup: Remove this proc. find_path does multiple goals now.
+// TODO @Cleanup: Remove this proc. find_path does multiple goals now.
 // NOTE: *_was_same_start_and_end_tile duration will only be set if allow_same_start_and_end_tile == false.
-bool find_path_to_any(v3 p0, v3 *possible_p1s, int num_possible_p1s, Walk_Map *walk_map, bool do_reduce_path, Array<v3, ALLOC_TMP> *_path = NULL, double *_dur = NULL)
+bool find_path_to_any(v3 p0, v3s *possible_p1s, int num_possible_p1s, Walk_Map *walk_map, bool do_reduce_path, Array<v3, ALLOC_TMP> *_path = NULL, double *_dur = NULL)
 {
     Function_Profile();
     
@@ -543,34 +581,18 @@ bool find_path_to_any(v3 p0, v3 *possible_p1s, int num_possible_p1s, Walk_Map *w
     
     Array<v3, ALLOC_TMP> path = {0};
 
-    for(int i = 0; i < num_possible_p1s; i++)
-    {
-        path.n = 0;
-
-        v3 p1 = possible_p1s[i];
     
-        v3s start_tile = tile_from_p(p0);
-        v3s end_tile   = tile_from_p(p1);
-
-        if(start_tile == end_tile) {
-            array_add_uninitialized(path, 2);
-            path[0] = p0;
-            path[1] = p1;
-        }
-        else if(!find_path(start_tile, end_tile, walk_map, false, &path)) {
-            continue;
-        }
-
+    v3s start_tile = tile_from_p(p0);
+    
+    if(find_path(start_tile, possible_p1s, num_possible_p1s, walk_map, false, &path)) {
         Assert(path.n != 1);
         
-        double dur = player_walk_path_duration(path.e, path.n);
-        if(dur < best_path_duration) {
-            array_set(best_path, path);
-            best_path_duration = dur;
-            any_path_found = true;
-        }
-    }
+        array_set(best_path, path);
+        best_path_duration = player_walk_path_duration(path.e, path.n);
 
+        any_path_found = true;
+    }
+    
     if(!any_path_found) return false;
 
     if(do_reduce_path) {

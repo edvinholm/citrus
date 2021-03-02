@@ -9,6 +9,8 @@ const int MAX_CHAT_MESSAGES_PER_ROOM = 32;
 
 typedef double World_Time;
 
+const float player_entity_height      = 3.4f;
+const   s32 player_entity_hands_zoffs = 2;
 
 // TODO @Robustness, @Norelease: We should be able to skip values here, so ITEM_NONE_OR_NUM would not be guaranteed to be correct.
 enum Item_Type_ID
@@ -70,13 +72,13 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chairg") },
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair") },
     { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed") }, 
     { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table") },
     { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant") },
     { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine") },
     { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can") },
-    { {2, 2, 3}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board") }
+    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board") }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -143,7 +145,8 @@ enum Player_Action_Type
 {
     PLAYER_ACT_ENTITY,
     PLAYER_ACT_WALK,
-    PLAYER_ACT_PUT_DOWN // Put down held item.
+    PLAYER_ACT_PUT_DOWN, // Put down held item.
+    PLAYER_ACT_PLACE_FROM_INVENTORY
 };
 
 struct Player_Action
@@ -164,6 +167,11 @@ struct Player_Action
         struct {
             v3 tp;
         } put_down;
+
+        struct {
+            Item_ID item;
+            v3 tp;
+        } place_from_inventory;
     };
 };
 

@@ -918,6 +918,12 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
             auto *x = &_action->put_down;
             Read_To_Ptr(v3, &x->tp, node);
         } break;
+            
+        case PLAYER_ACT_PLACE_FROM_INVENTORY: {
+            auto *x = &_action->place_from_inventory;
+            Read_To_Ptr(Item_ID, &x->item, node);
+            Read_To_Ptr(v3,      &x->tp, node);
+        } break;
 
         default: Assert(false); return false;
     }
@@ -944,6 +950,12 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
         case PLAYER_ACT_PUT_DOWN: {
             auto *x = &action.put_down;
             Write(v3, x->tp, node);
+        } break;
+
+        case PLAYER_ACT_PLACE_FROM_INVENTORY: {
+            auto *x = &action.place_from_inventory;
+            Write(Item_ID, x->item, node); // @Norelease @Robustness: Check that this is not NO_ITEM
+            Write(v3,      x->tp, node);
         } break;
 
         default: Assert(false); return false;

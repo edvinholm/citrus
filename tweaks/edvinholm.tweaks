@@ -16,8 +16,8 @@ startup_room 1
 
 show_window_sizes false
 
-run_profiler false
-show_profiler false
+run_profiler    false
+show_profiler   false
 profiler_yscale 250
 
 
@@ -28,3 +28,5 @@ color_tiles_by_position false
 
 
 show_entity_action_positions true
+
+# show_player_entity_parts true
