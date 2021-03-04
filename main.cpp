@@ -1,40 +1,6 @@
 
 
 
-
-
-
-
-/*
-  
-// @Continue:
-
-///////////////////////////
-
-SITTING
-
-WE WANT TO MAKE THINGS LIKE TABLES HAVE SURFACES THAT WE RAYCAST AGAINST WHEN PLACING
-OBJECTS!
-THEN, WE WANT TO CONNECT THE OBJECTS PLACED ON TOP OF TABLES TO THE TABLES, SO THAT THEY
-MOVE WHEN THE TABLE MOVES!
-
-THEEEEEEEEEEEEEEN! WE SHOULD MAKE CONTAINERS, THAT HOLDS OTHER ENTITIES!!!!!!!!!!!!!
-
-/////////////////////
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
 #define Fail_If_True(Condition) \
     if(Condition) { Debug_Print("[FAILURE] Condition met: %s at %s:%d\n", #Condition, __FILE__, __LINE__); return false; }
 
@@ -186,6 +152,10 @@ int main(int num_arguments, char **arguments)
         machine_is_big_endian = (*(u8 *)&x == 0);
         Debug_Print("machine_is_big_endian: %d\n", machine_is_big_endian);
     }
+
+    
+    init_recipes();
+    
 
 #if UNICODE_DB_PARSER
     return unicode_db_entry_point(num_arguments, arguments);

@@ -78,3 +78,13 @@ void deinit_room_server(Room_Server *server)
 
     deinit_room_client_queue(&server->client_queue);
 }
+
+
+
+void lock_item_entity(Entity *e, Entity_ID locker);
+void unlock_item_entity(Entity *e, Entity_ID locker, Room *room);
+
+bool destruction_possible(Entity *e, Room *room, Entity_ID destroyer = NO_ENTITY);
+void schedule_for_destruction(Entity *e, Room *room, Entity_ID destroyer = NO_ENTITY);
+
+void update_supporters_of(Entity *e, Room *room);

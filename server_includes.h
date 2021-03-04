@@ -22,6 +22,8 @@
 #include "chess.h"
 //--
 
+#include "recipe.h"
+
 #include "game_shared.h"
 #include "game_server.h"
 using namespace Server_Game;
@@ -39,6 +41,8 @@ using namespace Server_Market;
 #include "user_shared.cpp"
 #include "world_shared.cpp"
 #include "pathfinding_shared.cpp"
+
+#include "recipe.cpp"
 
 #include "log.cpp"
 
@@ -59,6 +63,8 @@ using namespace Server_Market;
 #include "server.h"
 
 #include "net_server.cpp"
+
+#include "machines.cpp"
 
 #include "market_server.cpp"
 #include "room_server.cpp"

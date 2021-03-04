@@ -39,3 +39,8 @@ struct Walk_Map
 };
 
 
+
+template<Allocator_ID A>
+bool find_path(v3s start, v3s *ends, int num_ends, Walk_Map *walk_map, bool do_reduce_path, Array<v3, A> *_path);
+
+bool find_path_to_any(v3 p0, v3s *possible_p1s, int num_possible_p1s, Walk_Map *walk_map, bool do_reduce_path, Array<v3, ALLOC_TMP> *_path = NULL, double *_dur = NULL);

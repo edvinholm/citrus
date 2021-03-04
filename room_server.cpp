@@ -627,50 +627,6 @@ bool rs_us_transaction_send_decision(bool commit, User_ID user_id, Room_Server *
 }
 
 
-Entity *find_entity(Entity_ID id, Room *room)
-{
-    for(int i = 0; i < room->num_entities; i++) {
-        auto *e = &room->entities[i];
-        if(e->id == id) {
-            return e;
-        }
-    }
-
-    return NULL;
-}
-
-Entity *find_player_entity(User_ID user_id, Room *room)
-{
-    for(int i = 0; i < room->num_entities; i++) {
-        auto *e = &room->entities[i];
-        if(e->type != ENTITY_PLAYER) continue;
-        if(e->player_e.user_id == user_id) {
-            return e;
-        }
-    }
-
-    return NULL;
-}
-
-
-// @Speed @Speed @Speed @Norelease
-// IMPORTANT: There is one implementation for this for the client, and one for the room server.
-//            Because C++ sucks. @Jai
-Entity *item_entity_of_type_at(Item_Type_ID type, v3 p, double world_t, Room *room)
-{
-    for(int i = 0; i < room->num_entities; i++) {
-        auto *e = room->entities + i;
-        if(e->type != ENTITY_ITEM) continue;
-        if(e->item_e.item.type != type) continue;
-
-        if(entity_position(e, world_t, room) == p) {
-            return e;
-        }
-    }
-    return NULL;
-}
-
-
 void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server);
 
 
@@ -791,29 +747,6 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
 }
 
 
-void do_place_item_entity_at_tp(Item *item, v3 tp, Room *room, Room_Server *server)
-{
-    v3 p = item_entity_p_from_tp(tp, item);
-                            
-    Entity e = {0};
-    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, room->t);
-    e.id   = 1 + room->next_entity_id_minus_one++;
-                        
-    room->entities[room->num_entities++] = e;
-
-    update_walk_map_and_paths(room, server);
-}
-
-bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Room *room, Room_Server *server)
-{
-    if(can_place_item_entity_at_tp(item, tp, room->t, room->entities, room->num_entities, room))
-    {
-        do_place_item_entity_at_tp(item, tp, room, server);
-        return true;
-    }
-    return false;
-}
-
 void set_held(Entity *e, Entity *holder, bool should_be_held)
 {
     if(should_be_held) {
@@ -832,15 +765,41 @@ void set_held(Entity *e, Entity *holder, bool should_be_held)
     }
 }
 
-
-void destroy_entity(Entity *e, Room *room)
+void lock_item_entity(Entity *e, Entity_ID locker)
 {
-    Assert(room->num_entities > 0);
-    
-    Assert(e >= room->entities);
-    Assert(e <= room->entities + room->num_entities-1);
-    Assert((u64)((u8 *)e - (u8 *)room->entities) % sizeof(Entity) == 0);
+    Assert(e->type == ENTITY_ITEM);
+    Assert(e->item_e.locked_by == NO_ENTITY);
 
+    e->item_e.locked_by = locker;
+}
+
+void unlock_item_entity(Entity *e, Entity_ID locker, Room *room)
+{
+    Assert(locker != NO_ENTITY);
+    Assert(e->type == ENTITY_ITEM);
+    Assert(e->item_e.locked_by == locker);
+
+    e->item_e.locked_by = NO_ENTITY;
+
+    if(is_machine(e)) {
+        maybe_begin_machine_recipe(e, room);
+    }
+}
+
+
+bool destruction_possible(Entity *e, Room *room, Entity_ID destroyer/* = NO_ENTITY*/)
+{
+    if(e->type != ENTITY_ITEM) return true;
+
+    if(e->item_e.locked_by != NO_ENTITY && e->item_e.locked_by != destroyer) return false;
+
+    return true;
+}
+
+void schedule_for_destruction(Entity *e, Room *room, Entity_ID destroyer/* = NO_ENTITY*/)
+{
+    Assert(destruction_possible(e, room, destroyer));
+    
     if(e->held_by != NO_ENTITY) {
         auto *holder = find_entity(e->held_by, room);
         if(holder) set_held(e, holder, false);
@@ -850,11 +809,88 @@ void destroy_entity(Entity *e, Room *room)
         auto *held = find_entity(e->holding, room);
         if(held) set_held(held, e, false);
     }
+        
+    // @Norelease: Check if this entity locks another entity.
+    //            If so, unlock that entity. @Incomplete
+
+    e->scheduled_for_destruction = true;
+}
+
+void destroy_scheduled_entities(Room *room)
+{
+    for(int i = 0; i < room->num_entities; i++) {
+        auto *e = &room->entities[i];
+        if(!e->scheduled_for_destruction) continue;
+
+        *e = room->entities[room->num_entities-1];
+        room->num_entities--;
+        
+        room->did_change = true;
+    }
+}
+
+
+void update_supporter(Entity *e, Room *room)
+{
+    Assert(e->type == ENTITY_ITEM);
+
+    if(is_machine(e)) {
+        maybe_begin_machine_recipe(e, room);
+    }
+}
+
+// @Speed!
+void update_supporters_of(Entity *e, Room *room)
+{
+    auto supporters = find_supporters(e, room->t, room);
+    for(int i = 0; i < supporters.n; i++) {
+        update_supporter(supporters[i], room);
+    }
+}
+
+
+void post_item_entity_move(Entity *e, Entity **old_supporters, int num_old_supporters, Entity **new_supporters, int num_new_supporters, Room *room, Room_Server *server)
+{
+    if(old_supporters) {
+        for(int i = 0; i < num_old_supporters; i++) {
+            update_supporter(old_supporters[i], room);
+        }
+    }
+
+    if(new_supporters) {
+        for(int i = 0; i < num_new_supporters; i++) {
+            update_supporter(new_supporters[i], room);
+        }
+    }
     
-    *e = room->entities[room->num_entities-1];
-    room->num_entities--;
+    update_walk_map_and_paths(room, server);
     
     room->did_change = true;
+}
+
+void do_create_item_entity_at_tp(Item *item, v3 tp, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
+{
+    v3 p = item_entity_p_from_tp(tp, item);
+                            
+    Entity e = {0};
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, room->t);
+    e.id   = 1 + room->next_entity_id_minus_one++;
+
+    auto *e_dest = room->entities + (room->num_entities++);
+    *e_dest = e;
+
+    post_item_entity_move(e_dest, NULL, 0, supporters, num_supporters, room ,server);
+}
+
+bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Room *room, Room_Server *server)
+{
+    Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = {0};
+    if(can_place_item_entity_at_tp(item, tp, room->t, room, &supporters))
+    {
+        do_create_item_entity_at_tp(item, tp, supporters.e, supporters.n, room, server);
+        return true;
+    }
+    return false;
 }
 
 
@@ -885,7 +921,7 @@ bool place_item_entity_in_inventory(User_ID as_user, Entity *e, Room *room, Room
             //             return on error, but instead retry until it succeeds (See comment for the proc.)
         }
         else {
-            destroy_entity(e, room);
+            schedule_for_destruction(e, room);
             return true;
         }
     }
@@ -915,12 +951,11 @@ void pick_up_item_entity(Entity *item_entity, Entity *player_entity, Room *room,
     Assert(item_entity->held_by == NO_ENTITY);
     Assert(player_entity->holding == NO_ENTITY); // This should have been checked before calling this procedure. For example in entity_action_predicted_possible... -EH, 2021-02-11
 
+    auto old_supporters = find_supporters(item_entity, room->t, room);
     
     set_held(item_entity, player_entity, true);
 
-    
-    update_walk_map_and_paths(room, server);            
-    room->did_change = true;        
+    post_item_entity_move(item_entity, old_supporters.e, old_supporters.n, NULL, 0, room, server);
 }
 
 
@@ -932,8 +967,11 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
     if(player == NULL) return false;
     Assert(player->type == ENTITY_PLAYER);
 
+    Player_Action_Prediction_Info prediction_info = {0};
+
+    // @Robustness: Should we tell player_action_predicted_possible to only return true here if transport_needed == NONE? (This is a variable inside predicted_possible)  -EH, 2021-03-03
     Player_State player_state = player_state_of(player, room->t, room);
-    if(!player_action_predicted_possible(action, &player_state, room->t, room)) return false;
+    if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL, NULL, NULL, &prediction_info)) return false;
     
     switch(action->type) { // @Jai: #complete
         
@@ -997,17 +1035,18 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(player);
                     Assert(player->holding != NO_ENTITY);
             
-                    // @Cleanup: Can we do a proc that finds an entity and check that it is an expected item type?
-                    auto *watering_can = find_entity(player->holding, room);
-                    Assert(watering_can);
-                    Assert(watering_can->type == ENTITY_ITEM);
-                    Assert(watering_can->item_e.item.type == ITEM_WATERING_CAN);
+                    auto *water_container = find_entity(player->holding, room);
+                    Assert(water_container);
+                    Assert(water_container->type == ENTITY_ITEM);
+                    
+                    Assert(item_types[water_container->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER);
+                    auto *lc = &water_container->item_e.item.liquid_container;
 
-                    auto *water_level = &watering_can->item_e.item.watering_can.water_level;
-                    if(*water_level >= 0.25f) // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+                    auto *water_level = &lc->amount;
+                    if(lc->liquid.type == LQ_WATER && *water_level >= 2) // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
                     {
                         plant_e->grow_progress_on_plant += 0.05f;
-                        *water_level -= 0.25f;
+                        *water_level -= 2;
 
                         room->did_change = true;
                         return true;
@@ -1089,18 +1128,21 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             
             Assert(held->held_by == player->id);
             Assert(held->type == ENTITY_ITEM);
-            
-            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item);
-            Assert(item_entity_can_be_at(held, p, room->t, room->entities, room->num_entities, room));
 
+            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item);
+            Assert(item_entity_can_be_at(held, p, room->t, room));
+            
             //--
+            
+            auto &new_supporters = prediction_info.put_down.supporters;
             
             held->item_e.p = p;
             set_held(held, player, false);
-            
-            update_walk_map_and_paths(room, server);
+
+            post_item_entity_move(held, NULL, 0, new_supporters.e, new_supporters.n, room, server);
                 
             return true;
+            
         } break;
 
         default: Assert(false); return true;
@@ -1250,31 +1292,37 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
 }
 
 
-void update_entity(Entity *e, Room *room, Room_Server *server, bool *_do_destroy)
+void update_entity(Entity *e, Room *room, Room_Server *server)
 {
-    *_do_destroy = false;
-
     switch(e->type) {
         case ENTITY_ITEM: {
 
             auto *item = &e->item_e.item;
-            if(item->type != ITEM_MACHINE) return;
 
-            auto *machine = &e->item_e.machine;
-            if(machine->stop_t >= machine->start_t) return; // Machine is not running.
+            switch(item->type) {
+                case ITEM_MACHINE: {
+                    auto *machine = &e->item_e.machine;
+                    if(machine->stop_t >= machine->start_t) return; // Machine is not running.
 
-            double time_since_start = room->t - machine->start_t;
-            if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
-            {
-                Item plant = create_item(ITEM_PLANT, item->owner, server);
+                    double time_since_start = room->t - machine->start_t;
+                    if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
+                    {
+                        Item plant = create_item(ITEM_PLANT, item->owner, server);
 
-                v3 tp = entity_position(e, room->t, room) - V3_Y * 2;
+                        v3 tp = entity_position(e, room->t, room) - V3_Y * 2;
 
-                place_item_entity_at_tp_if_possible(&plant, tp, room, server);
+                        place_item_entity_at_tp_if_possible(&plant, tp, room, server);
                 
-                machine->stop_t = room->t;
-                room->did_change = true;
+                        machine->stop_t = room->t;
+                        room->did_change = true;
+                    }
+                } break;
+
+                case ITEM_BLENDER: {
+                    update_blender(e, room);
+                } break;
             }
+            
         } break;
 
         case ENTITY_PLAYER: {
@@ -1296,17 +1344,29 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
 {
     switch(e->type) {
         case ENTITY_ITEM: {
-            
-            if(e->item_e.item.type != ITEM_MACHINE) break;
 
-            auto *machine = &e->item_e.machine;
-            if(machine->stop_t >= machine->start_t) break; // Machine is not running.
+            switch(e->item_e.item.type) {
+                case ITEM_MACHINE: {
+                    auto *machine = &e->item_e.machine;
+                    if(machine->stop_t >= machine->start_t) break; // Machine is not running.
 
-            double time_since_start = room->t - machine->start_t;
-            if(time_since_start >= 3.0) break;
+                    double time_since_start = room->t - machine->start_t;
+                    if(time_since_start >= 3.0) break;
 
-            return 3.0 - time_since_start;
-            
+                    return 3.0 - time_since_start;
+                } break;
+
+                case ITEM_BLENDER: {
+                    auto *blender = &e->item_e.blender;
+                    if(blender->t_on_recipe_begin + blender->recipe_duration < room->t) break;
+
+                    Assert(blender->recipe_duration > 0);
+                    
+                    auto time_since_start = (room->t - blender->t_on_recipe_begin);
+                    return blender->recipe_duration - time_since_start;
+                } break;
+            }
+
         } break;
 
         case ENTITY_PLAYER: {
@@ -1377,13 +1437,10 @@ void update_room(Room *room, int index, Room_Server *server)
         {
             auto *e = &room->entities[i];
             
-            bool do_destroy;
-            update_entity(e, room, server, &do_destroy);
-            if(do_destroy) {
-                destroy_entity(e, room);
-                i--;
-            }
+            update_entity(e, room, server);
         }
+
+        destroy_scheduled_entities(room);
 
         dt_left -= dt;
     }
@@ -1482,9 +1539,11 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                         can_commit = false;
                     }
 
+                    Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = {0};
+                    
                     // Check if we can commit //
                     if(can_commit) {
-                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room->entities, room->num_entities, room);
+                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room, &supporters);
                     }
 
                     if(can_commit)
@@ -1496,7 +1555,8 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                             //             return on error, but instead retry until it succeeds (See comment for the proc.)
                         }
 
-                        do_place_item_entity_at_tp(&item, tp, room, server);
+                        do_create_item_entity_at_tp(&item, tp, supporters.e, supporters.n, room, server);
+                        
                     }
                     else {
                         // Do abort //

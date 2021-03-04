@@ -1,8 +1,5 @@
 
-
-
-
-
+const int MAX_SUPPORT_POINTS = 16*16;
 
 
 v3 tp_from_p(v3 p) {
@@ -33,6 +30,48 @@ v3 tp_from_index(s32 tile_index)
 }
 
 
+// NOTE *_continuous_amount is 10 times smaller than Liquid_Container.amount.
+Liquid_Container liquid_container_lerp(Liquid_Container *a, Liquid_Container *b, float t, float *_continuous_amount = NULL /* @Jai: #bake */)
+{
+    Assert(a->liquid.type == b->liquid.type);
+
+    Liquid_Container result = *a;
+    
+    float amt = lerp(0.1f * result.amount, 0.1f * b->amount, t);
+    if(_continuous_amount) *_continuous_amount = amt;
+    
+    result.amount = floorf(amt * 10.0f);
+
+    return result;
+}
+
+Liquid_Container liquid_container_lerp(Liquid_Container *lc0, Liquid_Container *lc1, double t0, double t1, double t, float *_continuous_amount = NULL)
+{
+    double dur = t1 - t0;
+    double t_norm = (dur <= 0) ? 1 : clamp((t - t0) / dur);
+    return liquid_container_lerp(lc0, lc1, t_norm, _continuous_amount);
+}
+
+Liquid_Amount liquid_container_capacity(Item *item)
+{
+    Item_Type *item_type = item_types + item->type;
+    
+#if DEBUG
+    Assert(item_type->flags & ITEM_IS_LQ_CONTAINER);
+#endif
+
+    auto vol = item_type->volume;
+
+    switch(item->type) {
+
+        default: return vol.x * vol.y * vol.z * 10;
+    }
+
+    Assert(false);
+    return 0;
+}
+
+
 void update_entity_item(S__Entity *e, double world_t)
 {
     Assert(e->type == ENTITY_ITEM);
@@ -47,6 +86,11 @@ void update_entity_item(S__Entity *e, double world_t)
             plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * grow_speed;
             plant->grow_progress = clamp(plant->grow_progress);
         } break;
+    }
+
+    auto *type = &item_types[item->type];
+    if(type->flags & ITEM_IS_LQ_CONTAINER) {
+        item->liquid_container = liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t);
     }
 }
 
@@ -105,7 +149,7 @@ S__Entity create_item_entity(Item *item, v3 p, double world_t, Quat q = Q_IDENTI
     e.item_e.p = p;
     e.item_e.q = q;
 
-    switch(e.item_e.item.type) {
+    switch(item->type) {
         case ITEM_PLANT: {
             auto *plant_e = &e.item_e.plant;
             plant_e->t_on_plant = world_t;
@@ -114,16 +158,20 @@ S__Entity create_item_entity(Item *item, v3 p, double world_t, Quat q = Q_IDENTI
 
         case ITEM_CHESS_BOARD: {
             auto *board = &e.item_e.chess_board;
-
             reset_chess_board(board);
         } break;
+    }
+
+    if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+        e.item_e.lc0 = item->liquid_container;
+        e.item_e.lc1 = item->liquid_container;
     }
 
     return e;
 }
 
-template<typename ENTITY, typename ROOM>
-void get_entity_transform(ENTITY *e, double world_t, ROOM *room, v3 *_p, Quat *_q)
+template<typename ENTITY>
+void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_q)
 {
     ENTITY *holder = NULL;
     if(e->held_by != NO_ENTITY)
@@ -214,8 +262,8 @@ void get_entity_transform(ENTITY *e, double world_t, ROOM *room, v3 *_p, Quat *_
     *_q = Q_IDENTITY;
 }
 
-template<typename ENTITY, typename ROOM>
-v3 entity_position(ENTITY *e, double world_t, ROOM *room)
+template<typename ENTITY>
+v3 entity_position(ENTITY *e, double world_t, Room *room)
 {
     v3 p;
     Quat q; // @Unused
@@ -225,8 +273,8 @@ v3 entity_position(ENTITY *e, double world_t, ROOM *room)
 
 
 // NOTE: hands_zoffs is the z offset for the performer entity's hands from their origin.
-template<typename ENTITY, typename ROOM>
-Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, float hands_zoffs, double world_t, ROOM *room)
+template<typename ENTITY>
+Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, float hands_zoffs, double world_t, Room *room)
 {
     Array<v3s, ALLOC_TMP> positions = {0};
     
@@ -338,8 +386,8 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
 
 
-template<typename ENTITY, typename ROOM>
-AABB entity_aabb(ENTITY *e, double world_t, ROOM *room)
+template<typename ENTITY>
+AABB entity_aabb(ENTITY *e, double world_t, Room *room)
 {
     AABB bbox = {0};
     auto p = entity_position(e, world_t, room);
@@ -370,19 +418,217 @@ AABB entity_aabb(ENTITY *e, double world_t, ROOM *room)
     return bbox;
 }
 
-bool entity_has_surface(S__Entity *e)
+Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room *room)
 {
-    if(e->type != ENTITY_ITEM) return false;
-    if(e->item_e.item.type != ITEM_TABLE) return false;
+    Static_Array<Surface, 8> surfaces = {0};
+    
+    if(e->type != ENTITY_ITEM) return surfaces;
 
-    return true;
+    v3 p = entity_position(e, world_t, room);
+    Item *item = &e->item_e.item;
+    
+    switch(item->type) {
+        case ITEM_TABLE: {
+            v3s vol = item_types[item->type].volume;
+            
+            Surface surf;
+            surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
+            surf.s = { (float)vol.x, (float)vol.y };
+            array_add(surfaces, surf);
+            
+        } break;
+
+        case ITEM_BLENDER: {
+            v3s vol = item_types[item->type].volume;
+            
+            Surface surf;
+            surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
+            surf.s = { 1.0f, 1.0f };
+
+            float x0 = surf.p.x;
+            for(int y = 0; y < vol.y; y++) {
+                for(int x = 0; x < vol.x; x++) {
+                    array_add(surfaces, surf);
+                    surf.p.x += 1;
+                }
+                surf.p.x = x0;
+                surf.p.y += 1;
+            }
+            
+        } break;
+    }
+
+    return surfaces;
 }
 
 
-template<typename ENTITY, typename ROOM>
-bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *entities, s64 num_entities, ROOM *room)
+
+Entity *find_entity(Entity_ID id, Room *room)
+{
+    for(int i = 0; i < Num_Entities(room); i++) {
+        auto *e = &Entities(room)[i];
+        if(!Entity_Exists(e)) continue; // @Jai: Iterator for entities that always checks this.
+        if(e->id == id) {
+            return e;
+        }
+    }
+
+    return NULL;
+}
+
+Entity *find_player_entity(User_ID user_id, Room *room)
+{
+    for(int i = 0; i < Num_Entities(room); i++) {
+        auto *e = &Entities(room)[i];
+        if(!Entity_Exists(e)) continue;
+        if(e->type != ENTITY_PLAYER) continue;
+        if(e->player_e.user_id == user_id) {
+            return e;
+        }
+    }
+
+    return NULL;
+}
+
+
+// @Speed @Speed @Speed @Norelease
+Entity *item_entity_of_type_at(Item_Type_ID type, v3 p, double world_t, Room *room)
+{
+    for(int i = 0; i < Num_Entities(room); i++) {
+        auto *e = Entities(room) + i;
+        if(!Entity_Exists(e)) continue;
+        if(e->type != ENTITY_ITEM) continue;
+        if(e->item_e.item.type != type) continue;
+
+        if(entity_position(e, world_t, room) == p) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+// @Speed @Speed @Speed @Norelease
+Entity *entity_needing_support_intersecting(v3 p, double world_t, Room *room)
+{
+    for(int i = 0; i < Num_Entities(room); i++) {
+        auto *e = Entities(room) + i;
+        if(!Entity_Exists(e)) continue;
+
+        AABB bbox = entity_aabb(e, world_t, room);
+        if(aabb_contains_point(bbox, p)) return e;
+    }
+    return NULL;
+}
+
+
+
+
+bool is_supported_by(v3 *support_points, int num_support_points, Entity *potential_supporter, double world_t, Room *room, bool *support_point_satisfied_array = NULL)
+{
+    auto surfaces = item_entity_surfaces(potential_supporter, world_t, room);
+
+    bool supported = false;
+    
+    for(int i = 0; i < surfaces.n; i++) {
+        auto &surf = surfaces[i];
+        for(int i = 0; i < num_support_points; i++)
+        {
+            auto &sp = support_points[i];
+
+            if(!floats_equal(sp.z, surf.p.z)) continue; // @Speed: We might be able to skip this surface entirely here, if all support points have the same z.
+
+            Rect rect = { surf.p.xy, surf.s };
+            if(point_inside_rect(sp.xy, rect)) {
+                if(support_point_satisfied_array) {
+                    support_point_satisfied_array[i] = true;
+                }
+                supported = true;
+            }
+        }
+    }
+
+    return supported;
+}
+
+void get_support_points(AABB bbox, Static_Array<v3, MAX_SUPPORT_POINTS> *_points)
+{
+    _points->n = 0;
+    
+    float yy = bbox.p.y + 0.5f;
+    while(yy < bbox.p.y + bbox.s.y) {
+            
+        float xx = bbox.p.x + 0.5f;
+        while(xx < bbox.p.x + bbox.s.x) {
+            array_add(*_points, { xx, yy, bbox.p.z });
+            xx += 1;
+        }
+            
+        yy += 1;
+    }
+}
+
+// NOTE: *_supported should be in a valid state when passed! We set .n to zero, though.
+template<Allocator_ID A>
+void find_supported_entities(Entity *e, Room *room, Array<Entity *, A> *_supported)
+{
+    _supported->n = 0;
+    
+    auto surfaces = item_entity_surfaces(e, room->t, room);
+    for(int i = 0; i < surfaces.n; i++) {
+        auto &surf = surfaces[i];
+
+        float x0 = surf.p.x + 0.5f;
+        v3 pp = { x0, surf.p.y + 0.5f, surf.p.z + 0.5f};
+        float x1 = pp.x + surf.s.x;
+        float y1 = pp.y + surf.s.y;
+        while(pp.y < y1) {
+            while(pp.x < x1) {
+                Entity *supported_entity = entity_needing_support_intersecting(pp, room->t, room);
+                if(supported_entity) {
+                    ensure_in_array(*_supported, supported_entity);
+                }
+                pp.x += 1;
+            }
+            pp.x = x0;
+            pp.y += 1;
+        }
+    }
+}
+
+
+// @Speed!
+Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double world_t, Room *room)
+{
+    Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = {0};
+
+    AABB bbox = entity_aabb(e, world_t, room);
+    
+    Static_Array<v3, MAX_SUPPORT_POINTS> support_points = {0};
+    get_support_points(bbox, &support_points);
+    
+    for(int i = 0; i < Num_Entities(room); i++) {
+        auto *potential_supporter = &Entities(room)[i];
+        if(!Entity_Exists(potential_supporter)) continue;
+        
+        if(is_supported_by(support_points.e, support_points.n, potential_supporter, world_t, room)) {
+            array_add(supporters, potential_supporter);
+        }
+    }
+
+    return supporters;
+}
+
+
+bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
+
+    Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = { 0 };
+    defer(if(_supporters) *_supporters = supporters;);
+    
+    if(_supporters) {
+        Zero(*_supporters);
+    }
     
     S__Entity copy = *my_entity;
     copy.item_e.p = p;
@@ -393,52 +639,38 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *e
     bool supported_by_floor = (p.z <= 0);
     
     // FIND SUPPORT POINTS //
-    v3   support_points[16*16]; // @Speed: If we would want bigger items than this, we would probably need to do the check in some other way, anyway.
-    bool support_point_satisfied[ARRLEN(support_points)] = {0};
-    int  num_support_points = 0;
-    
-    if(!supported_by_floor) // NOTE: If this is false, we will end up with zero support points, which means 100% of them are satisfied.
-    {
-        float yy = my_bbox.p.y + 0.5f;
-        while(yy < my_bbox.p.y + my_bbox.s.y) {
-            
-            float xx = my_bbox.p.x + 0.5f;
-            while(xx < my_bbox.p.x + my_bbox.s.x) {
-                support_points[num_support_points++] = { xx, yy, my_bbox.p.z - 0.5f };
-                xx += 1;
-            }
-            
-            yy += 1;
-        }
-        Assert(num_support_points <= ARRLEN(support_point_satisfied));
+    Static_Array<v3, MAX_SUPPORT_POINTS> support_points = {0}; // @Speed: If we would want bigger items than this, we would probably need to do the check in some other way, anyway.
+    bool support_point_satisfied[MAX_SUPPORT_POINTS] = {0};
+    if(!supported_by_floor) { // NOTE: If this is false, we will end up with zero support points, which means 100% of them are satisfied.
+        get_support_points(my_bbox, &support_points);
     }
     // // //
     
-    for(int i = 0; i < num_entities; i++)
+    for(int i = 0; i < Num_Entities(room); i++)
     {
-        auto *e = entities + i;
+        auto *e = &Entities(room)[i];
+        if(!Entity_Exists(e)) continue;
+        
         if(e->id == my_entity->id) continue;
         
         AABB other_bbox = entity_aabb(e, world_t, room);
 
         if(aabb_intersects_aabb(my_bbox, other_bbox))
             return false;
+        
+        // @Speed: We look up the entity's position, bbox etc both in is_supported_by and entity_aabb.  -EH, 2021-03-02
 
-        if(entity_has_surface(e)) {
-            // Are we supported by this entity?
-            
-            for(int i = 0; i < num_support_points; i++)
-            {
-                if(support_point_satisfied[i]) continue;
-            
-                if(aabb_contains_point(other_bbox, support_points[i]))
-                    support_point_satisfied[i] = true;
-            }
+        if(in_array(supporters, e)) continue;
+
+        // Are we supported by this entity?
+        if(is_supported_by(support_points.e, support_points.n, e, world_t, room, support_point_satisfied)) {
+            array_add(supporters, e);
         }
+        
     }
 
     // CHECK IF WE ARE FULLY SUPPORTED //
-    for(int i = 0; i < num_support_points; i++) {
+    for(int i = 0; i < support_points.n; i++) {
         if(!support_point_satisfied[i]) return false;
     }
     // // //
@@ -446,29 +678,25 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, ENTITY *e
     return true;
 }
 
-template<typename ENTITY, typename ROOM>
-bool item_entity_can_be_at_tp(ENTITY *my_entity, v3 tp, double world_t, ENTITY *entities, s64 num_entities, ROOM *room)
+bool item_entity_can_be_at_tp(Entity *my_entity, v3 tp, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
-    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item), world_t, entities, num_entities, room);
+    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item), world_t, room, _supporters);
 }
 
-template<typename ENTITY, typename ROOM>
-bool can_place_item_entity(Item *item, v3 p, double world_t, ENTITY *entities, s64 num_entities, ROOM *room)
+bool can_place_item_entity(Item *item, v3 p, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     S__Entity e = create_item_entity(item, p, world_t);
-    return item_entity_can_be_at(&e, e.item_e.p, world_t, entities, num_entities, room);
+    return item_entity_can_be_at(&e, e.item_e.p, world_t, room, _supporters);
 }
 
-template<typename ENTITY, typename ROOM>
-bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, ENTITY *entities, s64 num_entities, ROOM *room)
+bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
-    return can_place_item_entity(item, item_entity_p_from_tp(tp, item), world_t, entities, num_entities, room);
+    return can_place_item_entity(item, item_entity_p_from_tp(tp, item), world_t, room, _supporters);
 }
 
 
-template<typename ROOM>
-Player_State player_state_of(S__Entity *player, double world_t, ROOM *room)
+Player_State player_state_of(S__Entity *player, double world_t, Room *room)
 {
     Player_State state = {0};
     
@@ -498,105 +726,11 @@ Player_State player_state_of(S__Entity *player, double world_t, ROOM *room)
 }
 
 
-// Pass user = NULL if you're a Room Server.
-// NOTE: If check_possible = false, we assume the caller has already checked that the actions are possible.
-// NOTE: Returns true if all actions are predicted possible.
-template<typename ROOM>
-bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, int num_actions, double world_t, ROOM *room, S__User *user)
-{
-    Function_Profile();
 
-    bool all_actions_predicted_possible = true;
-    
-    for(int i = 0; i < num_actions; i++) {
-        auto *act = &actions[i];
-
-        bool possible = true;
-        
-        Array<v3, ALLOC_TMP> path = {0}; // @Speed: We should send this in, and player_action should set .n = 0. Instead of allocating new memory every time
-        Optional<Player_Action> action_needed_before;
-        while(!player_action_predicted_possible(act, state, world_t, room, &action_needed_before, &path, NULL, user)) {
-
-            Player_Action needed_act;
-            if(get(action_needed_before, &needed_act)) {
-                if(apply_actions_to_player_state(state, &needed_act, 1, world_t, room, user)) continue;
-            }
-        
-            possible = false;
-            break;
-        }
-
-        if(!possible) {
-            all_actions_predicted_possible = false;
-            continue;
-        }
-
-        if(path.n > 0) {
-            Assert(path.n >= 2);
-            state->p = path[path.n-1];
-        }
-        
-        switch(act->type) {
-            case PLAYER_ACT_ENTITY:
-            {    
-                auto *entity_act = &act->entity;
-
-                auto *e = find_entity(entity_act->target, room);
-                if(!e) continue;
-                
-                Assert(e->type == ENTITY_ITEM);
-                
-                switch(entity_act->action.type)
-                {
-                    case ENTITY_ACT_PICK_UP: {
-                        state->held_item = e->item_e.item;
-                    } break;
-
-                    case ENTITY_ACT_PLACE_IN_INVENTORY: {
-                        if(state->held_item.type != ITEM_NONE_OR_NUM &&
-                           state->held_item.id   == e->item_e.item.id)
-                        {
-                            state->held_item.type = ITEM_NONE_OR_NUM;
-                        }
-                    } break;
-
-                    case ENTITY_ACT_WATER: {
-                        Assert(state->held_item.type == ITEM_WATERING_CAN); // player_action_predicted_possible() should have checked this.
-                        auto *can = &state->held_item.watering_can;
-                        
-                        // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
-                        can->water_level -= 0.25f; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
-
-                    } break;
-
-                    case ENTITY_ACT_SIT_OR_UNSIT: {
-                        auto *sit = &entity_act->action.sit_or_unsit;
-                        if(sit->unsit) {
-                            Assert(state->sitting_on == e->id);
-                            state->sitting_on = NO_ENTITY;
-                        } else {
-                            Assert(state->sitting_on == NO_ENTITY);
-                            state->sitting_on = e->id;
-                            state->p          = entity_position(e, world_t, room); // @Speed
-                        }
-                    } break;
-                }
-            }
-            break;
-
-            case PLAYER_ACT_PUT_DOWN: {
-                state->held_item.type = ITEM_NONE_OR_NUM;
-            } break;
-        }
-        
-    }
-
-    return all_actions_predicted_possible;
-}
 
 // NOTE: Pass NULL if calling this from for example the Room Server. See note for entity_action_predicted_possible(). -EH, 2021-02-11
-template<Allocator_ID A, typename ROOM>
-AABB *find_player_put_down_volumes(S__Entity *player, double world_t, ROOM *room, int *_num, S__User *user)
+template<Allocator_ID A>
+AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room, int *_num, S__User *user)
 {
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
@@ -636,12 +770,33 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, ROOM *room
 }
 
 
-bool item_entity_can_be_moved(S__Entity *e)
+bool item_entity_can_be_moved(S__Entity *e, double world_t, Room *room)
 {
     Assert(e->type == ENTITY_ITEM);
             
     auto *item_e = &e->item_e;
-    auto *item   = &e->item_e.item;
+    auto *item   = &item_e->item;
+    
+    if(item_e->locked_by != NO_ENTITY) return false;
+
+    auto surfaces = item_entity_surfaces(e, world_t, room);
+    for(int i = 0; i < surfaces.n; i++) {
+        auto &surf = surfaces[i];
+            
+        float x0 = surf.p.x + 0.5f;
+        v3 pp = { x0, surf.p.y + 0.5f, surf.p.z + 0.5f };
+        float y1 = surf.p.y + surf.s.y;
+        float x1 = surf.p.x + surf.s.x;
+        
+        while(pp.y < y1) {
+            while(pp.x < x1) {
+                if(entity_needing_support_intersecting(pp, world_t, room)) return false; // We are supporting another entity, so we can't be moved.
+                pp.x += 1;
+            }
+            pp.x = x0;
+            pp.y += 1;
+        }
+    }
 
     switch(item->type) {
         case ITEM_MACHINE: {
@@ -660,6 +815,7 @@ bool item_entity_can_be_moved(S__Entity *e)
 }
 
 
+
 // NOTE: user can be null, when we for example do this on the Room Server.
 //       The room server don't know much about the user. So (IMPORTANT) it will not check
 //       stuff that is in the User struct. But it should then in some way ask the User
@@ -674,7 +830,7 @@ bool item_entity_can_be_moved(S__Entity *e)
 // NOTE: @Norelease: We can't yet pass another world_t than the room's t. If we want
 //                   to do that, we need to simulate the room up to that t (temporarily)
 //                   before we check the state of entities!
-bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, bool *_sitting_allowed, S__User *user = NULL)
+bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, Room *room, bool *_sitting_allowed, S__User *user = NULL)
 {
     Function_Profile();
     
@@ -707,7 +863,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
             
             if(item->owner != player_state->user_id) return false;
 
-            if(!item_entity_can_be_moved(e)) return false;
+            if(!item_entity_can_be_moved(e, world_t, room)) return false;
             
             return true;
             
@@ -722,7 +878,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
 
             if(item->owner != player_state->user_id) return false;
 
-            if(!item_entity_can_be_moved(e)) return false;
+            if(!item_entity_can_be_moved(e, world_t, room)) return false;
     
             if(user) {
                 if(!inventory_has_available_space_for_item_type(item->type, user)) return false;
@@ -778,10 +934,11 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
 
             auto *plant_e = &e->item_e.plant;
 
-            if(player_state->held_item.type != ITEM_WATERING_CAN) return false;
+            if(!(item_types[player_state->held_item.type].flags & ITEM_IS_LQ_CONTAINER)) return false;
+            auto *lc = &player_state->held_item.liquid_container;
 
-            auto *can = &player_state->held_item.watering_can;
-            if(can->water_level < 0.25f) return false; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+            if(lc->liquid.type != LQ_WATER) return false;
+            if(lc->amount < 2) return false; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
 
             return true;
         } break;
@@ -826,10 +983,20 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
     return true;
 }
 
+
+// @BadName
+struct Player_Action_Prediction_Info
+{
+    union {
+        struct {
+            Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters;
+        } put_down;
+    };
+};
+
 // NOTE: See notes for entity_action_predicted_possible().
 // IMPORTANT: You can't pass _found_path_duration without passing _found_path.
-template<typename ROOM>
-bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, ROOM *room, Optional<Player_Action> *_action_needed_before = NULL, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, S__User *user = NULL)
+bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, Room *room, Optional<Player_Action> *_action_needed_before = NULL, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, Player_Action_Prediction_Info *_info = NULL, S__User *user = NULL)
 {
     Function_Profile();
 
@@ -837,7 +1004,6 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
     
     Assert(player_state);
     Assert(player_state->user_id != NO_USER);
-
 
     enum Transport_Mode {
         WALK,
@@ -860,7 +1026,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             S__Entity *e = find_entity(entity_act->target, room);
             if(!e) return false;
 
-            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, &sitting_allowed, user)) return false;
+            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, room, &sitting_allowed, user)) return false;
                         
             if(e->held_by == NO_ENTITY) {
                 possible_p1s = entity_action_positions(e, &entity_act->action, player_entity_hands_zoffs, world_t, room);
@@ -902,7 +1068,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             //             So it is possible to put down two entities in the same spot right now.
 
             // This is @Temporary (See comments above).
-
+            if(!item_entity_can_be_at(&held_entity_replica, put_down_p, world_t, room, &_info->put_down.supporters))
+                return false;
 
             // @Cleanup @Hack !!!
             Entity_Action dummy_action = {0};
@@ -1039,4 +1206,106 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
     }
 
     
+}
+
+
+
+// Pass user = NULL if you're a Room Server.
+// NOTE: If check_possible = false, we assume the caller has already checked that the actions are possible.
+// NOTE: Returns true if all actions are predicted possible.
+bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, int num_actions, double world_t, Room *room, S__User *user)
+{
+    Function_Profile();
+
+    bool all_actions_predicted_possible = true;
+    
+    for(int i = 0; i < num_actions; i++) {
+        auto *act = &actions[i];
+
+        bool possible = true;
+
+        Player_Action_Prediction_Info prediction_info = {0};
+        
+        Array<v3, ALLOC_TMP> path = {0}; // @Speed: We should send this in, and player_action should set .n = 0. Instead of allocating new memory every time
+        Optional<Player_Action> action_needed_before;
+        while(!player_action_predicted_possible(act, state, world_t, room, &action_needed_before, &path, NULL, &prediction_info, user)) {
+
+            Player_Action needed_act;
+            if(get(action_needed_before, &needed_act)) {
+                if(apply_actions_to_player_state(state, &needed_act, 1, world_t, room, user)) continue;
+            }
+        
+            possible = false;
+            break;
+        }
+
+        if(!possible) {
+            all_actions_predicted_possible = false;
+            continue;
+        }
+
+        if(path.n > 0) {
+            Assert(path.n >= 2);
+            state->p = path[path.n-1];
+        }
+        
+        switch(act->type) {
+            case PLAYER_ACT_ENTITY:
+            {    
+                auto *entity_act = &act->entity;
+
+                auto *e = find_entity(entity_act->target, room);
+                if(!e) continue;
+                
+                Assert(e->type == ENTITY_ITEM);
+                
+                switch(entity_act->action.type)
+                {
+                    case ENTITY_ACT_PICK_UP: {
+                        state->held_item = e->item_e.item;
+                    } break;
+
+                    case ENTITY_ACT_PLACE_IN_INVENTORY: {
+                        if(state->held_item.type != ITEM_NONE_OR_NUM &&
+                           state->held_item.id   == e->item_e.item.id)
+                        {
+                            state->held_item.type = ITEM_NONE_OR_NUM;
+                        }
+                    } break;
+
+                    case ENTITY_ACT_WATER: {
+                        Assert(item_types[state->held_item.type].flags & ITEM_IS_LQ_CONTAINER); // player_action_predicted_possible() should have checked this.
+                        auto *lc = &state->held_item.liquid_container;
+
+                        Assert(lc->liquid.type == LQ_WATER); // player_action_predicted_possible() should have checked this.
+                        Assert(lc->amount >= 2); // player_action_predicted_possible() should have checked this.
+                        
+                        // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
+                        lc->amount -= 2; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+
+                    } break;
+
+                    case ENTITY_ACT_SIT_OR_UNSIT: {
+                        auto *sit = &entity_act->action.sit_or_unsit;
+                        if(sit->unsit) {
+                            Assert(state->sitting_on == e->id);
+                            state->sitting_on = NO_ENTITY;
+                        } else {
+                            Assert(state->sitting_on == NO_ENTITY);
+                            state->sitting_on = e->id;
+                            state->p          = entity_position(e, world_t, room); // @Speed
+                        }
+                    } break;
+                }
+            }
+            break;
+
+            case PLAYER_ACT_PUT_DOWN: {
+                state->held_item.type = ITEM_NONE_OR_NUM;
+            } break;
+        }
+        
+    }
+
+    return all_actions_predicted_possible;
 }

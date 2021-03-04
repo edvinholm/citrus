@@ -378,7 +378,7 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
         Item_Type *type = &item_types[slot.item_type];
         label = type->name;
         Assert(label.length > 0);
-        label.length = 1;
+        label.length = min(3, label.length);
     }
     
     _draw_button_label(label, slot.a, gfx);
@@ -755,13 +755,13 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room 
             bool can_be_placed = true;
             
             v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
-            if(!can_place_item_entity_at_tp(item_to_place, tp, world_t, room->entities.e, room->entities.n, room)) {
+            if(!can_place_item_entity_at_tp(item_to_place, tp, world_t, room)) {
                 shadow_color = { 0.4,   0.1,  0.1, 1 };
                 can_be_placed = false;
             }
             
             Entity preview_entity = create_preview_item_entity(item_to_place, tp, world_t, Q_IDENTITY);
-            draw_entity(&preview_entity, world_t, room, client, gfx, false, false, /*cannot_be_placed = */!can_be_placed);
+            draw_entity(&preview_entity, world_t, room, client, gfx, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
 
@@ -837,11 +837,18 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         }
 
         // DRAW WORLD //
-        Entity_ID highlighted_surface_entity = (item_to_place) ? room->placement_surface_entity : NO_ENTITY;
-        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity, highlighted_surface_entity);
+        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity);
+
+        // SURFACE HIGHLIGHT //
+        if(wv->surface_is_hovered) {
+            auto surf = wv->hovered_surface;
+            
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+            draw_quad(surf.p + V3_Z * 0.002f, V3_X * surf.s.x, V3_Y * surf.s.y, C_YELLOW, gfx);
+        }
 
         // HOVERED TILE, ITEM PREVIEW //
-        if(wv->hovered_entity == NO_ENTITY || wv->entity_surface_hovered)
+        if(wv->hovered_entity == NO_ENTITY || wv->surface_is_hovered)
         {
             v3 hovered_tp;
             if(item_to_place) hovered_tp = room->placement_tp;

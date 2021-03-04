@@ -1678,8 +1678,9 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     view->clicked_entity  = NO_ENTITY;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
-    s32       hovered_tile_ix = -1;
-    Entity_ID hovered_entity  = NO_ENTITY;
+    s32       hovered_tile_ix    = -1;
+    Entity_ID hovered_entity     = NO_ENTITY;
+    bool      surface_is_hovered = false;
     
     if(e == hovered_element)
     {
@@ -1687,15 +1688,18 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 
         double world_t = world_time_for_room(room, t);
         
-        v3   entity_hit_p;
-        bool entity_hit_surface;
-        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, &entity_hit_p, &entity_hit_surface);
+        v3      entity_hit_p;
+        bool    entity_hit_was_on_surface;
+        Surface entity_hit_surface;
+        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, &entity_hit_p, &entity_hit_was_on_surface, &entity_hit_surface);
         if (entity_hit) {
 
             hovered_entity = entity_hit->id;
-            
-            view->entity_surface_hovered = entity_hit_surface;
             view->hovered_entity_hit_p   = entity_hit_p;
+            
+            surface_is_hovered = entity_hit_was_on_surface;
+            view->hovered_surface    = entity_hit_surface;
+            view->surface_hit_p      = entity_hit_p;
 
             if (view->click_state & PRESSED_NOW) {
                 view->pressed_entity = hovered_entity;
@@ -1729,8 +1733,9 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
         
     }
 
-    view->hovered_tile_ix        = hovered_tile_ix;
-    view->hovered_entity         = hovered_entity;
+    view->hovered_tile_ix    = hovered_tile_ix;
+    view->hovered_entity     = hovered_entity;
+    view->surface_is_hovered = surface_is_hovered;
 
     if(!(view->click_state & PRESSED))
         view->pressed_tile_ix = -1;

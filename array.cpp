@@ -340,6 +340,20 @@ T *array_add(Static_Array<T, Size> &array, T item)
 }
 
 
+
+template<typename T, int Size>
+void array_set(Static_Array<T, Size> &array, T *elements, s64 num_elements)
+{
+    if(num_elements > Size) {
+        Assert(num_elements <= Size);
+        return;
+    }
+    
+    memcpy(array.e, elements, sizeof(T) * num_elements);
+    array.n = num_elements;
+}
+
+
 template<typename T, int Size>
 T *last_element_pointer(Static_Array<T, Size> &array)
 {

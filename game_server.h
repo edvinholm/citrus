@@ -3,11 +3,16 @@
   Server Game
 */
 
+#define Num_Entities(Room_Pointer) ((Room_Pointer)->num_entities)
+#define Entities(Room_Pointer) ((Room_Pointer)->entities)
+
+#define Entity_Exists(Entity_Pointer) (!(Entity_Pointer)->scheduled_for_destruction)
 
 namespace Server_Game
 {
     struct Entity: public S__Entity
     {
+        bool scheduled_for_destruction;
     };
 
     struct Room: public S__Room {

@@ -157,7 +157,7 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
-void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool surface_hovered = false, bool cannot_be_placed = false)
+void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool cannot_be_placed = false)
 {
     auto *s_e = static_cast<S__Entity *>(e);
 
@@ -172,6 +172,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     v4 base_color = V4_ONE;
 
     float fill = 0;
+    v4 fill_color = C_WHITE;
     
     if(e->type == ENTITY_ITEM)
     {
@@ -190,8 +191,15 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         base_color = item_type->color;
 
-        if(item->type == ITEM_WATERING_CAN) {
-            fill = item->watering_can.water_level;
+        if(item_type->flags & ITEM_IS_LQ_CONTAINER)
+        {
+            float capacity = liquid_container_capacity(item) / 10.0f;
+
+            float liquid_amount;
+            liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t, &liquid_amount);
+            
+            fill = (capacity > 0) ? liquid_amount / capacity : 0;
+            fill_color = liquid_colors[item->liquid_container.liquid.type];
         }
 
         if(item->type == ITEM_CHESS_BOARD) {
@@ -268,8 +276,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     // ---
 
     if(fill > 0) {
-        v4 fill_color = { base_color.b * 1.1f, base_color.g * 1.1f, base_color.r * 1.1f, 1.0 };
-        
         v3 fill_s = volume;
         fill_s.z *= fill;
         draw_cube_ps(origin, fill_s, fill_color, gfx);
@@ -279,9 +285,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     }
     draw_cube_ps(origin, volume, base_color, gfx);
 
-    if(surface_hovered) {
-        draw_quad(origin + V3_Z * (volume.z + 0.01f), V3_X * volume.x, V3_Y * volume.y, C_YELLOW, gfx);
-    }
     
     if(e->type == ENTITY_PLAYER)
     {    
@@ -343,7 +346,7 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
     v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
     v4 grass = {0.25, 0.6,  0.1, 1.0f};
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
-    v4 water = {0.1,  0.3, 0.5,  0.9f};
+    v4 water = C_WATER;
 
     auto *tiles = room->tiles;
 

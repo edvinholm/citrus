@@ -86,9 +86,11 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                 slot.flags |= INV_SLOT_FILLED;
                 slot.item   = create_item(type, user.id, server);
 
-                if(slot.item.type == ITEM_WATERING_CAN)
+                if((item_types[slot.item.type].flags & ITEM_IS_LQ_CONTAINER) &&
+                   slot.item.type != ITEM_BLENDER)
                 {
-                    slot.item.watering_can.water_level = random_float();
+                    float capacity = liquid_container_capacity(&slot.item);
+                    slot.item.liquid_container.amount = floorf(random_float() * capacity);
                 }
             }
             

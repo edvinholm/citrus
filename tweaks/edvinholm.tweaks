@@ -27,6 +27,6 @@ color_tiles_by_position false
 
 
 
-show_entity_action_positions true
+# show_entity_action_positions true
 
 # show_player_entity_parts true

@@ -117,3 +117,11 @@ T *current(Static_Stack<T *, Max> &stack)
 {
     return current_<T *, Max>(stack, NULL);
 }
+
+
+template<typename T>
+void copy_elements(T *dest, T *src, size_t num)
+{
+    memcpy(dest, src, sizeof(T) * num);
+}
+

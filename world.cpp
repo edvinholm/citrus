@@ -85,7 +85,7 @@ double world_time_for_room(Room *room, double system_time)
 }
 
 
-Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL, bool *_hit_surface = NULL)
+Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL, bool *_did_hit_surface = NULL, Surface *_hit_surface = NULL)
 {
     Entity *closest_hit   = NULL;
     float   closest_ray_t = FLT_MAX;
@@ -105,14 +105,21 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p
                     
                 if(_hit_p) *_hit_p = intersection;
 
-                if(_hit_surface) {
-                    *_hit_surface = false;
-                    
-                    if(entity_has_surface(e)) {
-                        if(floats_equal(intersection.z, bbox.p.z + bbox.s.z)) {
-                            *_hit_surface = true;
+                if(_did_hit_surface) {
+                    *_did_hit_surface = false;
+
+                    auto surfaces = item_entity_surfaces(e, world_t, room);
+                    for(int i = 0; i < surfaces.n; i++) {
+                        auto &surf = surfaces[i];
+                        if(!floats_equal(intersection.z, surf.p.z)) continue;
+
+                        Rect rect = { surf.p.xy, surf.s };
+                        if(point_inside_rect(intersection.xy, rect)) {
+                            *_did_hit_surface = true;
+                            if(_hit_surface) *_hit_surface = surf;
                         }
                     }
+                    
                 }
             }
         }
@@ -228,16 +235,6 @@ Entity *add_entity(Entity e, Room *room)
     return array_add(room->entities, e);
 }
 
-Entity *find_entity(Entity_ID id, Room *room)
-{
-    for(int i = 0; i < room->entities.n; i++) {
-        auto *e = &room->entities[i];
-        if(e->id == id) return e;
-    }
-
-    return NULL;
-}
-
 Entity *find_or_add_entity(Entity_ID id, Room *room)
 {
     Entity *found_entity = find_entity(id, room);
@@ -247,36 +244,6 @@ Entity *find_or_add_entity(Entity_ID id, Room *room)
     new_entity.id = id;
     return add_entity(new_entity, room);
 }
-
-Entity *find_player_entity(User_ID user_id, Room *room)
-{
-    for(int i = 0; i < room->entities.n; i++) {
-        auto *e = &room->entities[i];
-        if(e->type != ENTITY_PLAYER) continue;
-        if(e->player_e.user_id == user_id) return e;
-    }
-
-    return NULL;
-}
-
-// @Speed @Speed @Speed @Norelease
-// IMPORTANT: There is one implementation for this for the client, and one for the room server.
-//            Because C++ sucks. @Jai
-Entity *item_entity_of_type_at(Item_Type_ID type, v3 p, double world_t, Room *room)
-{
-    for(int i = 0; i < room->entities.n; i++) {
-        auto *e = room->entities.e + i;
-        if(e->type != ENTITY_ITEM) continue;
-        if(e->item_e.item.type != type) continue;
-
-        if(entity_position(e, world_t, room) == p) {
-            return e;
-        }
-    }
-    return NULL;
-}
-
-
 
 void update_local_data_for_room(Room *room, double world_t, Client *client)
 {
@@ -317,19 +284,6 @@ Player_State player_state_after_completed_action_queue(Entity *player, double wo
     } else {
         return player_state_of(player, world_t, room);
     }
-}
-
-
-
-bool item_entity_can_be_at_tp(Entity *e, v3 tp, double world_t, Room *room)
-{
-    Assert(e->type == ENTITY_ITEM);
-    return item_entity_can_be_at_tp(e, tp, world_t, room->entities.e, room->entities.n, room);
-}
-
-bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room)
-{
-    return can_place_item_entity_at_tp(item, tp, world_t, room->entities.e, room->entities.n, room);
 }
 
 

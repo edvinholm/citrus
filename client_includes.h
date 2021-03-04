@@ -66,13 +66,15 @@
 
 #include "pathfinding.h"
 
+#include "color.h"
+
+#include "recipe.h"
+
 #include "game_shared.h"
 #include "user.h"
 #include "market.h"
 
-#include "user_shared.cpp"
-#include "world_shared.cpp"
-
+#include "recipe.cpp"
 
 #include "transaction.h"
 
@@ -83,7 +85,6 @@
 
 #include "net_client.h"
 
-#include "color.h"
 #include "ui.h"
 
 
@@ -93,8 +94,12 @@ using namespace Client_Game;
 using namespace Client_User;
 using namespace Client_Market;
 
+#include "user_shared.cpp"
+#include "world_shared.cpp"
+
 
 #include "pathfinding_shared.cpp"
+
 
 
 #include "ui_dev_client.h"

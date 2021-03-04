@@ -22,9 +22,18 @@ enum Item_Type_ID
     ITEM_MACHINE,
     ITEM_WATERING_CAN,
     ITEM_CHESS_BOARD,
+    ITEM_BARREL,
+    ITEM_BLENDER,
 
     ITEM_NONE_OR_NUM
 };
+
+enum Item_Type_Flag_: u8 {
+    ITEM_IS_LQ_CONTAINER = 0x01
+};
+
+typedef u8 Item_Type_Flags;
+static_assert(sizeof(Item_Type_Flags) == sizeof(Item_Type_Flag_));
 
 struct Item_Type
 {
@@ -32,6 +41,8 @@ struct Item_Type
     v4 color;
 
     String name;
+
+    Item_Type_Flags flags;
 };
 
 enum Entity_Action_Type
@@ -72,13 +83,15 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair") },
-    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed") }, 
-    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table") },
-    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant") },
-    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine") },
-    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can") },
-    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board") }
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), 0 },
+    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   0 },
+    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), 0 },
+    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), 0 },
+    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"), 0 },
+    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), ITEM_IS_LQ_CONTAINER },
+    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"), 0 },
+    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"), ITEM_IS_LQ_CONTAINER },
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), ITEM_IS_LQ_CONTAINER }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -98,6 +111,39 @@ bool operator != (const Item_ID &a, const Item_ID &b) {
 
 const Item_ID NO_ITEM = { 0, 0 };
 
+enum Liquid_Type: u8 {
+    LQ_WATER,
+    LQ_NONE_OR_NUM
+};
+
+#if !(SERVER)
+v4 liquid_colors[] = {
+    C_WATER
+};
+static_assert(ARRLEN(liquid_colors) == LQ_NONE_OR_NUM);
+#endif
+
+struct Liquid
+{
+    Liquid_Type type;
+    union {
+        /* TODO 
+        struct {
+            float yeast;
+            float nutrition;
+        } yeast_water;
+        */
+    };
+};
+
+typedef u32 Liquid_Amount;
+
+struct Liquid_Container
+{
+    Liquid liquid;
+    Liquid_Amount amount;
+};
+
 struct Item {
     Item_ID id;
     Item_Type_ID type;
@@ -107,11 +153,9 @@ struct Item {
         struct {
             float grow_progress;
         } plant;
-
-        struct {
-            float water_level; // 0 -> 1
-        } watering_can;
     };
+    
+    Liquid_Container liquid_container; // If item_types[.type].flags & ITEM_IS_LQ_CONTAINER
 };
 
 bool equal(Item *a, Item *b)
@@ -191,6 +235,8 @@ struct S__Entity
             Quat q;
             
             Item item;
+            
+            Entity_ID locked_by;
 
             union {
                 struct {
@@ -203,8 +249,25 @@ struct S__Entity
                     World_Time stop_t;
                 } machine;
 
+                struct {
+                    World_Time t_on_recipe_begin; // NOTE: We are currently "doing" a recipe if t_on_recipe_begin + recipe_duration > t.
+                    World_Time recipe_duration;
+                    
+                    //NOTE: These are only valid if t_on_recipe_begin + recipe_duration > t
+                    Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_inputs;
+                    //--
+                    
+                } blender;
+
                 Chess_Board chess_board;
             };
+
+            // NOTE: Only valid if item's type's flags & ITEM_IS_LQ_CONTAINER.
+            World_Time lc_t0;
+            World_Time lc_t1;
+            Liquid_Container lc0;
+            Liquid_Container lc1;
+            
         } item_e;
 
         struct {
@@ -229,6 +292,10 @@ void clear(S__Entity *e)
     dealloc(e->player_e.walk_path, ALLOC_MALLOC);
 }
 
+
+// TODO: Should predict some entity state too. For example, will this entity have anything
+//       that needs support on its surface? If we have PICK_UPs for all the supported entities
+//       queued, this should be predicted to false.... -EH, 2021-03-02
 
 // This is what we use to predict, for example, if a particular
 // action will be possible after a given queue of actions has been performed.
@@ -280,3 +347,10 @@ struct S__Room
 void clear(S__Room *room) {
     
 }
+
+
+struct Surface
+{
+    v3 p;
+    v2 s;
+};

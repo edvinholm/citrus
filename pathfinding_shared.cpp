@@ -571,7 +571,7 @@ bool find_path(v3s start, v3s *ends, int num_ends, Walk_Map *walk_map, bool do_r
 // TODO @Cleanup: Remove this proc. find_path does multiple goals now.
 // TODO @Cleanup: Remove this proc. find_path does multiple goals now.
 // NOTE: *_was_same_start_and_end_tile duration will only be set if allow_same_start_and_end_tile == false.
-bool find_path_to_any(v3 p0, v3s *possible_p1s, int num_possible_p1s, Walk_Map *walk_map, bool do_reduce_path, Array<v3, ALLOC_TMP> *_path = NULL, double *_dur = NULL)
+bool find_path_to_any(v3 p0, v3s *possible_p1s, int num_possible_p1s, Walk_Map *walk_map, bool do_reduce_path, Array<v3, ALLOC_TMP> *_path/* = NULL*/, double *_dur/* = NULL*/)
 {
     Function_Profile();
     

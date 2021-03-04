@@ -77,7 +77,7 @@ void request(Player_Action *action, Client *client)
     array_add(client->connections.room_action_queue, c_rs_act);
 }
 
-bool predicted_possible(Player_Action *action, double world_t, Client *client)
+bool predicted_possible(Player_Action *action, double world_t, Client *client, Player_Action_Prediction_Info *_prediction_info = NULL)
 {
     Entity *player = find_current_player_entity(client);
     if(player == NULL) return false;
@@ -94,7 +94,7 @@ bool predicted_possible(Player_Action *action, double world_t, Client *client)
         Optional<Player_Action> action_needed_before = {0};
         if(player_action_predicted_possible(action, &player_state,
                                             world_t, room, &action_needed_before,
-                                            NULL, NULL, user)) {
+                                            NULL, NULL, _prediction_info, user)) {
             return true;
         }
         else {
@@ -856,6 +856,12 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
             ui_text(P(ctx), owner_str);
         }
 
+        if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+            _TOP_CUT_(20);
+            String liquid_str = concat_tmp("Liquid Level: ", item->liquid_container.amount);
+            ui_text(P(ctx), liquid_str);
+        }
+
 #if DEBUG
         if(e)
         { _TOP_CUT_(20);
@@ -1337,15 +1343,10 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         // // //
     
         // Placement TP //
-        room->placement_surface_entity = NO_ENTITY;
         room->placement_tp = tp_from_index(wv->hovered_tile_ix);
     
-        if(wv->hovered_entity != NO_ENTITY && wv->entity_surface_hovered) {
-            Entity *surface_entity = find_entity(wv->hovered_entity, room);
-            if(surface_entity) {
-                room->placement_surface_entity = surface_entity->id;
-                room->placement_tp             = tp_from_p(wv->hovered_entity_hit_p);
-            }
+        if(wv->surface_is_hovered) {
+            room->placement_tp  = tp_from_p(wv->surface_hit_p);
         }
         // // //
 

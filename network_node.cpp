@@ -519,6 +519,62 @@ bool write_Item_ID(Item_ID id, Network_Node *node)
     return true;
 }
 
+// @Norelease @Security: Check that it is a valid type.
+bool read_Liquid_Type(Liquid_Type *_type, Network_Node *node)
+{
+    static_assert(sizeof(*_type) == sizeof(u8));
+    Read(u8, type, node);
+    *_type = (Liquid_Type)type;
+    return true;
+}
+
+bool write_Liquid_Type(Liquid_Type type, Network_Node *node)
+{
+    static_assert(sizeof(type) == sizeof(u8));
+    Write(u8, type, node);
+    return true;
+}
+
+bool read_Liquid(Liquid *_lq, Network_Node *node)
+{
+    Read_To_Ptr(Liquid_Type, &_lq->type, node);
+    return true;
+}
+
+bool write_Liquid(Liquid lq, Network_Node *node)
+{
+    Write(Liquid_Type, lq.type, node);
+    return true;
+}
+
+bool read_Liquid_Amount(Liquid_Amount *_amt, Network_Node *node)
+{
+    static_assert(sizeof(*_amt) == sizeof(u32));
+    Read_To_Ptr(u32, _amt, node);
+    return true;
+}
+
+bool write_Liquid_Amount(Liquid_Amount amt, Network_Node *node)
+{
+    static_assert(sizeof(amt) == sizeof(u32));
+    Write(u32, amt, node);
+    return true;
+}
+
+bool read_Liquid_Container(Liquid_Container *_lc, Network_Node *node)
+{
+    Read_To_Ptr(Liquid,        &_lc->liquid, node);
+    Read_To_Ptr(Liquid_Amount, &_lc->amount, node);
+    return true;
+}
+
+bool write_Liquid_Container(Liquid_Container lc, Network_Node *node)
+{
+    Write(Liquid,        lc.liquid, node);
+    Write(Liquid_Amount, lc.amount, node);
+    return true;
+}
+
 bool read_Item(Item *_item, Network_Node *node)
 {
     Read_To_Ptr(Item_ID,      &_item->id,    node);
@@ -530,11 +586,11 @@ bool read_Item(Item *_item, Network_Node *node)
             auto *x = &_item->plant;
             Read_To_Ptr(float, &x->grow_progress, node);
         } break;
+    }
 
-        case ITEM_WATERING_CAN: {
-            auto *x = &_item->watering_can;
-            Read_To_Ptr(float, &x->water_level, node);
-        } break;
+    // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
+    if(item_types[_item->type].flags & ITEM_IS_LQ_CONTAINER) {
+        Read_To_Ptr(Liquid_Container, &_item->liquid_container, node);
     }
     
     return true;
@@ -551,11 +607,11 @@ bool write_Item(Item item, Network_Node *node)
             auto *x = &item.plant;
             Write(float, x->grow_progress, node);
         } break;
-            
-        case ITEM_WATERING_CAN: {
-            auto *x = &item.watering_can;
-            Write(float, x->water_level, node);
-        } break;
+    }
+
+    // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
+    if(item_types[item.type].flags & ITEM_IS_LQ_CONTAINER) {
+        Write(Liquid_Container, item.liquid_container, node);
     }
     
     return true;
@@ -1076,8 +1132,11 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             auto *x = &_entity->item_e;
             
             Read_To_Ptr(v3, &x->p, node);
+            // TODO: Sync Quat q.
             
             Read_To_Ptr(Item, &x->item, node);
+
+            Read_To_Ptr(Entity_ID, &x->locked_by, node);
             
             switch(x->item.type) {
                 case ITEM_PLANT: {
@@ -1096,16 +1155,29 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                     auto *board = &x->chess_board;
                     Read_To_Ptr(Chess_Board, board, node);
                 } break;
-                    
 
-                case ITEM_WATERING_CAN:
-                case ITEM_CHAIR:
-                case ITEM_BED:
-                case ITEM_TABLE:
-                    break;
+                case ITEM_BLENDER: {
+                    auto *blender = &x->blender;
+                    Read_To_Ptr(World_Time, &blender->t_on_recipe_begin, node);
+                    Read_To_Ptr(World_Time, &blender->recipe_duration, node);
 
-                default: Assert(false); break;
+                    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+                    Read_To_Ptr(s64, &blender->recipe_inputs.n, node);
+                    Fail_If_True(blender->recipe_inputs.n > ARRLEN(blender->recipe_inputs.e));
+                    for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
+                        Read_To_Ptr(Entity_ID, &blender->recipe_inputs.e[i], node);
+                    }
+                } break;
             }
+
+            auto *type = &item_types[x->item.type];
+            if(type->flags & ITEM_IS_LQ_CONTAINER) {
+                Read_To_Ptr(World_Time, &x->lc_t0, node);
+                Read_To_Ptr(World_Time, &x->lc_t1, node);
+                Read_To_Ptr(Liquid_Container, &x->lc0, node);
+                Read_To_Ptr(Liquid_Container, &x->lc1, node);
+            }
+            
         } break;
             
         case ENTITY_PLAYER: {
@@ -1153,8 +1225,11 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             auto *x = &entity->item_e;
             
             Write(v3, x->p, node);
+            // TODO: Sync Quat q.
             
             Write(Item, x->item, node);
+            
+            Write(Entity_ID, x->locked_by, node);
             
             switch(x->item.type) {
                 case ITEM_PLANT: {
@@ -1174,13 +1249,27 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                     Write(Chess_Board, board, node);
                 } break;
                     
-                case ITEM_WATERING_CAN:                    
-                case ITEM_CHAIR:
-                case ITEM_BED:
-                case ITEM_TABLE:
-                    break;
+                case ITEM_BLENDER: {
+                    auto *blender = &x->blender;
+                    Write(World_Time, blender->t_on_recipe_begin, node);
+                    Write(World_Time, blender->recipe_duration, node);
 
-                default: Assert(false); break;
+                    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+                    Write(s64, blender->recipe_inputs.n, node);
+                    for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
+                        Write(Entity_ID, blender->recipe_inputs.e[i], node);
+                    }
+
+                } break;
+            }
+
+            
+            auto *type = &item_types[x->item.type];
+            if(type->flags & ITEM_IS_LQ_CONTAINER) {
+                Write(World_Time, x->lc_t0, node);
+                Write(World_Time, x->lc_t1, node);
+                Write(Liquid_Container, x->lc0, node);
+                Write(Liquid_Container, x->lc1, node);
             }
             
         } break;
