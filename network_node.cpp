@@ -535,17 +535,48 @@ bool write_Liquid_Type(Liquid_Type type, Network_Node *node)
     return true;
 }
 
+
+bool read_Liquid_Fraction(Liquid_Fraction *_f, Network_Node *node)
+{
+    static_assert(sizeof(*_f) == sizeof(u32));
+    Read_To_Ptr(u32, _f, node);
+    return true;
+}
+
+bool write_Liquid_Fraction(Liquid_Fraction f, Network_Node *node)
+{
+    static_assert(sizeof(f) == sizeof(u32));
+    Write(u32, f, node);
+    return true;
+}
+
+
 bool read_Liquid(Liquid *_lq, Network_Node *node)
 {
     Read_To_Ptr(Liquid_Type, &_lq->type, node);
+
+    if(_lq->type == LQ_YEAST_WATER) {
+        auto &yw = _lq->yeast_water;
+        Read_To_Ptr(Liquid_Fraction, &yw.yeast, node);
+        Read_To_Ptr(Liquid_Fraction, &yw.nutrition, node);
+    }
+    
     return true;
 }
 
 bool write_Liquid(Liquid lq, Network_Node *node)
 {
     Write(Liquid_Type, lq.type, node);
+
+    if(lq.type == LQ_YEAST_WATER) {
+        auto &yw = lq.yeast_water;
+        Write(Liquid_Fraction, yw.yeast, node);
+        Write(Liquid_Fraction, yw.nutrition, node);
+    }
+    
     return true;
 }
+
 
 bool read_Liquid_Amount(Liquid_Amount *_amt, Network_Node *node)
 {
@@ -560,6 +591,7 @@ bool write_Liquid_Amount(Liquid_Amount amt, Network_Node *node)
     Write(u32, amt, node);
     return true;
 }
+
 
 bool read_Liquid_Container(Liquid_Container *_lc, Network_Node *node)
 {

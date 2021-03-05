@@ -24,6 +24,7 @@ enum Item_Type_ID
     ITEM_CHESS_BOARD,
     ITEM_BARREL,
     ITEM_BLENDER,
+    ITEM_FRUIT,
 
     ITEM_NONE_OR_NUM
 };
@@ -91,7 +92,8 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), ITEM_IS_LQ_CONTAINER },
     { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"), 0 },
     { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"), ITEM_IS_LQ_CONTAINER },
-    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), ITEM_IS_LQ_CONTAINER }
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), ITEM_IS_LQ_CONTAINER },
+    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), 0 }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -113,36 +115,67 @@ const Item_ID NO_ITEM = { 0, 0 };
 
 enum Liquid_Type: u8 {
     LQ_WATER,
+    LQ_YEAST_WATER,
     LQ_NONE_OR_NUM
 };
 
-#if !(SERVER)
-v4 liquid_colors[] = {
-    C_WATER
+String liquid_names[] = {
+    STRING("WATER"),
+    STRING("YEAST WATER")
 };
-static_assert(ARRLEN(liquid_colors) == LQ_NONE_OR_NUM);
-#endif
+static_assert(ARRLEN(liquid_names) == LQ_NONE_OR_NUM);
+
+typedef u32 Liquid_Amount;
+typedef u32 Liquid_Fraction;
 
 struct Liquid
 {
     Liquid_Type type;
     union {
-        /* TODO 
         struct {
-            float yeast;
-            float nutrition;
+            Liquid_Fraction yeast;
+            Liquid_Fraction nutrition;
         } yeast_water;
-        */
     };
 };
+bool equal(Liquid *a, Liquid *b) {
+    // @Robustness: @Norelease Is this a good idea? Should be fine if we don't have any floats in Liquid(???????????? what about padding???????)
+    static_assert(sizeof(*a) == sizeof(*b));
+    return (memcmp(a, b, sizeof(*a)) == 0);
+}
 
-typedef u32 Liquid_Amount;
+#if !(SERVER)
+v4 liquid_color(Liquid lq) {
+
+    if(lq.type == LQ_NONE_OR_NUM) return { 0, 0, 0, 0 };
+    
+    v4 base_colors[] = {
+        C_WATER,
+        { 1.00, 0.95, 0.62, 0.9f }
+    };
+    static_assert(ARRLEN(base_colors) == LQ_NONE_OR_NUM);
+
+    Assert(lq.type >= 0 && lq.type < ARRLEN(base_colors));
+    v4 color = base_colors[lq.type];
+
+    if(lq.type == LQ_YEAST_WATER) {
+        color = lerp(C_WATER, color, clamp((lq.yeast_water.yeast / 1000.0f)/0.5f));
+    }
+    
+    return color;
+}
+#endif
 
 struct Liquid_Container
 {
     Liquid liquid;
     Liquid_Amount amount;
 };
+bool equal(Liquid_Container *a, Liquid_Container *b) {
+    if(!equal(&a->liquid, &b->liquid)) return false;
+    if(!floats_equal(a->amount, b->amount)) return false;
+    return true;
+}
 
 struct Item {
     Item_ID id;

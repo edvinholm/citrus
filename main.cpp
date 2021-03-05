@@ -1,6 +1,5 @@
 
 
-
 #define Fail_If_True(Condition) \
     if(Condition) { Debug_Print("[FAILURE] Condition met: %s at %s:%d\n", #Condition, __FILE__, __LINE__); return false; }
 

@@ -356,29 +356,75 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
                 btn.enabled, btn.selected, get_ui_string(btn.label, ui));
 }
 
+void draw_ui_liquid_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == UI_LIQUID_CONTAINER);
+    auto &ui_lc = e->liquid_container;
+
+    _OPAQUE_UI_();
+
+    auto *lc = &ui_lc.lc;
+    auto lq_type = liquid_type_of_container(lc);
+
+    Rect aa = ui_lc.a;
+    Rect bottom_a = cut_bottom_off(&aa, 10);
+    Rect meter_a  = cut_bottom_off(&aa, 14);
+    Rect info_a   = aa;
+
+    // INFO //
+    {
+        String type_str = (lq_type != LQ_NONE_OR_NUM) ? liquid_names[lq_type] : STRING("EMPTY");
+        draw_string(type_str, center_left_of(info_a), FS_16, FONT_BODY, ui_lc.text_color, gfx, HA_LEFT, VA_CENTER);
+    }
+    
+    // METER //
+    {
+        draw_rect(meter_a, { 0.1, 0.1, 0.1, 1 }, gfx);
+        
+        Rect inner = shrunken(meter_a, 2);
+        draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
+
+        float fill_factor = (ui_lc.capacity <= 0) ? 0 : (lc->amount / (float)ui_lc.capacity);
+        draw_rect(left_of(inner, fill_factor * inner.w), liquid_color(lc->liquid), gfx);
+
+    }
+
+    // BOTTOM //
+    {
+        String str = concat_tmp(lc->amount, "/", ui_lc.capacity);
+        draw_string(str, center_right_of(bottom_a), FS_10, FONT_BODY, ui_lc.text_color, gfx, HA_RIGHT, VA_CENTER);
+    }
+}
+
 void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == UI_INVENTORY_SLOT);
     auto &slot = e->inventory_slot;
 
     _OPAQUE_UI_();
+
+    v4 background = { 0.24, 0.30, 0.38, 1 };
     
-    _draw_button(slot.a, slot.click_state, gfx, { 0.24, 0.30, 0.38, 1 },
+    String label = EMPTY_STRING;    
+    if(slot.item_type != ITEM_NONE_OR_NUM) {
+        Item_Type *type = &item_types[slot.item_type];
+        label = type->name;
+        Assert(label.length > 0);
+        label.length = min(3, label.length);
+
+        background = type->color;
+        adjust_saturation(&background, 0.8f);
+        adjust_brightness(&background, 0.8f);
+    }
+
+    
+    _draw_button(slot.a, slot.click_state, gfx, background,
                  slot.enabled, slot.selected);
 
     auto a = slot.a;
     v3 fill_p0 = { a.x, a.y + a.h, eat_z_for_2d(gfx) };
     if(slot.fill > 0) {
         draw_quad(fill_p0, -V3_Y * a.h * slot.fill, V3_X * a.w, { 0.03, 0.8, 0.6, 1 }, gfx);
-    }
-
-    String label = EMPTY_STRING;
-    
-    if(slot.item_type != ITEM_NONE_OR_NUM) {
-        Item_Type *type = &item_types[slot.item_type];
-        label = type->name;
-        Assert(label.length > 0);
-        label.length = min(3, label.length);
     }
     
     _draw_button_label(label, slot.a, gfx);
@@ -969,7 +1015,8 @@ DWORD render_loop(void *loop_)
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
 
                         case GRAPH: draw_graph(e, ui, &gfx); break;
-                            
+
+                        case UI_LIQUID_CONTAINER: draw_ui_liquid_container(e, ui, &gfx); break;
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
                             

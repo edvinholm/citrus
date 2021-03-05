@@ -856,12 +856,6 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
             ui_text(P(ctx), owner_str);
         }
 
-        if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
-            _TOP_CUT_(20);
-            String liquid_str = concat_tmp("Liquid Level: ", item->liquid_container.amount);
-            ui_text(P(ctx), liquid_str);
-        }
-
 #if DEBUG
         if(e)
         { _TOP_CUT_(20);
@@ -876,6 +870,33 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
 #endif
     }
 
+
+    if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+        { _TOP_CUT_(40);
+            ui_liquid_container(P(ctx), &item->liquid_container, liquid_container_capacity(item));
+        }
+
+        // @Cleanup: move to ui_liquid_container.
+        if(liquid_type_of_container(&item->liquid_container) == LQ_YEAST_WATER)
+        {
+            auto *yw = &item->liquid_container.liquid.yeast_water;
+            
+            { _TOP_CUT_(20);
+                int pre  = yw->yeast / 10; // @Cleanup
+                int post = yw->yeast % 10;
+                String id_str = concat_tmp("Yeast: ", pre, ".", post, "%");
+                ui_text(P(ctx), id_str);
+            }
+            { _TOP_CUT_(20);
+                int pre  = yw->nutrition / 10; // @Cleanup
+                int post = yw->nutrition % 10;
+                String id_str = concat_tmp("Nutrition: ", pre, ".", post, "%");
+                ui_text(P(ctx), id_str);
+            }
+        }
+    }
+
+    
     switch(item->type) {
         case ITEM_PLANT: {
             auto *plant = &item->plant;

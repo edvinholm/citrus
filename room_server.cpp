@@ -868,18 +868,23 @@ void post_item_entity_move(Entity *e, Entity **old_supporters, int num_old_suppo
     room->did_change = true;
 }
 
+Entity *add_entity(Entity *entity, Room *room)
+{
+    auto *dest = room->entities + (room->num_entities++);
+    *dest = *entity;
+    dest->id = 1 + room->next_entity_id_minus_one++;
+    return dest;
+}
+
 void do_create_item_entity_at_tp(Item *item, v3 tp, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
 {
     v3 p = item_entity_p_from_tp(tp, item);
                             
     Entity e = {0};
     *static_cast<S__Entity *>(&e) = create_item_entity(item, p, room->t);
-    e.id   = 1 + room->next_entity_id_minus_one++;
+    Entity *e_added = add_entity(&e, room);
 
-    auto *e_dest = room->entities + (room->num_entities++);
-    *e_dest = e;
-
-    post_item_entity_move(e_dest, NULL, 0, supporters, num_supporters, room ,server);
+    post_item_entity_move(e_added, NULL, 0, supporters, num_supporters, room ,server);
 }
 
 bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Room *room, Room_Server *server)
@@ -1012,16 +1017,20 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                 case ENTITY_ACT_HARVEST: {
                     Assert(as_user != NO_USER);
                     Assert(target->type == ENTITY_ITEM);
-            
-                    // @Temporary @Norelease
-                    bool action_performed = place_item_entity_in_inventory(as_user, target, room, server);
-                    // REMEMBER: e is invalid after this.
-            
-                    if(action_performed) {   
-                        RS_Log("User %llu picked up (\"Harvested\") entity %llu (Item %llu:%llu).\n", as_user, target->id, target->item_e.item.id.origin, target->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
-                        return true;
-                    }
-                    return false;
+
+                    Item fruit = create_item(ITEM_FRUIT, as_user, server);
+                    Entity fruit_entity = {0};
+                    *static_cast<S__Entity *>(&fruit_entity) = create_item_entity(&fruit, V3_ZERO, room->t);
+
+                    Assert(player);
+                    
+                    Entity *fruit_added = add_entity(&fruit_entity, room);
+                    set_held(fruit_added, player, true);
+                    
+                    RS_Log("User %llu Harvested entity %llu (Item %llu:%llu), creating held entity %llu (Item %llu:%llu)\n", as_user,
+                           target->id, target->item_e.item.id.origin, target->item_e.item.id.number,
+                           fruit_added->id, fruit_added->item_e.item.id.origin, fruit_added->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
+                    return true; 
                 } break;
             
                 case ENTITY_ACT_WATER: {

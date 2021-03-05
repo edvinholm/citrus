@@ -261,7 +261,7 @@ v2 string_size(String string, Font_Size size, Graphics *gfx)
 }
 
 //NOTE: Returns rect of drawn string
-Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4 color, Graphics *gfx,
+Rect draw_string(String string, v2 p, Font_Size size, Font_ID font_id, v4 color, Graphics *gfx,
                  H_Align h_align = HA_LEFT, V_Align v_align = VA_TOP,
                  int *previous_codepoint = NULL)
 {
@@ -295,21 +295,21 @@ Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4
         v2 str_size = string_size(string, size, font);
         
         if(h_align == HA_CENTER)
-            top_left.x -= str_size.w / 2.0;
+            p.x -= str_size.w / 2.0;
         else if(h_align == HA_RIGHT)
-            top_left.x -= str_size.w;
+            p.x -= str_size.w;
         else Assert(h_align == HA_LEFT);
 
         if(v_align == VA_CENTER)
-            top_left.y += str_size.h / 2.0;
+            p.y += str_size.h / 2.0;
         else if(v_align == VA_BOTTOM)
-            top_left.y += str_size.h;
+            p.y += str_size.h;
         else Assert(v_align == VA_TOP);
     }
     
     float scale = scale_for_font_size(size, font);
     
-    v2 pp = top_left - V2_Y * font->ascent * scale;
+    v2 pp = p - V2_Y * font->ascent * scale;
 
     float max_x = pp.x;
     
@@ -321,7 +321,7 @@ Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4
 
         if(codepoint == '\n')
         {
-            pp.x  = top_left.x;
+            pp.x  = p.x;
             pp.y -= font_height(size, font);
         }
         else
@@ -345,9 +345,10 @@ Rect draw_string(String string, v2 top_left, Font_Size size, Font_ID font_id, v4
         *previous_codepoint = codepoint;
     }
 
-    return { top_left.x, pp.y,
-             max_x - top_left.x,
-             top_left.y - pp.y - font->descent * scale };
+    // NOTE: p is top-left of string.
+    return { p.x, pp.y,
+             max_x - p.x,
+             p.y - pp.y - font->descent * scale };
 }
 
 inline

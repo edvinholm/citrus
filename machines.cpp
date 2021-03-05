@@ -1,11 +1,7 @@
 
 
-Liquid_Type liquid_type_of_container(Liquid_Container *lc)
-{
-    return (lc->amount == 0) ? LQ_NONE_OR_NUM : lc->liquid.type;
-}
-
 // NOTE: This just begins doing the recipe. Its possibility should have been checked beforehand.
+// NOTE: Indices of inputs should map to indices of recipe->inputs.
 void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *e, Room *room, bool entity_items_already_updated = false)
 {
     if(!entity_items_already_updated)
@@ -16,27 +12,33 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *e, Ro
 
     Assert(item->type == ITEM_BLENDER);
     auto *blender = &e->item_e.blender;
-
-    auto *lc = &item->liquid_container;
-
-    auto current_lq = liquid_type_of_container(lc);
     
-    auto end_lc = *lc;
-
-    if(current_lq == LQ_NONE_OR_NUM) { // This is to avoid floating point weirdness. If we decide that the container is empty, but amount is actually like 0.001, we might get extra liquid over time...(?) Or am i just overthinking this?  -EH, 2021-03-03
-        end_lc.liquid.type = recipe->output_type; // @Norelease: Set other properties of the liquid if any
-        end_lc.amount     = recipe->output_amount;
-    } else {
-        Assert(current_lq == recipe->output_type);
-        end_lc.amount += recipe->output_amount;
-    }
-
-
     blender->t_on_recipe_begin = room->t;
     blender->recipe_duration   = 2; // @Hardcoded
 
     auto t0 = room->t;
     auto t1 = room->t + blender->recipe_duration;
+
+    
+    auto lc0 = item->liquid_container;
+    auto current_lq = liquid_type_of_container(&lc0);
+    auto lc1 = lc0;
+
+    if(current_lq == LQ_NONE_OR_NUM) { // This is to avoid floating point weirdness. If we decide that the container is empty, but amount is actually like 0.001, we might get extra liquid over time...(?) Or am i just overthinking this?  -EH, 2021-03-03
+        lc1 = recipe->output;
+        lc0.liquid = lc1.liquid;
+    } else {
+        Assert(liquid_type_of_container(&lc1) != LQ_NONE_OR_NUM);
+        Assert(can_blend(&lc1, &recipe->output));
+
+        // NOTE: For now, we don't simulate the properties of the recipe output liquid
+        //       during the progress of the recipe.
+        //       The output's properties are what they are when the recipe starts.
+
+        simulate_liquid_properties(&lc1, t1 - t0);
+        
+        lc1 = blend(&lc1, &recipe->output);
+    }
 
     blender->recipe_inputs.n = num_inputs;
     for(int i = 0; i < num_inputs; i++) {
@@ -47,13 +49,15 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *e, Ro
             update_entity_item(input_entity, room->t);
         
         auto *item = &input_entity->item_e.item;
-        if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+        if(recipe->inputs[i].is_liquid) {
+            Assert(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER);
+            
             input_entity->item_e.lc_t0 = t0;
             input_entity->item_e.lc_t1 = t1;
             input_entity->item_e.lc0 = item->liquid_container;
 
             auto lc1 = item->liquid_container;
-            lc1.amount -= recipe->output_amount;// @Hack @Norelease: Recipe_Component should have a required amount thing.
+            lc1.amount -= recipe->inputs[i].liquid.amount;// @Hack @Norelease: Recipe_Component should have a required amount thing.
             Assert(lc1.amount >= 0);
             input_entity->item_e.lc1 = lc1;
         }
@@ -65,8 +69,8 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *e, Ro
 
     e->item_e.lc_t0 = t0;
     e->item_e.lc_t1 = t1;
-    e->item_e.lc0 = *lc;
-    e->item_e.lc1 = end_lc;
+    e->item_e.lc0 = lc0;
+    e->item_e.lc1 = lc1;
     
     room->did_change = true;
 }
@@ -135,7 +139,7 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
     }
 
     // FIND A MATCHING RECIPE //
-    Entity *found_inputs[ARRLEN(Recipe::inputs)];
+    Entity *found_inputs[ARRLEN(Recipe::inputs)] = { 0 };
     int num_found_inputs = 0;
     
     Recipe *found_recipe = NULL;
@@ -144,9 +148,12 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
         if(rec->num_inputs != supported_entities.n) continue;
 
         num_found_inputs = 0;
+        memset(found_inputs, 0, sizeof(found_inputs));
+        
         for(int i = 0; i < rec->num_inputs; i++) {
 
             Recipe_Component &input = rec->inputs[i];
+            if (found_inputs[i] != NULL) continue;
             
             for(int k = 0; k < supported_entities.n; k++) {
                 auto *sup = supported_entities[k];
@@ -158,13 +165,13 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
                     if(!(item_types[sup->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER)) continue;
                     auto *lc = &sup->item_e.item.liquid_container;
                     if(lc->liquid.type != input.liquid.type) continue;
-                    if(lc->amount < rec->output_amount) continue; // @Hack @Norelease: Recipe_Component should have a required amount thing.
+                    if(lc->amount < input.liquid.amount) continue;
                 } else {
                     if(sup->item_e.item.type != input.item.type) continue;
                 }
 
                 bool already_used = false;
-                for(int j = 0; j < num_found_inputs; j++) {
+                for(int j = 0; j < rec->num_inputs; j++) {
                     if(found_inputs[j] == sup) {
                         already_used = true;
                         break;
@@ -173,8 +180,12 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
 
                 if(already_used) continue;
 
+                Assert(num_found_inputs < rec->num_inputs);
                 Assert(num_found_inputs < ARRLEN(found_inputs));
-                found_inputs[num_found_inputs++] = sup;
+                Assert(found_inputs[i] == NULL);
+                found_inputs[i] = sup;
+                num_found_inputs++;
+                break;
             }
         }
         
@@ -192,12 +203,16 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
         auto capacity = liquid_container_capacity(item);
         
         Assert(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER);
-        Assert(capacity >= found_recipe->output_amount); // Should have checked this earlier, when we looked through all available recipes. If we do it now, it's too late -- there might be a better recipe that meets this requirement.
+        
+        // NOTE: This is not the same as (capacity - lc->amount >= found_recipe->output.amount).
+        //       The Assert check below is about if this recipe is suitable at all for this machine.
+        //       The condition above is "can we do the recipe right now given what we have in our container?"
+        Assert(capacity >= found_recipe->output.amount); // Should have checked this earlier, when we looked through all available recipes. If we do it now, it's too late -- there might be a better recipe that meets this requirement.
 
         auto current_lq = liquid_type_of_container(lc);
-        if(current_lq == LQ_NONE_OR_NUM || current_lq == found_recipe->output_type)
+        if(can_blend(lc, &found_recipe->output))
         {
-            if(capacity - lc->amount >= found_recipe->output_amount) {
+            if(capacity - lc->amount >= found_recipe->output.amount) {
                 begin_recipe(found_recipe, found_inputs, num_found_inputs, e, room, true);
             }
         }        

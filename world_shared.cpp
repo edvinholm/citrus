@@ -30,12 +30,93 @@ v3 tp_from_index(s32 tile_index)
 }
 
 
+Liquid_Type liquid_type_of_container(Liquid_Container *lc)
+{
+    return (lc->amount == 0) ? LQ_NONE_OR_NUM : lc->liquid.type;
+}
+
+bool can_blend(Liquid_Container *a, Liquid_Container *b)
+{
+    auto a_type = liquid_type_of_container(a);
+    auto b_type = liquid_type_of_container(b);
+
+    if(a_type == LQ_NONE_OR_NUM || b_type == LQ_NONE_OR_NUM) return true;
+    if(a_type == b_type) return true;
+
+    return false;
+}
+
+Liquid_Fraction liquid_fraction_lerp(Liquid_Fraction a, Liquid_Fraction b, float t)
+{
+    float f = lerp((float)a, (float)b, t);
+    return floorf(f);
+}
+
+Liquid liquid_lerp(Liquid *a, Liquid *b, float t)
+{
+    Liquid result = *a;
+    
+    Assert(a->type == b->type);
+    if(a->type == LQ_NONE_OR_NUM) return *a;
+    
+    if(a->type == LQ_YEAST_WATER) {
+        auto &yw_a = a->yeast_water;
+        auto &yw_b = b->yeast_water;
+        auto &yw_r = result.yeast_water;
+        
+        yw_r.yeast     = liquid_fraction_lerp(yw_a.yeast,     yw_b.yeast, t);
+        yw_r.nutrition = liquid_fraction_lerp(yw_a.nutrition, yw_b.nutrition, t);
+    }
+
+    return result;
+}
+
+Liquid_Container blend(Liquid_Container *a, Liquid_Container *b)
+{
+    Assert(can_blend(a, b));
+
+    auto a_type = liquid_type_of_container(a);
+    auto b_type = liquid_type_of_container(b);
+
+    if(a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) return *a;
+
+    Liquid_Container result;
+    Zero(result);
+    
+    result.amount = a->amount + b->amount;
+
+    if(a_type == LQ_NONE_OR_NUM)      result.liquid = b->liquid;
+    else if(b_type == LQ_NONE_OR_NUM) result.liquid = a->liquid;
+    else {
+        Assert(b->amount > 0); // Because b_type != LQ_NONE_OR_NUM.
+        float t = (result.amount > 0) ? (b->amount / (float)result.amount) : 0;
+        result.liquid = liquid_lerp(&a->liquid, &b->liquid, t);
+    }
+    
+    return result;
+}
+
 // NOTE *_continuous_amount is 10 times smaller than Liquid_Container.amount.
 Liquid_Container liquid_container_lerp(Liquid_Container *a, Liquid_Container *b, float t, float *_continuous_amount = NULL /* @Jai: #bake */)
 {
-    Assert(a->liquid.type == b->liquid.type);
+    Assert(a->liquid.type == b->liquid.type ||
+           liquid_type_of_container(a) == LQ_NONE_OR_NUM ||
+           liquid_type_of_container(b) == LQ_NONE_OR_NUM);
 
+    auto a_type = liquid_type_of_container(a);
+    auto b_type = liquid_type_of_container(b);
+
+    if (a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) {
+        if(_continuous_amount) *_continuous_amount = 0;
+        return *a;
+    }
+    
+    auto type = a_type;
+    if(type == LQ_NONE_OR_NUM) type = b_type;
+    
     Liquid_Container result = *a;
+    result.liquid.type = type;
+    result.liquid = liquid_lerp(&result.liquid, &b->liquid, t);
     
     float amt = lerp(0.1f * result.amount, 0.1f * b->amount, t);
     if(_continuous_amount) *_continuous_amount = amt;
@@ -72,6 +153,33 @@ Liquid_Amount liquid_container_capacity(Item *item)
 }
 
 
+void simulate_liquid_properties(Liquid_Container *lc, double dt)
+{
+    Assert(dt >= 0);
+    
+    auto lq_type = liquid_type_of_container(lc);
+    if(lq_type == LQ_YEAST_WATER) {
+        auto &yw = lc->liquid.yeast_water;
+
+        const Liquid_Fraction max_yeast = 800;
+
+        // @Norelease: We should have these speeds as integers, and make sure that, for example,
+        //             yeast does not increase without nutrition decreasing.
+        //             Also, if one yeast grow == 2 nutrition eat, and there is only 1 nutrition left,
+        //             the yeast should not be able to grow...
+        const double yeast_grow_speed = 1; // @Norelease: This should be much slower. We have it like this for testing.
+        const double nutrition_consume_speed = 0.5;
+
+        double max_yeast_dt     = (max_yeast - yw.yeast) / yeast_grow_speed;
+        double max_nutrition_dt = yw.nutrition           / nutrition_consume_speed;
+            
+        dt = min(max_yeast_dt, min(max_nutrition_dt, dt));
+
+        yw.yeast     += roundf(dt * yeast_grow_speed);
+        yw.nutrition -= roundf(dt * nutrition_consume_speed);
+    } 
+}
+
 void update_entity_item(S__Entity *e, double world_t)
 {
     Assert(e->type == ENTITY_ITEM);
@@ -91,6 +199,12 @@ void update_entity_item(S__Entity *e, double world_t)
     auto *type = &item_types[item->type];
     if(type->flags & ITEM_IS_LQ_CONTAINER) {
         item->liquid_container = liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t);
+
+        // Continue simulating properties after lerp t1
+        double extra_dt = world_t - e->item_e.lc_t1;
+        if(extra_dt > 0) {
+            simulate_liquid_properties(&item->liquid_container, extra_dt);
+        }
     }
 }
 
@@ -165,6 +279,8 @@ S__Entity create_item_entity(Item *item, v3 p, double world_t, Quat q = Q_IDENTI
     if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
         e.item_e.lc0 = item->liquid_container;
         e.item_e.lc1 = item->liquid_container;
+        e.item_e.lc_t0 = world_t;
+        e.item_e.lc_t1 = world_t;
     }
 
     return e;
@@ -896,11 +1012,8 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
             
             if(item->plant.grow_progress < 0.75f) return false;
 
-            if(user) {
-                // @Temporary: @Norelease Should check if harvested item(s) fits in inventory, not if the plant itself fits.
-                if(!inventory_has_available_space_for_item_type(e->item_e.item.type, user)) return false;
-            }
-            
+            if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
+
             return true;
             
         } break;
@@ -1263,6 +1376,13 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                 {
                     case ENTITY_ACT_PICK_UP: {
                         state->held_item = e->item_e.item;
+                    } break;
+
+                    case ENTITY_ACT_HARVEST: {
+                        Item fruit = {0};
+                        fruit.type = ITEM_FRUIT;
+                        fruit.owner = state->user_id;
+                        state->held_item = fruit;
                     } break;
 
                     case ENTITY_ACT_PLACE_IN_INVENTORY: {

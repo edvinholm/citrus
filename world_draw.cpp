@@ -199,7 +199,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t, &liquid_amount);
             
             fill = (capacity > 0) ? liquid_amount / capacity : 0;
-            fill_color = liquid_colors[item->liquid_container.liquid.type];
+            fill_color = liquid_color(item->liquid_container.liquid);
         }
 
         if(item->type == ITEM_CHESS_BOARD) {

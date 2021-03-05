@@ -46,4 +46,4 @@ const v4 C_SELL = { 0.75, 0.00,  0.11, 1 };
 
 
 // WORLD COLORS //
-const v4 C_WATER = {0.1, 0.3, 0.5, 0.9f};
+const v4 C_WATER = {0.1, 0.3, 0.5, 0.8f};

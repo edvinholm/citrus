@@ -104,6 +104,15 @@ void ui_set(UI_Element *e, Rect *dest, Rect new_value)
 }
 
 
+inline
+void ui_set(UI_Element *e, Liquid_Container *dest, Liquid_Container *new_value)
+{
+    if(equal(dest, new_value)) return;
+
+    *dest = *new_value;
+    e->needs_redraw = true;
+}
+
 
 
 inline
@@ -241,34 +250,8 @@ void init_ui_element(UI_Element_Type type, UI_Element *_e)
 
 void clear_ui_element(UI_Element *e)
 {
-    switch(e->type) { // @Jai: #complete
+    switch(e->type) { // @Jai: #complete (Actually IMPORTANT, but can't be bothered to have default be an assert right now, as it makes it annoying to add new UI element types. We can skip this until we have @Jai.)
         case DROPDOWN: clear(&e->dropdown); break;
-
-            // Maybe IMPORTANT to keep default case here as an assert
-            // so we REMEMBER to add things here to new elements
-            // that need to be cleared.
-        case PANEL:
-        case WINDOW:
-        case BUTTON:
-        case TEXTFIELD:
-        case SLIDER:
-        case UI_TEXT:
-
-        case GRAPH:
-
-        case UI_INVENTORY_SLOT:
-        case UI_CHAT:
-
-        case UI_CHESS_BOARD:
-
-        case WORLD_VIEW:
-            
-#if DEBUG
-        case UI_PROFILER:
-#endif
-            break;
-
-        default: Assert(false); break;
     }
 }
 
@@ -639,6 +622,24 @@ void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float
     ui_set(e, &graph->y_min, y_min);
     ui_set(e, &graph->y_max, y_max);
     
+}
+
+void ui_liquid_container(UI_Context ctx, Liquid_Container *lc, Liquid_Amount capacity)
+{
+    U(ctx);
+
+    auto id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, UI_LIQUID_CONTAINER, ctx.manager);
+
+    Rect a = area(ctx.layout);
+    auto *theme = current_color_theme(ctx.manager);
+
+    auto *ui_lc = &e->liquid_container;
+    ui_set(e, &ui_lc->a,  a);
+    ui_set(e, &ui_lc->lc, lc);
+    ui_set(e, &ui_lc->capacity, capacity);
+
+    ui_set(e, &ui_lc->text_color, theme->text);
 }
 
 UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enabled = true, bool selected = false)
@@ -1912,9 +1913,14 @@ Rect ui_element_rect(UI_Element *e)
         case DROPDOWN:  return dropdown_rect(e->dropdown.box_a, e->dropdown.open);
         case UI_TEXT:   return e->text.a;
 
+        case UI_LIQUID_CONTAINER: return e->liquid_container.a;
         case UI_INVENTORY_SLOT: return e->inventory_slot.a;
 
         case WORLD_VIEW: return e->world_view.a;
+
+        case UI_CHESS_BOARD: return e->chess_board.a;
+
+        case GRAPH: return e->graph.a;
 
 #if DEBUG
         case UI_PROFILER: return e->profiler.a;
@@ -2069,31 +2075,8 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
         Assert(e);
 
         bool mouse_over = false;
-        
-        switch(e->type) { // @Jai: #complete
-            case PANEL:      mouse_over = point_inside_rect(mouse.p, e->panel.a);          break;
-            case WINDOW:     mouse_over = point_inside_rect(mouse.p, e->window.current_a); break;
-            case BUTTON:     mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
-            case TEXTFIELD:  mouse_over = point_inside_rect(mouse.p, e->textfield.a);      break;
-            case SLIDER:     mouse_over = point_inside_rect(mouse.p, e->slider.a);         break;
-            case DROPDOWN:   mouse_over = point_inside_rect(mouse.p, dropdown_rect(e->dropdown.box_a, e->dropdown.open));   break;
-            case WORLD_VIEW: mouse_over = point_inside_rect(mouse.p, e->button.a);         break;
-
-            case GRAPH:      mouse_over = point_inside_rect(mouse.p, e->graph.a);         break;
-                
-            case UI_INVENTORY_SLOT: mouse_over = point_inside_rect(mouse.p, e->inventory_slot.a); break;
-            case UI_CHAT:           mouse_over = point_inside_rect(mouse.p, e->chat.a); break;
-
-            case UI_CHESS_BOARD: mouse_over = point_inside_rect(mouse.p, e->chess_board.a); break;
-
-            case UI_TEXT:
-
-#if DEBUG
-            case UI_PROFILER:
-#endif
-                break;
-                
-            default: Assert(false); break;
+        if(e->type != UI_TEXT && e->type != UI_PROFILER) {
+            mouse_over = point_inside_rect(mouse.p, ui_element_rect(e));
         }
 
         if(mouse_over) {
@@ -2153,18 +2136,9 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 
             case UI_CHESS_BOARD: update_ui_chess_board(e, input, hovered_element); break;
+           
                 
-            case GRAPH:
-            case PANEL:
-            case UI_TEXT:
-            case UI_CHAT:
-
-#if DEBUG
-            case UI_PROFILER:
-#endif
-                break;
-                
-            default: Assert(false); break;
+            default: break;
         }
     }
     
