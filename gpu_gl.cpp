@@ -1,4 +1,6 @@
 
+#define GPU_GL_Check_Errors()  { auto err = glGetError();  Assert(err == 0); }
+
 
 struct GPU_Context
 {
@@ -67,11 +69,14 @@ void gpu_set_buffer_set(GPU_Buffer_Set *set, Vertex_Shader *vertex_shader)
             case 1: { element_size = 2; } break;
             case 2: { element_size = 4; } break;
             case 3: { element_size = 1; } break;
+            case 4: { element_size = 3; } break;
 
             default: Assert(false); break;
         }
         
-        glVertexAttribPointer(vertex_shader->buffer_attributes[b], element_size, GL_FLOAT, GL_FALSE, 0, 0); { auto err = glGetError();  Assert(err == 0); }
+        glVertexAttribPointer(vertex_shader->buffer_attributes[b], element_size, GL_FLOAT, GL_FALSE, 0, 0);
+        GPU_GL_Check_Errors();
+        
         glEnableVertexAttribArray(vertex_shader->buffer_attributes[b]); Assert(glGetError() == 0);
         
         Assert(glGetError() == 0);
@@ -84,29 +89,25 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
 {
     auto program = context->shader_program;
     
-    vertex_shader->projection_uniform = glGetUniformLocation(program, "projection");
-    vertex_shader->transform_uniform = glGetUniformLocation(program, "transform");
+    vertex_shader->projection_uniform = glGetUniformLocation(program, "projection"); GPU_GL_Check_Errors();
+    vertex_shader->transform_uniform  = glGetUniformLocation(program, "transform");  GPU_GL_Check_Errors();
+    vertex_shader->mode_2d_uniform    = glGetUniformLocation(program, "mode_2d");    GPU_GL_Check_Errors();
+
     
-    //@ColorUniform: shader->color_uniform = glGetUniformLocation(program, "color");
-    
-    vertex_shader->position_attr = glGetAttribLocation(program, "aVertexPosition");
-    vertex_shader->texcoord_attr = glGetAttribLocation(program, "aTexCoord");
-    vertex_shader->color_attr = glGetAttribLocation(program, "color");
-    vertex_shader->texture_attr = glGetAttribLocation(program, "texture");
-    //@Normals: shader->normal_attr = glGetAttribLocation(program, "aNormal");
-
-
-    /* @Normals:
-      Uncomment this when the shader actually uses the value - otherwise it might be optimized out from the shader.
-      
-    glBindBuffer(GL_ARRAY_BUFFER, gfx.normal_buffer);
-    glVertexAttribPointer(shader->normal_attr, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(shader->normal_attr);
-    */
-
+    vertex_shader->position_attr = glGetAttribLocation(program, "position"); GPU_GL_Check_Errors();
+    vertex_shader->texcoord_attr = glGetAttribLocation(program, "uvs");      GPU_GL_Check_Errors();
+    vertex_shader->color_attr    = glGetAttribLocation(program, "color");    GPU_GL_Check_Errors();
+    vertex_shader->texture_attr  = glGetAttribLocation(program, "texture");  GPU_GL_Check_Errors();
+    vertex_shader->normal_attr   = glGetAttribLocation(program, "normal");   GPU_GL_Check_Errors(); 
 
     // GENERATE BUFFERS //
-    glGenBuffers(ARRLEN(vertex_shader->all_buffers), vertex_shader->all_buffers);
+    for(int i = 0; i < ARRLEN(vertex_shader->buffer_sets); i++) {
+        auto *set = &vertex_shader->buffer_sets[i];
+        glGenBuffers(ARRLEN(set->buffers), set->buffers);
+        
+        GPU_GL_Check_Errors();
+    }
+    
     Assert(glGetError() == 0);
 
     gpu_set_buffer_set(&vertex_shader->buffer_sets[0], vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
@@ -133,6 +134,11 @@ void gpu_set_uniform_m4x4(GPU_Uniform_ID uniform, m4x4 m)
     glUniformMatrix4fv(uniform, 1, GL_FALSE, m.elements);
 }
 
+inline
+void gpu_set_uniform_bool(GPU_Uniform_ID uniform, bool b)
+{
+    glUniform1i(uniform, (b) ? 1 : 0);
+}
 
 inline
 void gpu_set_uniform_int(GPU_Uniform_ID uniform, int i)

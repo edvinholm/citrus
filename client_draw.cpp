@@ -1,5 +1,5 @@
 
-// @Temporary
+// @Cleanup
 int fps = 0;
 int frames_this_second = 0;
 int ups = 0;
@@ -189,6 +189,7 @@ void config_gpu_for_ui(Graphics *gfx)
 
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    true);
 
     gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
 }
@@ -200,6 +201,7 @@ void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
     
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    false);
 }
 
 
@@ -627,10 +629,15 @@ void draw_slider(UI_Element *e, Graphics *gfx)
         0, 0, 0
     };
 
+    v3 normals[6] = {
+        V3_Z, V3_Z, V3_Z,
+        V3_Z, V3_Z, V3_Z
+    };
+
     v4 *color = c;
     if(!slider->enabled)  color = d;
 
-    triangles(v, uv, color, tex, 6, gfx);
+    triangles(v, uv, color, tex, normals, 6, gfx);
 
     v4 handle_c   = {0, 0.25, 0.45, 1};
     v4 handle_c_p = {0.1, 0.1, 0.1, 1};

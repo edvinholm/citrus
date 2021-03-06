@@ -96,10 +96,11 @@ void draw_vertex_buffer(Vertex_Buffer<A> *buffer, bool do_dynamic_draw_now, GPU_
     vertex1 = min(buffer->n, vertex1);
     Assert(vertex0 < vertex1);
 
-    triangles_now(buffer->p   + vertex0,
-                  buffer->uv  + vertex0,
-                  buffer->c   + vertex0,
-                  buffer->tex + vertex0,
+    triangles_now(buffer->p       + vertex0,
+                  buffer->uv      + vertex0,
+                  buffer->c       + vertex0,
+                  buffer->tex     + vertex0,
+                  buffer->normals + vertex0,
                   vertex1 - vertex0,
                   buffer_set,
                   do_dynamic_draw_now);
@@ -122,10 +123,11 @@ void draw_render_object(Render_Object *obj, Vertex_Buffer<A> vertices, bool do_d
 
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
 
-    triangles_now(vertices.p   + vertex0,
-                  vertices.uv  + vertex0,
-                  vertices.c   + vertex0,
-                  vertices.tex + vertex0,
+    triangles_now(vertices.p       + vertex0,
+                  vertices.uv      + vertex0,
+                  vertices.c       + vertex0,
+                  vertices.tex     + vertex0,
+                  vertices.normals + vertex0,
                   num_vertices, buffer_set,
                   do_dynamic_draw_now);
 }
@@ -227,7 +229,7 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
                
                 auto v0 = obj->vertex0;
                 auto num_vertices = obj->vertex1 - v0;
-                add_vertices(vertices.p + v0, vertices.uv + v0, vertices.c + v0, vertices.tex + v0, num_vertices, &temporary_vertex_buffer);
+                add_vertices(vertices.p + v0, vertices.uv + v0, vertices.c + v0, vertices.tex + v0, vertices.normals + v0, num_vertices, &temporary_vertex_buffer);
                 temporary_object.vertex1 += num_vertices;
 
                 obj_ix++;

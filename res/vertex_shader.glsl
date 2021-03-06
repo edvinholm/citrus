@@ -1,18 +1,19 @@
 
 #version 130
 
+#define DEBUG_NORMALS 0
+
 //TODO @Speed: Combine matrices on CPU?
 uniform mat4 projection;
 uniform mat4 transform;
+uniform bool mode_2d;
 //--
 
-// @ColorUniform: uniform vec4 color;
-
-in vec3 aVertexPosition;
-in vec2 aTexCoord;
-in vec3 aNormal;
+in vec3 position;
+in vec2 uvs;
 in vec4 color;
 in float texture;
+in vec3 normal;
 
 out vec3 vertex_position;
 out vec2 fragment_texcoord;
@@ -21,19 +22,34 @@ out vec3 fragment_world_position;
 out vec4 fragment_color;
 out float fragment_texture;
 
+
+const vec3 sun = vec3(-0.196, -0.588, 0.784);
+const vec3 light_2d = vec3(0, 0, 1);
+
 void main() {
 
-    fragment_color = color;
-
-    vec4 normal;
-
-    gl_Position = vec4(aVertexPosition, 1.0);
-    normal = normalize(vec4(aNormal, 1.0));
+    gl_Position = vec4(position, 1.0); // Do we need to set gl_Position????
 
     vec4 world_position = gl_Position * transform;
     gl_Position = world_position * projection;
 
-    fragment_texcoord = aTexCoord;
+    vec4 world_normal = normalize(vec4(normal, 0) * transform);
+
+    fragment_color = color;
+    vec3 light_source = (mode_2d) ? light_2d : sun;
+    fragment_color.xyz *= (0.75f + 0.25f * dot(world_normal.xyz, light_source));
+
+#if DEBUG_NORMALS
+    if(!mode_2d) {
+        fragment_color.xyz = world_normal.xyz;
+        fragment_color.xy *= -1;
+    
+        fragment_color.xyz *= 0.5f;
+        fragment_color.xyz += vec3(0.5f, 0.5f, 0.5f);
+    }
+#endif
+
+    fragment_texcoord = uvs;
     vertex_position = gl_Position.xyz;
     fragment_position = gl_Position.xyz;
     fragment_world_position = world_position.xyz;

@@ -18,6 +18,7 @@ struct Vertex_Buffer
     v2    *uv;  // texture coordinates
     v4    *c;   // colors
     float *tex; // textures
+    v3    *normals;
 };
 
 template<Allocator_ID A>

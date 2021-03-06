@@ -7,8 +7,9 @@ struct GPU_Buffer_Set
             GPU_Buffer_ID uv_buffer;
             GPU_Buffer_ID color_buffer;
             GPU_Buffer_ID texture_buffer;
+            GPU_Buffer_ID normal_buffer;
         };
-        GPU_Buffer_ID buffers[4];
+        GPU_Buffer_ID buffers[5];
     };
 };
 
@@ -18,6 +19,7 @@ struct Vertex_Shader
 {
     GPU_Uniform_ID projection_uniform;
     GPU_Uniform_ID transform_uniform;
+    GPU_Uniform_ID mode_2d_uniform;
 
 #if GFX_GL
     union {
@@ -26,21 +28,18 @@ struct Vertex_Shader
             GPU_Attribute_ID texcoord_attr;
             GPU_Attribute_ID color_attr;
             GPU_Attribute_ID texture_attr;
+            GPU_Attribute_ID normal_attr;
         };
-        GPU_Attribute_ID buffer_attributes[4];
+        GPU_Attribute_ID buffer_attributes[5];
     };
         
 #endif
-
-    //@Normals: GLint normal_attr;
-
     
     union
     {
         // IMPORTANT: There is some hardcoded stuff in gpu_set_buffer_set that needs to be updated if we add/remove/move buffers here. -EH, 2020-10-20
         
         GPU_Buffer_Set buffer_sets[2];
-        GPU_Buffer_ID all_buffers[sizeof(buffer_sets)/sizeof(GPU_Buffer_ID)];
     };
 };
 

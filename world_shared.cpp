@@ -311,6 +311,7 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
             case ENTITY_ITEM: {
                 *_p = e->item_e.p;
                 *_q = e->item_e.q;
+                
                 return;
             } break;
             

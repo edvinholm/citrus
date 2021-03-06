@@ -6,14 +6,12 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     v4 grass = {0.25, 0.6,  0.1, 1.0f};
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
     v4 water = {0.1,  0.3, 0.5,  0.9f};
-    
+
     v4 wall = {0.9, 0.9, 0.9, 1};
 
     auto *tiles = room->tiles;
 
     float tile_s = 1;
-    
-    float shadow_factor = 0.90f;
     
     for(int y = 0; y < room_size_y; y++) {
         for(int x = 0; x < room_size_x; x++) {
@@ -49,7 +47,7 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
 #endif
       
             if(tile == TILE_WATER) {
-                draw_quad({tile_a.x, tile_a.y,   z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, sand, gfx);
 
                 // WEST
                 if(x != 0 && tiles[y * room_size_x + x - 1] != tile)
@@ -70,14 +68,12 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
                 // X
                 if(x == 0 || tiles[y * room_size_x + x - 1] != tile || x >= room_size_x-2) {
                     auto cc = *color;
-                    cc.rgb *= shadow_factor;
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, cc, gfx);
+                    draw_quad({tile_a.x, tile_a.y, z}, {0, 1, 0}, {0, 0, -z}, cc, gfx);
                 }
                 // Y
                 if(y == 0 || tiles[(y-1) * room_size_x + x] != tile || y >= room_size_y-2) {
                     auto cc = *color;
-                    cc.rgb *= 1.0f/shadow_factor;
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, cc, gfx);
+                    draw_quad({tile_a.x, tile_a.y, z}, {0, 0, -z}, {1, 0, 0}, cc, gfx);
                 }
             }
             else if(color){
@@ -95,10 +91,6 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
         int c1 = ((comp == 0) ? room_size_x : room_size_y);
 
         v4 color = side_color_base;
-        if(comp == 1)
-            color.xyz *= shadow_factor;
-        else
-            color.xyz *= 1.0f/shadow_factor;
         
         int c0 = 0;
         for(int c = 1; c <= c1; c++)
@@ -125,8 +117,13 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
 
                 v3 d1 = {0};
                 d1.comp[comp] = length;
+
+                v3 d2 = { 0, 0, height };
                 
-                draw_quad(origin, d1, {0, 0, height}, color, gfx);
+                // @Hack: To get draw_quad to calculate normal correctly......... Also for correct back-face culling i guess??
+                if(comp == 1) swap(&d1, &d2);
+                
+                draw_quad(origin, d1, d2, color, gfx);
             
                 c0  = c;
             }
@@ -301,6 +298,12 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         head_color.rgb *= 0.94f;
         
         draw_cube_ps(head_p, V3_ONE * head_size, head_color, gfx);
+
+
+        // hair
+        v3 hair_s = { head_size * 1.1f, head_size * 0.8f, head_size * 0.6f };
+        v3 hair_p = head_center + V3(-0.55f, -0.55f, -0.05f) * head_size;
+        draw_cube_ps(hair_p, hair_s, { 0.20, 0.09, 0.02, 1 }, gfx);
 
         // HANDS Z //
         if(tweak_bool(TWEAK_SHOW_PLAYER_ENTITY_PARTS)) {

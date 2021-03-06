@@ -146,7 +146,7 @@ float magnitude_xy(float x, float y)
 
 
 inline
-v2 normalized(v2 v)
+v2 normalize(v2 v)
 {
     return v / magnitude(v);
 }

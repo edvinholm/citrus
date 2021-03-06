@@ -1,7 +1,7 @@
 
 
 //NOTE: n is number of vertices
-void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *textures, u64 n, GPU_Buffer_Set *set, bool do_dynamic_draw_now)
+void triangles_now(v3 *positions, v2 *uvs, v4 *colors, float *textures, v3 *normals, u64 n, GPU_Buffer_Set *set, bool do_dynamic_draw_now)
 {
     bool static_draw = !do_dynamic_draw_now;
     
@@ -9,22 +9,23 @@ void triangles_now(v3 *positions, /*v3 *normals,*/ v2 *uvs, v4 *colors, float *t
     gpu_set_vertex_buffer_data(set->uv_buffer,       uvs,       sizeof(v2) * n,    static_draw);
     gpu_set_vertex_buffer_data(set->color_buffer,    colors,    sizeof(v4) * n,    static_draw);
     gpu_set_vertex_buffer_data(set->texture_buffer,  textures,  sizeof(float) * n, static_draw);
+    gpu_set_vertex_buffer_data(set->normal_buffer,   normals,   sizeof(v3) * n,    static_draw);
 
     if(do_dynamic_draw_now) gpu_draw(GPU_TRIANGLES, n);
 }
 
 
-void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
+void triangles(v3 *p, v2 *uv, v4 *c, float *tex, v3 *normals, u32 n, Graphics *gfx)
 {
     auto *buffer = current_vertex_buffer(gfx);
 
     if(!buffer) {
-        triangles_now(p, uv, c, tex, n, current_default_buffer_set(gfx), true);
+        triangles_now(p, uv, c, tex, normals, n, current_default_buffer_set(gfx), true);
         return;
     }
     
     Assert(buffer);
-    add_vertices(p, uv, c, tex, n, buffer);
+    add_vertices(p, uv, c, tex, normals, n, buffer);
 
     // MULTIPLY BY CURRENT TRANSFORM MATRIX //
     if(gfx->transform.size > 0)
@@ -41,7 +42,7 @@ void triangles(v3 *p, v2 *uv, v4 *c, float *tex, u32 n, Graphics *gfx)
 }
 
 template<u32 NUM_VERTICES>
-void draw_polygon(v3 *p, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
+void draw_polygon(v3 *p, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM, v3 *normals = NULL)
 {        
     v4 colors[NUM_VERTICES];
     for(int i = 0; i < ARRLEN(colors); i++) colors[i] = color;
@@ -49,11 +50,26 @@ void draw_polygon(v3 *p, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID tex
     v2 default_uvs[NUM_VERTICES] = {0};
     if(!uvs) uvs = default_uvs;
 
+    // @Speed @Ugly
+    // @Speed @Ugly
+    // @Speed @Ugly
+    static v3 default_normals[NUM_VERTICES] = {0};
+    static bool default_normals_initialized = false;
+    if(!normals) {
+        if(!default_normals_initialized) {
+            for(int i = 0; i < NUM_VERTICES; i++) {
+                default_normals[i] = V3_Z;
+            }
+            default_normals_initialized = true;
+        }
+        normals = default_normals;
+    }
+
     float textures[NUM_VERTICES];
     float t = bound_slot_for_texture(texture, gfx);
     for(int i = 0; i < ARRLEN(colors); i++) textures[i] = t;
 
-    triangles(p, uvs, colors, textures, NUM_VERTICES, gfx);
+    triangles(p, uvs, colors, textures, normals, NUM_VERTICES, gfx);
 }
 
 
@@ -79,14 +95,12 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
         a, d, b
     };
 
-    /* @Normals: 
-    v3 normal = normalized(-cross((b-a), (c-a)));
+    v3 normal = normalize(cross((b-a), (c-a)));
 
-    v3 n[6] = {
+    v3 normals[6] = {
         normal, normal, normal,
         normal, normal, normal
     };
-    */
     
     const float default_uvs[6 * 2] = {
         0, 0,
@@ -113,11 +127,11 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
     if(uvs == NULL)
         uvs = (v2 *)default_uvs;
 
-    triangles(v, uvs, colors, tex, 6, gfx);
+    triangles(v, uvs, colors, tex, normals, 6, gfx);
 }
 
 
-void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM, bool fake_lighting = true)
+void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     v3 p1 = p0 + s;
 
@@ -205,38 +219,28 @@ void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_
         0, 0,
         1, 1
     };
-
-    v4 color_1 = color;
-    v4 color_2 = color;
-    v4 color_3 = color;
-    v4 color_4 = color;
-
-    if(fake_lighting)
-    {
-        color_1.rgb *= 1;
-        color_2.rgb *= (1.0f / 0.9f);
-        color_3.rgb *= 0.9f;
-        color_4.rgb *= 0.9f * 0.9f;
-    }
+    
+    if(uvs == NULL)
+        uvs = (v2 *)default_uvs;
 
     v4 colors[6*6] = {
-        color_1, color_1, color_1,
-        color_1, color_1, color_1,
+        color, color, color,
+        color, color, color,
         
-        color_2, color_2, color_2,
-        color_2, color_2, color_2,
+        color, color, color,
+        color, color, color,
         
-        color_3, color_3, color_3,
-        color_3, color_3, color_3,
+        color, color, color,
+        color, color, color,
         
-        color_4, color_4, color_4,
-        color_4, color_4, color_4,
+        color, color, color,
+        color, color, color,
         
-        color_2, color_2, color_2,
-        color_2, color_2, color_2,
+        color, color, color,
+        color, color, color,
         
-        color_3, color_3, color_3,
-        color_3, color_3, color_3
+        color, color, color,
+        color, color, color
     };
 
     float t = bound_slot_for_texture(texture, gfx);
@@ -261,10 +265,27 @@ void draw_cube_ps(v3 p0, v3 s, v4 color, Graphics *gfx, v2 *uvs = NULL, Texture_
         t, t, t
     };
 
-    if(uvs == NULL)
-        uvs = (v2 *)default_uvs;
+    v3 normals[6*6] = {
+        -V3_X, -V3_X, -V3_X,
+        -V3_X, -V3_X, -V3_X,
 
-    triangles(v, uvs, colors, tex, 6*6, gfx);
+         V3_X, V3_X, V3_X,
+         V3_X, V3_X, V3_X,
+        
+        -V3_Y, -V3_Y, -V3_Y,
+        -V3_Y, -V3_Y, -V3_Y,
+
+         V3_Y, V3_Y, V3_Y,
+         V3_Y, V3_Y, V3_Y,
+
+        -V3_Z, -V3_Z, -V3_Z,
+        -V3_Z, -V3_Z, -V3_Z,
+
+         V3_Z, V3_Z, V3_Z,
+         V3_Z, V3_Z, V3_Z
+    };
+
+    triangles(v, uvs, colors, tex, normals, 6*6, gfx);
 }
 
 #if 0
@@ -450,7 +471,12 @@ void draw_rect(Rect a, v4 color, Graphics *gfx, float z_3d = 0, v2 *uvs = NULL, 
         t, t, t
     };
 
-    triangles(v, uvs, c, tex, 6, gfx);
+    v3 normals[6] = {
+        V3_Z, V3_Z, V3_Z,
+        V3_Z, V3_Z, V3_Z
+    };
+
+    triangles(v, uvs, c, tex, normals, 6, gfx);
 }
 
 void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, float z = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)

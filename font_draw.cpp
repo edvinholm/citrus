@@ -118,7 +118,12 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
                 { uv0.x, uv1.y }, { uv1.x, uv0.y }, { uv1.x, uv1.y }
             };
 
-            triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
+            v3 normals[6] = {
+                V3_Z, V3_Z, V3_Z,
+                V3_Z, V3_Z, V3_Z
+            };
+
+            triangles(pos, uvs, vertex_colors, vertex_textures, normals, 6, gfx);
         }
         else {
 
@@ -142,7 +147,12 @@ v2 draw_glyph(Sized_Glyph *glyph, v2 p, v4 *vertex_colors, float *vertex_texture
                 { glyph->sprite_frame_p1.x, glyph->sprite_frame_p1.y },
             };
 
-            triangles(pos, uvs, vertex_colors, vertex_textures, 6, gfx);
+            v3 normals[6] = {
+                V3_Z, V3_Z, V3_Z,
+                V3_Z, V3_Z, V3_Z
+            };
+            
+            triangles(pos, uvs, vertex_colors, vertex_textures, normals, 6, gfx);
         }
         
     }

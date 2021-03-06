@@ -28,35 +28,39 @@ void ensure_capacity(Vertex_Buffer<A> *vb, u64 required_capacity)
         (void **)&vb->p,
         (void **)&vb->uv,
         (void **)&vb->c,
-        (void **)&vb->tex
+        (void **)&vb->tex,
+        (void **)&vb->normals
     };
 
     size_t element_sizes[] = {
         sizeof(*vb->p),
         sizeof(*vb->uv),
         sizeof(*vb->c),
-        sizeof(*vb->tex)
+        sizeof(*vb->tex),
+        sizeof(*vb->normals)
     };
 
-    Assert(ARRLEN(buffers) == ARRLEN(element_sizes));
+    static_assert(ARRLEN(buffers) == ARRLEN(element_sizes));
 
     ensure_buffer_set_capacity(required_capacity, &vb->capacity, buffers, element_sizes, ARRLEN(buffers), A);
 }
 
 template<Allocator_ID A>
-void add_vertices(v3 *p, v2 *uv, v4 *c, float *tex, u64 n, Vertex_Buffer<A> *vb)
+void add_vertices(v3 *p, v2 *uv, v4 *c, float *tex, v3 *normals, u64 n, Vertex_Buffer<A> *vb)
 {
     ensure_capacity(vb, vb->n + n);
 
-    Assert(sizeof(*p)  == sizeof(*vb->p));
-    Assert(sizeof(*uv) == sizeof(*vb->uv));
-    Assert(sizeof(*c)  == sizeof(*vb->c));
-    Assert(sizeof(*tex)  == sizeof(*vb->tex));
+    Assert(sizeof(*p)        == sizeof(*vb->p));
+    Assert(sizeof(*uv)       == sizeof(*vb->uv));
+    Assert(sizeof(*c)        == sizeof(*vb->c));
+    Assert(sizeof(*tex)      == sizeof(*vb->tex));
+    Assert(sizeof(*normals)  == sizeof(*vb->normals));
 
-    memcpy(vb->p   + vb->n, p,   sizeof(*p)   * n);
-    memcpy(vb->uv  + vb->n, uv,  sizeof(*uv)  * n);
-    memcpy(vb->c   + vb->n, c,   sizeof(*c)   * n);
-    memcpy(vb->tex + vb->n, tex, sizeof(*tex) * n);
+    memcpy(vb->p       + vb->n, p,       sizeof(*p)       * n);
+    memcpy(vb->uv      + vb->n, uv,      sizeof(*uv)      * n);
+    memcpy(vb->c       + vb->n, c,       sizeof(*c)       * n);
+    memcpy(vb->tex     + vb->n, tex,     sizeof(*tex)     * n);
+    memcpy(vb->normals + vb->n, normals, sizeof(*normals) * n);
 
     vb->n += n;
 }
