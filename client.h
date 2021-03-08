@@ -105,7 +105,10 @@ struct Client
     Window main_window;
     Rect main_window_a;
 
+    // ASSETS //
+    Asset_Catalog assets;
     Font_Table fonts;
+    // --
 
     // NETWORKING //
     Server_Connections connections;

@@ -12,6 +12,40 @@ FILE *open_file(char *filename, bool for_writing)
     return fopen(filename, (for_writing) ? "wb" : "rb");
 }
 
+// NOTE: *data needs to be in a valid state.
+// NOTE: We set data->n = 0 in this proc.
+// IMPORTANT: We do not clear *data or reset data->n to zero if the read fails.
+template<Allocator_ID A>
+bool read_entire_file(FILE *file, Array<u8, A> *contents)
+{
+    contents->n = 0;
+
+    Assert(file);
+ 
+    fseek(file, 0, SEEK_END);
+    size_t size = ftell(file);
+    rewind(file);
+
+    array_add_uninitialized(*contents, size);
+    
+    size_t fread_result = fread(contents->e, 1, size, file);
+    if(fread_result != size) return false;
+    
+    return true;
+}
+
+template<Allocator_ID A>
+bool read_entire_file(char *filename, Array<u8, A> *contents)
+{
+    contents->n = 0;
+
+    FILE *file = open_file(filename, false);
+    if(!file) return false;
+    defer(close_file(file););
+       
+    return read_entire_file(file, contents);
+}
+
 bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, strlength *_Length = NULL)
 {
     Assert(File);
@@ -24,7 +58,6 @@ bool read_entire_file(FILE *File, u8 **_Data, Allocator_ID allocator, strlength 
     size_t FReadResult = fread(*_Data, 1, FileSize, File);
     if(FReadResult != FileSize)
     {
-        close_file(File);
         dealloc_if_legal(*_Data, allocator);
         *_Data = NULL;
         return false;
@@ -147,6 +180,8 @@ long resource_seek(Resource_Handle resource, long offset, int whence) {
 #endif
     
 }
+
+    
 
 // @Startup: @Speed: Pass a builder here always so we don't allocate memory every time.
 inline

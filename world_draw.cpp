@@ -7,7 +7,7 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
     v4 stone = {0.42, 0.4, 0.35, 1.0f};
     v4 water = {0.1,  0.3, 0.5,  0.9f};
 
-    v4 wall = {0.9, 0.9, 0.9, 1};
+    v4 wall = {0.99, 0.99, 0.99, 1};
 
     auto *tiles = room->tiles;
 
@@ -158,11 +158,16 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 {
     auto *s_e = static_cast<S__Entity *>(e);
 
+
+    Mesh_ID mesh = MESH_NONE_OR_NUM;
+    
     float shadow_factor = 0.90f;
     
     v3 center;
     Quat q;
     get_entity_transform(s_e, world_t, room, &center, &q);
+    
+    float scale = 1.0f;
     
     v3 volume = V3_ONE;
 
@@ -170,6 +175,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
     float fill = 0;
     v4 fill_color = C_WHITE;
+
     
     if(e->type == ENTITY_ITEM)
     {
@@ -201,6 +207,14 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         if(item->type == ITEM_CHESS_BOARD) {
             volume.z = 0.1f;
+        }
+
+        if(item->type == ITEM_CHAIR) {
+            scale = .35f;
+            mesh = MESH_CHAIR;
+        }
+        else if (item->type == ITEM_BLENDER) {
+            mesh = MESH_BLENDER;
         }
     }
     else if(e->type == ENTITY_PLAYER)
@@ -259,11 +273,14 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         base_color.g /= 1.5f;
         base_color.b /= 1.5f;
     }
-    
-    
-    _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(q, center));
 
-    v3 origin  = center;
+    if(mesh != MESH_NONE_OR_NUM) {
+        draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx);
+    }
+    
+    _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_matrix(q) * translation_matrix(center));
+
+    v3 origin  = V3_ZERO;
     origin.xy -= volume.xy * 0.5f;
         
     // PREVIEW ANIMATION //
@@ -280,14 +297,16 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         volume.z -= fill_s.z;
         origin.z += fill_s.z;
     }
-    draw_cube_ps(origin, volume, base_color, gfx);
+    if(mesh == MESH_NONE_OR_NUM)
+        draw_cube_ps(origin, volume, base_color, gfx);
+
 
     
     if(e->type == ENTITY_PLAYER)
     {    
         float head_size = 1.8f;
         
-        v3 head_p = center;
+        v3 head_p = V3_ZERO;
         head_p.z += volume.z;
         head_p.x -= head_size * 0.5f;
         head_p.y -= head_size * 0.5f;

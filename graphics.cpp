@@ -1,4 +1,20 @@
 
+
+//NOTE: n is number of vertices
+void triangles_now(v3 *positions, v2 *uvs, v4 *colors, float *textures, v3 *normals, u64 n, GPU_Buffer_Set *set, bool do_dynamic_draw_now)
+{
+    bool static_draw = !do_dynamic_draw_now;
+    
+    gpu_set_vertex_buffer_data(set->position_buffer, positions, sizeof(v3) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->uv_buffer,       uvs,       sizeof(v2) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->color_buffer,    colors,    sizeof(v4) * n,    static_draw);
+    gpu_set_vertex_buffer_data(set->texture_buffer,  textures,  sizeof(float) * n, static_draw);
+    gpu_set_vertex_buffer_data(set->normal_buffer,   normals,   sizeof(v3) * n,    static_draw);
+
+    if(do_dynamic_draw_now) gpu_draw(GPU_TRIANGLES, n);
+}
+
+
 inline
 float eat_z_for_2d(Graphics *gfx)
 {
@@ -6,7 +22,6 @@ float eat_z_for_2d(Graphics *gfx)
     gfx->z_for_2d -= 0.0001f;
     return z;
 }
-
 
 
 
@@ -42,7 +57,7 @@ void ensure_capacity(Vertex_Buffer<A> *vb, u64 required_capacity)
 
     static_assert(ARRLEN(buffers) == ARRLEN(element_sizes));
 
-    ensure_buffer_set_capacity(required_capacity, &vb->capacity, buffers, element_sizes, ARRLEN(buffers), A);
+    ensure_buffer_set_capacity(required_capacity, &vb->capacity, buffers, element_sizes, ARRLEN(buffers), allocators[A]);
 }
 
 template<Allocator_ID A>
@@ -102,38 +117,46 @@ void unbind_vao(Graphics *gfx)
     gpu_set_buffer_set(default_buffer_set, &gfx->vertex_shader);
 }
 
-inline
-void draw_vao(VAO *vao, Graphics *gfx)
+void push_vao_to_gpu(VAO *vao, v3 *positions, v2 *uvs, v4 *colors, float *tex, v3 *normals, Graphics *gfx)
 {
     bind_vao(vao, gfx);
     {
-        gpu_draw(GPU_TRIANGLES, vao->vertex1 - vao->vertex0, 0);
+        triangles_now(positions + vao->vertex0,
+                      uvs       + vao->vertex0,
+                      colors    + vao->vertex0,
+                      tex       + vao->vertex0,
+                      normals   + vao->vertex0,
+                      vao->vertex1 - vao->vertex0,
+                      &vao->buffer_set,
+                      false);
     }
     unbind_vao(gfx);
+    
+    vao->needs_push = false;
+}
+
+bool maybe_push_vao_to_gpu(VAO *vao, v3 *positions, v2 *uvs, v4 *colors, float *tex, v3 *normals, Graphics *gfx)
+{
+    if(!vao->needs_push) return false;
+
+    push_vao_to_gpu(vao, positions, uvs, colors, tex, normals, gfx);
+    
+    return true;
 }
 
 
 // NOTE: The vao contains a vertex0 and vertex1, which is used
 //       to select the right vertices from the passed vertex_buffer.
 template<Allocator_ID A>
-void maybe_push_vao_to_gpu(VAO *vao, Vertex_Buffer<A> *vertex_buffer, Graphics *gfx)
+bool maybe_push_vao_to_gpu(VAO *vao, Vertex_Buffer<A> *vbuf, Graphics *gfx)
 {
-    if(!vao->needs_push) return;
+    if(!vao->needs_push) return false;
     
     Assert(vao->vertex0 >= 0);
-    Assert(vao->vertex0 < vertex_buffer->n);
+    Assert(vao->vertex0 < vbuf->n);
     
     Assert(vao->vertex1 >= vao->vertex1);
-    Assert(vao->vertex1 <= vertex_buffer->n);
-
-    auto *default_buffer_set = current_default_buffer_set(gfx);
-
-    bind_vao(vao, gfx);
-    {
-        draw_vertex_buffer(vertex_buffer, false, &vao->buffer_set, vao->vertex0, vao->vertex1);
-    }
-    unbind_vao(gfx);
-    
-    vao->needs_push = false;
-    Debug_Print("Pushed gfx.world.static_world_vao vertices to gpu.\n");
+    Assert(vao->vertex1 <= vbuf->n);
+   
+    return maybe_push_vao_to_gpu(vao, vbuf->p, vbuf->uv, vbuf->c, vbuf->tex, vbuf->normals, gfx);
 }

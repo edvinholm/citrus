@@ -239,26 +239,6 @@ void ensure_not_in_array(Array<T, A> &array, T &element)
 }
 
 
-template<typename T, Allocator_ID A>
-inline
-void clear(Array<T, A> *array)
-{   
-    if(array->e) dealloc(array->e, A);
-    memset(array, 0, sizeof(Array<T, A>));
-}
-
-
-
-template<typename T, Allocator_ID A>
-inline
-void clear_deep(Array<T, A> *array, Allocator_ID element_allocator)
-{
-    for(int i = 0; i < array->n; i++)
-        clear_deep(array->e + i, element_allocator);
-
-    clear(array);
-}
-
 
 
 

@@ -1,5 +1,7 @@
 
 
+vsync false
+
 # window_border_color 0 0 0 1
 
 # initial_os_window_rect 72 8 1440 1000
@@ -21,7 +23,7 @@ show_profiler   false
 profiler_yscale 250
 
 
-color_tiles_by_position false
+# color_tiles_by_position true
 
 
 

@@ -190,6 +190,7 @@ void config_gpu_for_ui(Graphics *gfx)
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
     gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    true);
+    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
 
     gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
 }
@@ -202,6 +203,7 @@ void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
     gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    false);
+    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
 }
 
 
@@ -803,17 +805,19 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room 
     {
         if(item_to_place)
         {
+            Quat q = axis_rotation(V3_Z, PI); // @Norelease
+            
             // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
             
             bool can_be_placed = true;
             
             v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
-            if(!can_place_item_entity_at_tp(item_to_place, tp, world_t, room)) {
+            if(!can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room)) {
                 shadow_color = { 0.4,   0.1,  0.1, 1 };
                 can_be_placed = false;
             }
             
-            Entity preview_entity = create_preview_item_entity(item_to_place, tp, world_t, Q_IDENTITY);
+            Entity preview_entity = create_preview_item_entity(item_to_place, tp, world_t, q);
             draw_entity(&preview_entity, world_t, room, client, gfx, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
@@ -940,12 +944,14 @@ DWORD render_loop(void *loop_)
         input       =  &client->input;
         main_window = &client->main_window;
         
-        gfx.fonts = &client->fonts;
+        gfx.fonts  = &client->fonts;
+        gfx.assets = &client->assets;
         
         bool graphics_init_result = init_graphics(main_window, &gfx);
         Assert(graphics_init_result);
 
         init_fonts(gfx.fonts, &gfx);
+        init_assets_for_drawing(&client->assets, &gfx);
 
         // CREATE FONT GLYPH TEXTURES ON GPU //
         for(int f = 0; f < NUM_FONTS; f++){
@@ -1137,7 +1143,6 @@ DWORD render_loop(void *loop_)
                 config_gpu_for_ui(&gfx);
                 {
                     gpu_set_depth_mask(false);
-                    
                     draw_render_object_buffer(&gfx.ui_render_buffer.translucent, true, &gfx);              
                 }
                 

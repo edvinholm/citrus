@@ -89,9 +89,10 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
 {
     auto program = context->shader_program;
     
-    vertex_shader->projection_uniform = glGetUniformLocation(program, "projection"); GPU_GL_Check_Errors();
-    vertex_shader->transform_uniform  = glGetUniformLocation(program, "transform");  GPU_GL_Check_Errors();
-    vertex_shader->mode_2d_uniform    = glGetUniformLocation(program, "mode_2d");    GPU_GL_Check_Errors();
+    vertex_shader->projection_uniform       = glGetUniformLocation(program, "projection");       GPU_GL_Check_Errors();
+    vertex_shader->transform_uniform        = glGetUniformLocation(program, "transform");        GPU_GL_Check_Errors();
+    vertex_shader->mode_2d_uniform          = glGetUniformLocation(program, "mode_2d");          GPU_GL_Check_Errors();
+    vertex_shader->color_multiplier_uniform = glGetUniformLocation(program, "color_multiplier"); GPU_GL_Check_Errors();
 
     
     vertex_shader->position_attr = glGetAttribLocation(program, "position"); GPU_GL_Check_Errors();
@@ -133,6 +134,13 @@ void gpu_set_uniform_m4x4(GPU_Uniform_ID uniform, m4x4 m)
 {
     glUniformMatrix4fv(uniform, 1, GL_FALSE, m.elements);
 }
+
+inline
+void gpu_set_uniform_v4(GPU_Uniform_ID uniform, v4 u)
+{
+    glUniform4f(uniform, u.x, u.y, u.z, u.w);
+}
+
 
 inline
 void gpu_set_uniform_bool(GPU_Uniform_ID uniform, bool b)
@@ -177,7 +185,7 @@ void gpu_set_vertex_buffer_data(GPU_Buffer_ID buffer, void *data, size_t size, b
     Assert(size >= 0);
     
     { auto err = glGetError(); Assert(err == 0); }
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);                      { auto err = glGetError(); Assert(err == 0); }
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);    { auto err = glGetError(); Assert(err == 0); }
     glBufferData(GL_ARRAY_BUFFER, size, data, (static_data) ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW); { auto err = glGetError(); Assert(err == 0); }
 }
 

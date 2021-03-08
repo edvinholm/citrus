@@ -46,7 +46,7 @@ struct VAO
     // Absolute values of vertex0 and vertex1 are only valid
     // if needs_push is true. BUT, vertex1-vertex0 should always
     // give the number of vertices the vao consists of.
-    u64 vertex0; // In the vertex buffer we used. (Usually gfx.universal_vertex_buffer)
+    u64 vertex0; // In the positons/uvs/colors... arrays we send to push_vao_to_gpu().
     u64 vertex1;
 };
 
@@ -55,8 +55,8 @@ struct VAO
 // @Incomplete: This is supposed to determine if we should give the gpu a mesh ID or vertices...
 enum Render_Object_Type
 {
-    VERTEX_OBJECT
-    // @Incomplete: MESH_OBJECT    or something..
+    VERTEX_OBJECT,
+    MESH_OBJECT
 };
 
 struct Render_Object
@@ -70,6 +70,8 @@ struct Render_Object
             u64 vertex0;
             u64 vertex1;
         };
+        
+        VAO *mesh_vao;
     };
 };
 
@@ -148,6 +150,8 @@ m4x4 current(Static_Stack<m4x4, Max> &stack)
 }
 
 
+struct Asset_Catalog;
+
 struct Graphics
 {
     GPU_Context gpu_ctx;
@@ -188,7 +192,8 @@ struct Graphics
     
     Sprite_Map glyph_maps[NUM_FONTS];
 
-    Font_Table *fonts; // IMPORTANT: Graphics does not own this memory.
+    Font_Table    *fonts;  // IMPORTANT: Graphics does not own this memory.
+    Asset_Catalog *assets; // IMPORTANT: Graphics does not own this memory.
 
     // World
     World_Graphics world;

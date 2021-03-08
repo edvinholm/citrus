@@ -83,6 +83,9 @@ gl_get_uniform_location glGetAttribLocation;
 typedef void (*gl_uniform_matrix_4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 gl_uniform_matrix_4fv glUniformMatrix4fv;
 
+typedef void (*gl_uniform_4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+gl_uniform_4f glUniform4f;
+
 typedef void (*gl_use_program)(GLuint program);
 gl_use_program glUseProgram;
 
@@ -208,6 +211,7 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_get_uniform_location, glGetUniformLocation);
     TRY_LOAD_GL_EXT(gl_get_attrib_location, glGetAttribLocation);
     TRY_LOAD_GL_EXT(gl_uniform_matrix_4fv, glUniformMatrix4fv);
+    TRY_LOAD_GL_EXT(gl_uniform_4f, glUniform4f);
     TRY_LOAD_GL_EXT(gl_use_program, glUseProgram);
     TRY_LOAD_GL_EXT(gl_vertex_attrib_pointer, glVertexAttribPointer);
     TRY_LOAD_GL_EXT(gl_vertex_attrib_i_pointer, glVertexAttribIPointer);

@@ -54,7 +54,9 @@ Item create_item(Item_Type_ID type, User_ID owner, Room_Server *server)
 }
 
 void create_dummy_entities(Room *room, Room_Server *server)
-{   
+{
+    Quat q = axis_rotation(V3_Z, PI);
+    
     v3 pp = { room_size_x/2 + 8, room_size_y/2 };
     for(int i = 0; i < 2; i++)
     {
@@ -66,7 +68,7 @@ void create_dummy_entities(Room *room, Room_Server *server)
         item.type = item_type_id; 
 
         Entity e = {0};
-        *static_cast<S__Entity *>(&e) = create_item_entity(&item, pp, room->t);
+        *static_cast<S__Entity *>(&e) = create_item_entity(&item, pp, q, room->t);
         e.id = 1 + room->next_entity_id_minus_one++;
 
         Assert(room->num_entities < ARRLEN(room->entities));
@@ -876,23 +878,23 @@ Entity *add_entity(Entity *entity, Room *room)
     return dest;
 }
 
-void do_create_item_entity_at_tp(Item *item, v3 tp, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
+void do_create_item_entity_at_tp(Item *item, v3 tp, Quat q, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
 {
     v3 p = item_entity_p_from_tp(tp, item);
                             
     Entity e = {0};
-    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, room->t);
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, room->t);
     Entity *e_added = add_entity(&e, room);
 
     post_item_entity_move(e_added, NULL, 0, supporters, num_supporters, room ,server);
 }
 
-bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Room *room, Room_Server *server)
+bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Quat q, Room *room, Room_Server *server)
 {
     Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = {0};
-    if(can_place_item_entity_at_tp(item, tp, room->t, room, &supporters))
+    if(can_place_item_entity_at_tp(item, tp, q, room->t, room, &supporters))
     {
-        do_create_item_entity_at_tp(item, tp, supporters.e, supporters.n, room, server);
+        do_create_item_entity_at_tp(item, tp, q, supporters.e, supporters.n, room, server);
         return true;
     }
     return false;
@@ -1020,7 +1022,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
 
                     Item fruit = create_item(ITEM_FRUIT, as_user, server);
                     Entity fruit_entity = {0};
-                    *static_cast<S__Entity *>(&fruit_entity) = create_item_entity(&fruit, V3_ZERO, room->t);
+                    *static_cast<S__Entity *>(&fruit_entity) = create_item_entity(&fruit, V3_ZERO, Q_IDENTITY, room->t);
 
                     Assert(player);
                     
@@ -1139,7 +1141,8 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             Assert(held->type == ENTITY_ITEM);
 
             v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item);
-            Assert(item_entity_can_be_at(held, p, room->t, room));
+            Quat q = Q_IDENTITY; // @Norelease
+            Assert(item_entity_can_be_at(held, p, q, room->t, room));
             
             //--
             
@@ -1303,6 +1306,7 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
 
 void update_entity(Entity *e, Room *room, Room_Server *server)
 {
+    
     switch(e->type) {
         case ENTITY_ITEM: {
 
@@ -1318,9 +1322,12 @@ void update_entity(Entity *e, Room *room, Room_Server *server)
                     {
                         Item plant = create_item(ITEM_PLANT, item->owner, server);
 
-                        v3 tp = entity_position(e, room->t, room) - V3_Y * 2;
+                        v3 tp;
+                        Quat q;
+                        get_entity_transform(e, room->t, room, &tp, &q);
+                        tp += rotate_vector(V3_X, q) * 2;
 
-                        place_item_entity_at_tp_if_possible(&plant, tp, room, server);
+                        place_item_entity_at_tp_if_possible(&plant, tp, q, room, server);
                 
                         machine->stop_t = room->t;
                         room->did_change = true;
@@ -1531,7 +1538,8 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                 auto *p = &player_action->place_from_inventory;
 
                 Item_ID item_id = p->item;
-                v3 tp = p->tp;
+                v3   tp = p->tp;
+                Quat q  = p->q;
                 
                 // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
                 //            This is so the game client can know when to for example remove preview entities.
@@ -1552,7 +1560,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     
                     // Check if we can commit //
                     if(can_commit) {
-                        can_commit = can_place_item_entity_at_tp(&item, tp, room->t, room, &supporters);
+                        can_commit = can_place_item_entity_at_tp(&item, tp, q, room->t, room, &supporters);
                     }
 
                     if(can_commit)
@@ -1564,7 +1572,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                             //             return on error, but instead retry until it succeeds (See comment for the proc.)
                         }
 
-                        do_create_item_entity_at_tp(&item, tp, supporters.e, supporters.n, room, server);
+                        do_create_item_entity_at_tp(&item, tp, q, supporters.e, supporters.n, room, server);
                         
                     }
                     else {

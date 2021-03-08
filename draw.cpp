@@ -115,21 +115,52 @@ void reset_vertex_buffer(Vertex_Buffer<A> *buffer)
 
 
 
-template<Allocator_ID A>
-void draw_render_object(Render_Object *obj, Vertex_Buffer<A> vertices, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, Graphics *gfx)
+inline
+void draw_vao(VAO *vao, Graphics *gfx)
 {
+    bind_vao(vao, gfx);
+    {
+        gpu_draw(GPU_TRIANGLES, vao->vertex1 - vao->vertex0, 0);
+    }
+    unbind_vao(gfx);
+}
+
+template<Allocator_ID A>
+void draw_vertex_render_object(Render_Object *obj, Vertex_Buffer<A> *vertex_buffer, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, Graphics *gfx)
+{
+    Assert(obj->type == VERTEX_OBJECT);
+    
+    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
+    
     auto vertex0 = obj->vertex0;
     auto num_vertices = (obj->vertex1 - vertex0);
-
-    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
-
-    triangles_now(vertices.p       + vertex0,
-                  vertices.uv      + vertex0,
-                  vertices.c       + vertex0,
-                  vertices.tex     + vertex0,
-                  vertices.normals + vertex0,
+    
+    triangles_now(vertex_buffer->p       + vertex0,
+                  vertex_buffer->uv      + vertex0,
+                  vertex_buffer->c       + vertex0,
+                  vertex_buffer->tex     + vertex0,
+                  vertex_buffer->normals + vertex0,
                   num_vertices, buffer_set,
                   do_dynamic_draw_now);
+}
+
+
+void draw_render_object(Render_Object *obj, Render_Object_Buffer *object_buffer, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, Graphics *gfx)
+{
+    switch(obj->type) { // @Jai #complete
+        case VERTEX_OBJECT: {
+            draw_vertex_render_object(obj, &object_buffer->vertices, do_dynamic_draw_now, buffer_set, gfx);
+        } break;
+
+        case MESH_OBJECT: {
+            gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
+    
+            draw_vao(obj->mesh_vao, gfx);            
+        } break;
+
+        default: Assert(false); break;
+    }
+    
 }
 
 void reset_render_object_buffer(Render_Object_Buffer *buffer)
@@ -198,11 +229,6 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
 #endif
 
         // DRAW //
-        // NOTE: Here we try to combine objects that can be drawn with
-        //       one draw call (where we don't need to change uniforms etc).
-        //       Combinable objects must come right after one another though,
-        //       because we still want to draw them in the order we've sorted
-        //       them in.
         
         int obj_ix = 0;
         Vertex_Buffer<ALLOC_MALLOC> temporary_vertex_buffer = {0}; // IMPORTANT: Do not use temporary memory here. We cannot use that when we don't have the mutex locked. (@Speed: Make one temp mem per thread)
@@ -211,32 +237,44 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
 
         while(obj_ix < num_objects) {
 
-            int first_ix = obj_ix;
-            
-            Render_Object temporary_object = buffer->objects[object_indices[first_ix]];
-            Assert(temporary_object.type == VERTEX_OBJECT);
-            
-            temporary_object.vertex0 = 0;
-            temporary_object.vertex1 = 0;
-
-            while(obj_ix < num_objects)
-            {
-                auto *obj = &buffer->objects[object_indices[obj_ix]];
-
-                Assert(obj->type == VERTEX_OBJECT);
+            if(buffer->objects[object_indices[obj_ix]].type == VERTEX_OBJECT) {
+                reset(&temporary_vertex_buffer);
                 
-                if(obj_ix > first_ix && obj->transform != temporary_object.transform) break;
-               
-                auto v0 = obj->vertex0;
-                auto num_vertices = obj->vertex1 - v0;
-                add_vertices(vertices.p + v0, vertices.uv + v0, vertices.c + v0, vertices.tex + v0, vertices.normals + v0, num_vertices, &temporary_vertex_buffer);
-                temporary_object.vertex1 += num_vertices;
+                // NOTE: Here we try to combine vertex objects that can be drawn with
+                //       one draw call (where we don't need to change uniforms etc).
+                //       Combinable objectscts must come right after one another though,
+                //       because we still want to draw them in the order we've sorted
+                //       them in.
 
+                int first_ix = obj_ix;
+                
+                Render_Object temporary_object = buffer->objects[object_indices[first_ix]];
+                
+                temporary_object.vertex0 = 0;
+                temporary_object.vertex1 = 0;
+
+                while(obj_ix < num_objects)
+                {
+                    auto *obj = &buffer->objects[object_indices[obj_ix]];
+
+                    if(obj->type != VERTEX_OBJECT) break;                
+                    if(obj_ix > first_ix && obj->transform != temporary_object.transform) break;
+               
+                    auto v0 = obj->vertex0;
+                    auto num_vertices = obj->vertex1 - v0;
+                    add_vertices(vertices.p + v0, vertices.uv + v0, vertices.c + v0, vertices.tex + v0, vertices.normals + v0, num_vertices, &temporary_vertex_buffer);
+                    temporary_object.vertex1 += num_vertices;
+
+                    obj_ix++;
+                }
+                
+                draw_vertex_render_object(&temporary_object, &temporary_vertex_buffer, true, current_default_buffer_set(gfx), gfx);
+            }
+            else {
+                draw_render_object(&buffer->objects[object_indices[obj_ix]], buffer, true, current_default_buffer_set(gfx), gfx);
                 obj_ix++;
             }
             
-            draw_render_object(&temporary_object, temporary_vertex_buffer, true, current_default_buffer_set(gfx), gfx);
-            reset(&temporary_vertex_buffer);
         }
         
     }
@@ -246,26 +284,32 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
         // Tries to combine objects with the same transform.
         
         int obj_ix = 0;
-        while(obj_ix < buffer->objects.n) {
-
-            int first_ix = obj_ix;
-            Render_Object temporary_object = buffer->objects[first_ix];
-
-            while(obj_ix < buffer->objects.n)
+        while(obj_ix < buffer->objects.n)
+        {
+            if(buffer->objects[obj_ix].type == VERTEX_OBJECT)
             {
-                auto *obj = &buffer->objects[obj_ix];
+                int first_ix = obj_ix;
+                Render_Object temporary_object = buffer->objects[first_ix];
 
-                Assert(obj->type == VERTEX_OBJECT);
+                while(obj_ix < buffer->objects.n)
+                {
+                    auto *obj = &buffer->objects[obj_ix];
+                    
+                    if(obj->type != VERTEX_OBJECT) break;
+                    if(obj_ix > first_ix && (obj->transform != temporary_object.transform ||
+                                             obj->vertex0 != temporary_object.vertex1)) break;
 
-                if(obj_ix > first_ix && (obj->transform != temporary_object.transform ||
-                                         obj->vertex0 != temporary_object.vertex1)) break;
-
-                temporary_object.vertex1 = obj->vertex1;
+                    temporary_object.vertex1 = obj->vertex1;
                 
+                    obj_ix++;
+                }
+            
+                draw_vertex_render_object(&temporary_object, &vertices, true, current_default_buffer_set(gfx), gfx);
+            }
+            else {
+                draw_render_object(&buffer->objects[obj_ix], buffer, true, current_default_buffer_set(gfx), gfx);
                 obj_ix++;
             }
-            
-            draw_render_object(&temporary_object, vertices, true, current_default_buffer_set(gfx), gfx);
         }
     }
 }

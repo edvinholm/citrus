@@ -257,6 +257,26 @@ bool read_bool(bool *_b, Network_Node *node)
 
 
 inline
+bool read_Quat(Quat *_q, Network_Node *node)
+{   
+    Assert(sizeof(_q->x) == sizeof(u32));
+    Assert(sizeof(_q->x) == 4);
+    u32 x, y, z, w; 
+    if(!read_u32(&x, node)) return false;
+    if(!read_u32(&y, node)) return false;
+    if(!read_u32(&z, node)) return false;
+    if(!read_u32(&w, node)) return false;
+
+    memcpy(&_q->x, &x, 4);
+    memcpy(&_q->y, &y, 4);
+    memcpy(&_q->z, &z, 4);
+    memcpy(&_q->w, &w, 4);
+
+    return true;
+}
+
+
+inline
 bool read_v3(v3 *_u, Network_Node *node)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -384,12 +404,33 @@ bool write_bool(bool b, Network_Node *node)
     return write_u8(b ? 1 : 0, node);
 }
 
+
+inline
+bool write_Quat(Quat q, Network_Node *node)
+{
+    Assert(sizeof(q.x) == sizeof(u32));
+    Assert(sizeof(q.x) == 4);
+    u32 x, y, z, w;
+    memcpy(&x, &q.x, 4);
+    memcpy(&y, &q.y, 4);
+    memcpy(&z, &q.z, 4);
+    memcpy(&w, &q.w, 4);
+
+    if(!write_u32(x, node)) return false;
+    if(!write_u32(y, node)) return false;
+    if(!write_u32(z, node)) return false;
+    if(!write_u32(w, node)) return false;
+
+    return true;
+}
+
+
 inline
 bool write_v3(v3 u, Network_Node *node)
 {
     Assert(sizeof(u.x) == sizeof(u32));
     Assert(sizeof(u.x) == 4);
-    u32 x, y, z, w;
+    u32 x, y, z;
     memcpy(&x, &u.x, 4);
     memcpy(&y, &u.y, 4);
     memcpy(&z, &u.z, 4);
@@ -1011,6 +1052,7 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
             auto *x = &_action->place_from_inventory;
             Read_To_Ptr(Item_ID, &x->item, node);
             Read_To_Ptr(v3,      &x->tp, node);
+            Read_To_Ptr(Quat,    &x->q, node);
         } break;
 
         default: Assert(false); return false;
@@ -1044,6 +1086,7 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
             auto *x = &action.place_from_inventory;
             Write(Item_ID, x->item, node); // @Norelease @Robustness: Check that this is not NO_ITEM
             Write(v3,      x->tp, node);
+            Write(Quat,    x->q,  node);
         } break;
 
         default: Assert(false); return false;
@@ -1163,8 +1206,8 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
         case ENTITY_ITEM: {
             auto *x = &_entity->item_e;
             
-            Read_To_Ptr(v3, &x->p, node);
-            // TODO: Sync Quat q.
+            Read_To_Ptr(v3,   &x->p, node);
+            Read_To_Ptr(Quat, &x->q, node);
             
             Read_To_Ptr(Item, &x->item, node);
 
@@ -1256,8 +1299,8 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
         case ENTITY_ITEM: {
             auto *x = &entity->item_e;
             
-            Write(v3, x->p, node);
-            // TODO: Sync Quat q.
+            Write(v3,   x->p, node);
+            Write(Quat, x->q, node);
             
             Write(Item, x->item, node);
             

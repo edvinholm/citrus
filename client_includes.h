@@ -26,6 +26,7 @@
 
 // --
 
+#include "mesh.h"
 #include "obj.cpp"
 
 #include "direction.h"
@@ -103,6 +104,8 @@ using namespace Client_Market;
 
 
 #include "ui_dev_client.h"
+
+#include "assets.cpp"
 
 #include "client.h"
 

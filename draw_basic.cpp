@@ -1,20 +1,5 @@
 
 
-//NOTE: n is number of vertices
-void triangles_now(v3 *positions, v2 *uvs, v4 *colors, float *textures, v3 *normals, u64 n, GPU_Buffer_Set *set, bool do_dynamic_draw_now)
-{
-    bool static_draw = !do_dynamic_draw_now;
-    
-    gpu_set_vertex_buffer_data(set->position_buffer, positions, sizeof(v3) * n,    static_draw);
-    gpu_set_vertex_buffer_data(set->uv_buffer,       uvs,       sizeof(v2) * n,    static_draw);
-    gpu_set_vertex_buffer_data(set->color_buffer,    colors,    sizeof(v4) * n,    static_draw);
-    gpu_set_vertex_buffer_data(set->texture_buffer,  textures,  sizeof(float) * n, static_draw);
-    gpu_set_vertex_buffer_data(set->normal_buffer,   normals,   sizeof(v3) * n,    static_draw);
-
-    if(do_dynamic_draw_now) gpu_draw(GPU_TRIANGLES, n);
-}
-
-
 void triangles(v3 *p, v2 *uv, v4 *c, float *tex, v3 *normals, u32 n, Graphics *gfx)
 {
     auto *buffer = current_vertex_buffer(gfx);
@@ -487,4 +472,23 @@ void draw_rect_pp(v2 p0, v2 p1, v4 color, Graphics *gfx, float z = 0, v2 *uvs = 
 void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, float z = 0, v2 *uvs = NULL, Texture_ID texture = TEX_NONE_OR_NUM)
 {
     draw_rect({p0, s}, color, gfx, z, uvs, texture);
+}
+
+
+void draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0)
+{
+    Assert(!object_buffer->current_vertex_object_began);
+    
+    Render_Object obj = {0};
+    obj.type      = MESH_OBJECT;
+    obj.transform = transform;
+    obj.mesh_vao  = mesh_vao;
+    obj.screen_z  = screen_z;
+
+    array_add(object_buffer->objects, obj);
+}
+
+void draw_mesh(Mesh_ID mesh, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0) {
+    Assert(mesh >= 0 && mesh < ARRLEN(gfx->assets->mesh_vaos));
+    draw_mesh(&gfx->assets->mesh_vaos[mesh], transform , object_buffer, gfx, screen_z);
 }

@@ -13,6 +13,25 @@ struct Array
     T &operator [] (const s64 index);
 };
 
+template<typename T, Allocator_ID A>
+inline
+void clear(Array<T, A> *array)
+{   
+    if(array->e) dealloc(array->e, A);
+    memset(array, 0, sizeof(Array<T, A>));
+}
+
+template<typename T, Allocator_ID A>
+inline
+void clear_deep(Array<T, A> *array, Allocator_ID element_allocator)
+{
+    for(int i = 0; i < array->n; i++)
+        clear_deep(array->e + i, element_allocator);
+
+    clear(array);
+}
+
+
 
 template<typename T, Allocator_ID A>
 T *array_add(Array<T, A> &array, T *elements, s64 num_elements = 1);

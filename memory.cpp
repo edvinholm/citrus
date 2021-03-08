@@ -39,216 +39,7 @@ bool ensure_size(s64 required_size, Memory_Buffer *buffer)
 }
 
 
-
-
-
-inline
-Memory_Block_Header first_memory_block(size_t page_size)
-{
-    Memory_Block_Header first_block = {0};
-    first_block.prev_size = 0;
-    first_block.size = page_size - sizeof(Memory_Block_Header);
-    first_block.alive = false;
-    first_block.last  = true;
-    return first_block;
-}
-
-
-Memory_Page *add_memory_page(size_t size, Allocator *allocator)
-{
-    Release_Assert(allocator->num_pages < ARRLEN(allocator->pages));
-    
-    Memory_Page page = {0};
-    page.start = (u8 *)malloc(size);
-    page.size = size;
-    Release_Assert(page.start);
-
-    Memory_Block_Header first_block = first_memory_block(page.size);
-
-    Memory_Block_Header *first = (Memory_Block_Header*)page.start;
-    
-    *first = first_block;
-
-    allocator->pages[allocator->num_pages++] = page;
-    
-    return allocator->pages + allocator->num_pages - 1;
-}
-
-
-inline
-u8 *allocate_in_page(size_t size, Memory_Page *page, Allocator *allocator)
-{
-    Release_Assert(size > 0);
-
-    size_t size_with_header = sizeof(Memory_Block_Header) + size;
-    if(size_with_header > page->size) return NULL;
-
-    Memory_Block_Header *my_block = NULL;
-
-    Memory_Block_Header *block = (Memory_Block_Header *)page->start;
-
-    while(true)
-    {
-        if(!block->alive && block->size >= size)
-        {
-            my_block = block;
-        
-            size_t ds = block->size - size;
-            if(ds > sizeof(Memory_Block_Header))
-            {
-                my_block->size = size;
-            
-                Memory_Block_Header *rest = (Memory_Block_Header *)(((u8 *)block) + sizeof(Memory_Block_Header) + size);
-                rest->prev_size = my_block->size;
-                rest->size = ds - sizeof(Memory_Block_Header);
-                rest->alive = false;
-
-                rest->last = block->last;
-                my_block->last = false;
-
-                if (!rest->last)
-                {
-                    Memory_Block_Header *next = (Memory_Block_Header *)(((u8 *)rest) + sizeof(Memory_Block_Header) + rest->size);
-                    next->prev_size = rest->size;
-                }
-            }
-        
-            // So if ds <= sizeof(Memory_Block_Header), our block will have the old block's size. So it will potentially be bigger than we asked for.
-
-            my_block->alive = true;
-            break;
-        }
-
-        if(block->last) break;
-
-        Release_Assert(block->size > 0);
-        block = (Memory_Block_Header *)((u8 *)block + sizeof(Memory_Block_Header) + block->size);
-    }
-
-    if (my_block)
-    {
-#if DEBUG
-#if false
-        u8 *block_start = (u8 *)my_block + sizeof(Memory_Block_Header);
-        memset(block_start, 0xAA, my_block->size);
-#endif
-
-        allocator->block_size_sum += my_block->size;
-#endif
-
-        return ((u8 *)my_block) + sizeof(Memory_Block_Header);
-    }
-    
-    return NULL;
-}
-
-u8 *allocate(size_t size, Allocator *allocator)
-{
-    Function_Profile();
-    
-#if DEBUG
-    allocator->num_allocs++;
-#endif
-    
-    if (size == 0) return NULL;
-    
-    for(int p = allocator->num_pages-1; p >= 0; p--)
-    {
-        u8 *ptr = allocate_in_page(size, allocator->pages + p, allocator);
-        if(ptr) return ptr;
-    }
-    
-    size_t size_with_header = sizeof(Memory_Block_Header) + size;
-
-    Memory_Page *new_page = add_memory_page(max(size_with_header, MEMORY_DEFAULT_PAGE_SIZE), allocator);
-    u8 *ptr = allocate_in_page(size, new_page, allocator);
-    Release_Assert(ptr);
-
-    return ptr;
-}
-
-void deallocate(void *ptr, Allocator *allocator)
-{
-#if DEBUG
-    allocator->num_deallocs++;
-#endif
-
-    auto *block = (Memory_Block_Header *)((u8 *)ptr - sizeof(Memory_Block_Header));
-    
-    Assert(block->alive);
-    block->alive = false;
-
-#if DEBUG
-    Assert(allocator->block_size_sum >= block->size);
-    allocator->block_size_sum -= block->size;
-#endif
-
-    // Find dead blocks backwards
-    while(block->prev_size > 0)
-    {
-        auto *prev = (Memory_Block_Header *)((u8 *)block - block->prev_size - sizeof(Memory_Block_Header));
-        if(prev->alive) break;
-        
-        block = prev;
-    }
-    
-    // Merge dead blocks forward
-    while(true)
-    {
-        if(block->last) break;
-        
-        auto *next = (Memory_Block_Header *)((u8 *)block + sizeof(Memory_Block_Header) + block->size);
-        if(next->alive) {
-            next->prev_size = block->size;
-            break;
-        }
-
-        Assert(next->size > 0);
-
-        block->size += sizeof(Memory_Block_Header) + next->size;
-
-        block->last = next->last;
-    }
-
-#if DEBUG && false
-    u8 *block_start = (u8 *)block + sizeof(Memory_Block_Header);
-    memset(block_start, 0xDD, block->size);
-#endif
-}
-
 u64 platform_milliseconds();
-
-
-void init_allocator(Allocator *allocator)
-{
-    add_memory_page(MEMORY_DEFAULT_PAGE_SIZE, allocator);
-}
-
-void reset_allocator(Allocator *allocator)
-{
-    // Free all pages but one.
-    for(int p = allocator->num_pages - 1; p >= 1; p--)
-        free(allocator->pages[p].start);
-    allocator->num_pages = 1;
-
-    // Make first page be one dead block.
-    auto *first_page = allocator->pages;
-    auto *block = (Memory_Block_Header *)first_page->start;
-    *block = first_memory_block(first_page->size);
-
-#if DEBUG
-    allocator->block_size_sum = 0;
-#endif
-}
-
-inline
-void reset_allocator(Allocator_ID allocator)
-{
-    reset_allocator(allocators[allocator]);
-}
-
-
-
 
 
 
@@ -278,7 +69,7 @@ void reset_linear_allocator(Linear_Allocator *allocator)
 inline
 void reset_temporary_memory()
 {
-    reset_linear_allocator(&temporary_memory);
+    reset_linear_allocator(&tmp_allocator);
 }
 
 
@@ -291,13 +82,13 @@ u64 next_multiple(u64 x, u64 factor)
     return x;
 }
 
-u8 *linear_alloc(size_t size, Linear_Allocator *allocator)
+u8 *allocate(size_t size, Linear_Allocator *allocator)
 {
 
     Linear_Allocator_Page *page = NULL;
-    for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
+    for(int p = tmp_allocator.pages.n - 1; p >= 0; p--)
     {
-        Linear_Allocator_Page &pg = temporary_memory.pages[p];
+        Linear_Allocator_Page &pg = tmp_allocator.pages[p];
         
         if(pg.used + size <= pg.size)
         {
@@ -315,9 +106,9 @@ u8 *linear_alloc(size_t size, Linear_Allocator *allocator)
         Linear_Allocator_Page new_page = {0};
         new_page.start = alloc(page_size, ALLOC_MALLOC);
         new_page.size = page_size;
-        array_add(temporary_memory.pages, new_page);
+        array_add(tmp_allocator.pages, new_page);
 
-        page = last_element_pointer(temporary_memory.pages);
+        page = last_element_pointer(tmp_allocator.pages);
     }
     
     Assert((page->used % 64) == 0); // Assert new block is 64-byte aligned.
@@ -330,12 +121,12 @@ u8 *linear_alloc(size_t size, Linear_Allocator *allocator)
 }
 
 
-u8 *linear_realloc(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *allocator)
+u8 *reallocate(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *allocator)
 {
     Linear_Allocator_Page *page = NULL;
-    for(int p = temporary_memory.pages.n - 1; p >= 0; p--)
+    for(int p = tmp_allocator.pages.n - 1; p >= 0; p--)
     {
-        Linear_Allocator_Page &pg = temporary_memory.pages[p];
+        Linear_Allocator_Page &pg = tmp_allocator.pages[p];
         if(old >= pg.start && old < pg.start + pg.size)
             page = &pg;
     }
@@ -351,7 +142,7 @@ u8 *linear_realloc(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *
         return old;
     }
 
-    auto *new_ = linear_alloc(new_size, allocator);
+    auto *new_ = allocate(new_size, allocator);
     memcpy(new_, old, old_size);
     return new_;
 }
@@ -361,12 +152,12 @@ u8 *linear_realloc(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *
 inline
 u8 *tmp_alloc(size_t size)
 {
-    return linear_alloc(size, &temporary_memory);
+    return allocate(size, &tmp_allocator);
 }
 
 u8 *tmp_realloc(u8 *old, size_t old_size, size_t new_size)
 {
-    return linear_realloc(old, old_size, new_size, &temporary_memory);
+    return reallocate(old, old_size, new_size, &tmp_allocator);
 }
 
 
@@ -395,30 +186,30 @@ u8 *realloc(void *ptr, size_t old_size, size_t size, Allocator_ID allocator)
 }
 
 
+u8 *alloc(size_t size, Allocator *allocator)
+{
+    auto *linear = dynamic_cast<Linear_Allocator *>(allocator);
+    if(linear != NULL) return allocate(size, linear);
+
+    auto *malloc_ = dynamic_cast<Malloc_Allocator *>(allocator);
+    if(malloc_ != NULL) return (u8 *)malloc(size);
+
+    Assert(false);
+    return NULL;
+}
+
+
 inline
-u8 *alloc(size_t size, Allocator_ID allocator)
+u8 *alloc(size_t size, Allocator_ID allocator_id)
 {
     //void *result = allocate(size, default_allocator);
 
     Assert(ARRLEN(allocators) == ALLOC_NONE_OR_NUM);
-    Assert(allocator != ALLOC_NONE_OR_NUM);
-    Assert(allocator < ARRLEN(allocators));
+    Assert(allocator_id != ALLOC_NONE_OR_NUM);
+    Assert(allocator_id < ARRLEN(allocators));
 
-    switch(allocator)
-    {
-        case ALLOC_MALLOC: {
-            auto *result = (u8 *)malloc(size);
-            return result;
-        } break;
-            
-        case ALLOC_TMP:    return tmp_alloc(size);
-
-        default: {
-            return (u8 *)malloc(size);
-            
-            //return allocate(size, allocators[allocator]);
-        }
-    }
+    Allocator *allocator = allocators[allocator_id];
+    return alloc(size, allocator);
 }
 
 template<typename T>
@@ -427,46 +218,36 @@ T *alloc_elements(int n, Allocator_ID allocator)
     return (T *)alloc(sizeof(T)*n, allocator);
 }
 
-inline
-void dealloc(void *ptr, Allocator_ID allocator)
-{   
+void dealloc(void *ptr, Allocator *allocator)
+{    
     Assert(ptr);
-
-
-#if DEBUG
-
-    u8 first_byte_before = *(u8 *)ptr;
-
-    *(u8 *)ptr = 'F';
-
-#if DEBUG_MEMORY_SLOW
-    if(!now_doing_allocs_deallocs_debug_stuff)
-    {
-        now_doing_allocs_deallocs_debug_stuff = true;
-        register_dealloc(ptr, file, line);
-        now_doing_allocs_deallocs_debug_stuff = false;
-    }
-#endif
     
-#endif
+    auto *linear = dynamic_cast<Linear_Allocator *>(allocator);
+    if(linear != NULL)  { Assert(false); return; } // Not legal
 
-    switch(allocator)
-    {
-        case ALLOC_MALLOC: free(ptr); break;
-        case ALLOC_TMP:    Assert(false); break;
+    auto *malloc_ = dynamic_cast<Malloc_Allocator *>(allocator);
+	if (malloc_ != NULL) { free(ptr); return; }
 
-        default: {
-            free(ptr);
-//            deallocate(ptr, allocators[allocator]);
-        } break;
-    }
-    
+    Assert(false);
 }
 
-void dealloc_if_legal(void *ptr, Allocator_ID allocator)
+inline
+void dealloc(void *ptr, Allocator_ID allocator_id)
+{   
+    return dealloc(ptr, allocators[allocator_id]);
+}
+
+void dealloc_if_legal(void *ptr, Allocator *allocator)
 {
-    if(allocator == ALLOC_TMP) return;
+    auto *linear = dynamic_cast<Linear_Allocator *>(allocator);
+    if(linear != NULL)  { return; } // Not legal
+
     dealloc(ptr, allocator);
+}
+
+void dealloc_if_legal(void *ptr, Allocator_ID allocator_id)
+{
+    return dealloc(ptr, allocators[allocator_id]);
 }
 
 
@@ -579,7 +360,7 @@ u64 next_power_of(u64 x, u64 power)
 
 void ensure_buffer_set_capacity(u64 required_capacity, u64 *capacity,
                                 void ***buffers, size_t *element_sizes,
-                                u64 num_buffers, Allocator_ID allocator,
+                                u64 num_buffers, Allocator *allocator,
                                 u64 min_capacity = 1)
 {
     Assert(num_buffers <= 8);
@@ -627,17 +408,3 @@ void dealloc_buffer_set(void *first_buffer, Allocator_ID allocator)
 }
 
 
-
-
-
-
-void init_memory()
-{
-    for(int a = 0; a < ARRLEN(allocators); a++)
-    {
-        Allocator *alc = allocators[a];
-        if(!alc) continue;
-        
-        init_allocator(alc);
-    }
-}

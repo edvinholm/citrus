@@ -210,7 +210,7 @@ Entity create_preview_item_entity(Item *item, v3 tp, double world_t, Quat q = Q_
     v3 p = item_entity_p_from_tp(tp, item);
     
     Entity e = {0};
-    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, world_t, q);
+    *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, world_t);
 
     e.is_preview = true;
     return e;

@@ -248,6 +248,7 @@ struct Player_Action
         struct {
             Item_ID item;
             v3 tp;
+            Quat q;
         } place_from_inventory;
     };
 };

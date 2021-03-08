@@ -254,7 +254,7 @@ Player_Action make_player_entity_action(Entity_Action *action, Entity_ID target)
     return player_action;
 }
 
-S__Entity create_item_entity(Item *item, v3 p, double world_t, Quat q = Q_IDENTITY)
+S__Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
 {
     S__Entity e = {0};
     e.type = ENTITY_ITEM;
@@ -310,8 +310,7 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
         switch(e->type) {
             case ENTITY_ITEM: {
                 *_p = e->item_e.p;
-                *_q = e->item_e.q;
-                
+                *_q = e->item_e.q;                
                 return;
             } break;
             
@@ -407,8 +406,8 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
     v3s volume = item_types[item->type].volume;
 
-    v3 forward = rotate_vector(V3_Y, item_e->q);
-    v3 right   = rotate_vector(V3_X, item_e->q);
+    v3 forward = rotate_vector(V3_X, item_e->q);
+    v3 left    = rotate_vector(V3_Y, item_e->q);
 
     // @Cleanup: action should not be optional. We have it here for PUT_DOWN.
     if(action) {
@@ -436,21 +435,21 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
                             const float offs = 1.0f;
                         
-                            if     (x == 0)        array_add(positions, tile_from_p(pp - right * offs));
-                            else if(x == volume.x) array_add(positions, tile_from_p(pp + right * offs));
+                            if     (y == 0)        array_add(positions, tile_from_p(pp + left * offs));
+                            else if(y == volume.x) array_add(positions, tile_from_p(pp - left * offs));
                         
-                            if     (y == 0)        array_add(positions, tile_from_p(pp - forward * offs));
-                            else if(y == volume.y) array_add(positions, tile_from_p(pp + forward * offs));
+                            if     (x == 0)        array_add(positions, tile_from_p(pp - forward * offs));
+                            else if(x == volume.y) array_add(positions, tile_from_p(pp + forward * offs));
                         }
                     }
                 }
             } break;
 
             case ENTITY_ACT_SIT_OR_UNSIT: {
-                array_add(positions, tile_from_p(p + forward * (volume.y * 0.5f + 1)));
-                array_add(positions, tile_from_p(p - right   * (volume.x * 0.5f + 1)));
-                array_add(positions, tile_from_p(p + right   * (volume.x * 0.5f + 1)));
-                array_add(positions, tile_from_p(p - forward * (volume.y * 0.5f + 1)));
+                array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
+                array_add(positions, tile_from_p(p + left    * (volume.y * 0.5f + 1)));
+                array_add(positions, tile_from_p(p - left    * (volume.y * 0.5f + 1)));
+                array_add(positions, tile_from_p(p - forward * (volume.x * 0.5f + 1)));
             } break;
 
             case ENTITY_ACT_CHESS: {
@@ -459,8 +458,8 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
                 Assert(item->type == ITEM_CHESS_BOARD);
                 auto *board = &item_e->chess_board;
                 
-                v3 white_p = p + forward * (volume.y * 0.5f + 1);
-                v3 black_p = p - forward * (volume.y * 0.5f + 1);
+                v3 white_p = p + left * (volume.y * 0.5f + 1);
+                v3 black_p = p - left * (volume.y * 0.5f + 1);
 
                 white_p.z -= hands_zoffs;
                 black_p.z -= hands_zoffs;
@@ -736,7 +735,7 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
 }
 
 
-bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
+bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
 
@@ -795,21 +794,21 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, double world_t, Room *roo
     return true;
 }
 
-bool item_entity_can_be_at_tp(Entity *my_entity, v3 tp, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
+bool item_entity_can_be_at_tp(Entity *my_entity, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
-    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item), world_t, room, _supporters);
+    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item), q, world_t, room, _supporters);
 }
 
-bool can_place_item_entity(Item *item, v3 p, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
+bool can_place_item_entity(Item *item, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
-    S__Entity e = create_item_entity(item, p, world_t);
-    return item_entity_can_be_at(&e, e.item_e.p, world_t, room, _supporters);
+    S__Entity e = create_item_entity(item, p, q, world_t);
+    return item_entity_can_be_at(&e, e.item_e.p, q, world_t, room, _supporters);
 }
 
-bool can_place_item_entity_at_tp(Item *item, v3 tp, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
+bool can_place_item_entity_at_tp(Item *item, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
-    return can_place_item_entity(item, item_entity_p_from_tp(tp, item), world_t, room, _supporters);
+    return can_place_item_entity(item, item_entity_p_from_tp(tp, item), q, world_t, room, _supporters);
 }
 
 
@@ -874,7 +873,8 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
             if(state.held_item.type != ITEM_NONE_OR_NUM)
             {
                 v3 p = item_entity_p_from_tp(x->tp, &state.held_item);
-                S__Entity fake_entity = create_item_entity(&state.held_item, p, world_t, Q_IDENTITY);
+                Quat q = Q_IDENTITY; // @Norelease
+                S__Entity fake_entity = create_item_entity(&state.held_item, p, q, world_t);
 
                 AABB bbox = entity_aabb(&fake_entity, world_t, room);
                 volumes[(*_num)++] = bbox;
@@ -1170,8 +1170,9 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
 
             v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item);
+            Quat put_down_q = Q_IDENTITY; // @Norelease: Rotation for PUT_DOWN
             
-            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, world_t, Q_IDENTITY /* @Norelease: Have q in PUT_DOWN action */);
+            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, put_down_q, world_t);
             
             // @Norelease: Check that the put down entity won't collide with anything.
 
@@ -1182,7 +1183,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             //             So it is possible to put down two entities in the same spot right now.
 
             // This is @Temporary (See comments above).
-            if(!item_entity_can_be_at(&held_entity_replica, put_down_p, world_t, room, &_info->put_down.supporters))
+            if(!item_entity_can_be_at(&held_entity_replica, put_down_p, put_down_q, world_t, room, &_info->put_down.supporters))
                 return false;
 
             // @Cleanup @Hack !!!

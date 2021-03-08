@@ -6,8 +6,9 @@
 //TODO @Speed: Combine matrices on CPU?
 uniform mat4 projection;
 uniform mat4 transform;
-uniform bool mode_2d;
 //--
+uniform vec4 color_multiplier;
+uniform bool mode_2d;
 
 in vec3 position;
 in vec2 uvs;
@@ -35,9 +36,9 @@ void main() {
 
     vec4 world_normal = normalize(vec4(normal, 0) * transform);
 
-    fragment_color = color;
+    fragment_color = color * color_multiplier;
     vec3 light_source = (mode_2d) ? light_2d : sun;
-    fragment_color.xyz *= (0.75f + 0.25f * dot(world_normal.xyz, light_source));
+    fragment_color.xyz *= (0.5f + min(0.5f, 0.65f * dot(world_normal.xyz, light_source)));
 
 #if DEBUG_NORMALS
     if(!mode_2d) {

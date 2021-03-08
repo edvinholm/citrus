@@ -1388,7 +1388,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             {
                 v3 tp = room->placement_tp;
 
-                if (can_place_item_entity_at_tp(item_to_place, tp, world_t, room))
+                Quat q = axis_rotation(V3_Z, PI); // @Norelease
+
+                if (can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room))
                 {
                     if(room->placing_held_item) {
                         Player_Action action = {0};
@@ -1402,6 +1404,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         action.type = PLAYER_ACT_PLACE_FROM_INVENTORY;
                         action.place_from_inventory.item = item_to_place->id;
                         action.place_from_inventory.tp   = tp;
+                        action.place_from_inventory.q   = q;
                 
                         request(&action, client);
 
@@ -1619,24 +1622,7 @@ void update_client(Client *client, Input_Manager *input)
 }
 
 int client_entry_point(int num_args, char **arguments)
-{
-
-#if 0
-    // @Cleanup: .obj stuff in client_entry_point
-    String obj_contents = {0};
-    if(!read_entire_resource("meshes/bed.obj", &obj_contents.data, ALLOC_TMP, &obj_contents.length)){
-        Debug_Print("Unable to read mesh resource.\n");
-        return 987;
-    }
-    if(read_obj(obj_contents)) {
-        Debug_Print("Read obj successfully.\n");
-    } else {
-        Debug_Print("Failed to read obj.\n");
-    }
-    return 0;
-    //---
-#endif
-                             
+{                             
     platform_init_socket_use();
     
     Debug_Print("I am a client.\n");
@@ -1665,6 +1651,10 @@ int client_entry_point(int num_args, char **arguments)
     platform_create_window(main_window, "Citrus", window_rect.w, window_rect.h, window_rect.x, window_rect.y);
     client_set_window_delegate(main_window, &client);
     platform_get_window_rect(main_window, &client.main_window_a.x,  &client.main_window_a.y,  &client.main_window_a.w,  &client.main_window_a.h);
+    //--
+
+    // LOAD ASSETS //
+    load_assets(&client.assets);
     //--
 
     // INIT CLIENT UI //
