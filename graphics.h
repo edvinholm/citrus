@@ -62,8 +62,11 @@ enum Render_Object_Type
 struct Render_Object
 {
     Render_Object_Type type;
+
     float screen_z;
-    m4x4 transform;
+    
+    m4x4  transform;
+    v4    color;
 
     union {
         struct { // VERTEX_OBJECT

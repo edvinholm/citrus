@@ -73,3 +73,40 @@ Mesh copy_mesh(Mesh *mesh, Allocator *allocator)
 {
     return create_mesh(mesh->positions, mesh->normals, mesh->uvs, mesh->n, allocator);
 }
+
+
+
+bool ray_intersects_mesh(Ray ray, Mesh *mesh, v3 *_intersection, float *_ray_t)
+{
+    bool  any_hit = false;
+    float closest_hit_t = FLT_MAX;
+    v3    closest_hit;
+    
+    int i = 0;
+    while(i < mesh->n)
+    {
+        v3 a = mesh->positions[i++];
+        v3 b = mesh->positions[i++];
+        v3 c = mesh->positions[i++];
+
+        v4 plane = triangle_plane(a, b, c);
+
+        v3    intersection;
+        float ray_t;
+        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) continue;
+        if(any_hit && ray_t >= closest_hit_t) continue;
+
+        auto bc = barycentric(intersection, a, b, c);
+        if(bc.x >= 0 && bc.y >= 0 && bc.z >= 0) {
+            any_hit = true;
+            closest_hit   = intersection;
+            closest_hit_t = ray_t;
+        }
+    }
+
+    if(!any_hit) return false;
+
+    *_intersection = closest_hit;
+    *_ray_t        = closest_hit_t;
+    return true;
+}

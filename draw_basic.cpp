@@ -473,22 +473,3 @@ void draw_rect_ps(v2 p0, v2 s, v4 color, Graphics *gfx, float z = 0, v2 *uvs = N
 {
     draw_rect({p0, s}, color, gfx, z, uvs, texture);
 }
-
-
-void draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0)
-{
-    Assert(!object_buffer->current_vertex_object_began);
-    
-    Render_Object obj = {0};
-    obj.type      = MESH_OBJECT;
-    obj.transform = transform;
-    obj.mesh_vao  = mesh_vao;
-    obj.screen_z  = screen_z;
-
-    array_add(object_buffer->objects, obj);
-}
-
-void draw_mesh(Mesh_ID mesh, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0) {
-    Assert(mesh >= 0 && mesh < ARRLEN(gfx->assets->mesh_vaos));
-    draw_mesh(&gfx->assets->mesh_vaos[mesh], transform , object_buffer, gfx, screen_z);
-}

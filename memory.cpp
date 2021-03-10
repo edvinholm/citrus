@@ -86,9 +86,9 @@ u8 *allocate(size_t size, Linear_Allocator *allocator)
 {
 
     Linear_Allocator_Page *page = NULL;
-    for(int p = tmp_allocator.pages.n - 1; p >= 0; p--)
+    for(int p = allocator->pages.n - 1; p >= 0; p--)
     {
-        Linear_Allocator_Page &pg = tmp_allocator.pages[p];
+        Linear_Allocator_Page &pg = allocator->pages[p];
         
         if(pg.used + size <= pg.size)
         {
@@ -106,9 +106,9 @@ u8 *allocate(size_t size, Linear_Allocator *allocator)
         Linear_Allocator_Page new_page = {0};
         new_page.start = alloc(page_size, ALLOC_MALLOC);
         new_page.size = page_size;
-        array_add(tmp_allocator.pages, new_page);
+        array_add(allocator->pages, new_page);
 
-        page = last_element_pointer(tmp_allocator.pages);
+        page = last_element_pointer(allocator->pages);
     }
     
     Assert((page->used % 64) == 0); // Assert new block is 64-byte aligned.
@@ -124,9 +124,9 @@ u8 *allocate(size_t size, Linear_Allocator *allocator)
 u8 *reallocate(u8 *old, size_t old_size, size_t new_size, Linear_Allocator *allocator)
 {
     Linear_Allocator_Page *page = NULL;
-    for(int p = tmp_allocator.pages.n - 1; p >= 0; p--)
+    for(int p = allocator->pages.n - 1; p >= 0; p--)
     {
-        Linear_Allocator_Page &pg = tmp_allocator.pages[p];
+        Linear_Allocator_Page &pg = allocator->pages[p];
         if(old >= pg.start && old < pg.start + pg.size)
             page = &pg;
     }
@@ -226,7 +226,7 @@ void dealloc(void *ptr, Allocator *allocator)
     if(linear != NULL)  { Assert(false); return; } // Not legal
 
     auto *malloc_ = dynamic_cast<Malloc_Allocator *>(allocator);
-	if (malloc_ != NULL) { free(ptr); return; }
+    if (malloc_ != NULL) { free(ptr); return; }
 
     Assert(false);
 }

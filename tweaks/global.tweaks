@@ -35,6 +35,10 @@ show_entity_action_positions false
 # Shows for example the z of player entities' hands.	
 show_player_entity_parts false
 
+show_entity_forward_vectors false
+
+show_entity_bounding_boxes false
+
 
 run_profiler    false
 show_profiler   false

@@ -240,7 +240,7 @@ m4x4 inverse_of(m4x4 matrix)
     det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
 
     if (det == 0) {
-        Zero(inverse);
+        Zero(inverse); // @Speed
         return inverse;
     }
 
@@ -265,65 +265,6 @@ m4x4 inverse_of(m4x4 matrix)
     
     return inverse;
 }
-
-#if 0
-m4x4 inverted_(m4x4 matrix)
-{
-    float d = det(matrix);
-    
-    if(is_zero(d)) {
-        //Assert(false);
-
-        //TODO @Investigate: Is this the right thing to do? We just shoot stuff out in space and scale it to zero.
-        m4x4 m = {0};
-        m._03 = m._13 = m._23 = -99999999999;
-        m._33 = 1;
-        
-        return m;
-    }
-
-    //FROM: https://www.sanfoundry.com/c-program-find-inverse-matrix/
-    //@Research how this actually work.
-    m4x4 inv;
-    
-    float b[3*3];
-    int p, q, m, n, i, j;
-    for (q = 0; q < 4; q++)
-    {
-        for (p = 0; p < 4; p++)
-        {
-            m = 0;
-            n = 0;
-            for (i = 0; i < 4; i++)
-            {
-                for (j = 0; j < 4; j++)
-                {
-                    if (i != q && j != p)
-                    {
-                        b[m*3 + n] = matrix.elements[i*4 + j];
-                        if (n < (4 - 2))
-                            n++;
-                        else
-                        {
-                            n = 0;
-                            m++;
-                        }
-                    }
-                }
-            }
-
-            inv.elements[q*4 + p] = pow(-1, q + p) * det(b, 4 - 1);
-        }
-    }
-    
-    inv = transposed(inv);
-    for(int r = 0; r < 4; r++)
-        for(int c = 0; c < 4; c++)
-            inv.elements[r*4 + c] /= d;
-
-    return inv;
-}
-#endif
 
 
 #define m4x4_set(Matrix, Row, Col, Value) Matrix.elements[(Row * 4) + Col] = Value
@@ -384,12 +325,12 @@ void vecmatmuls(v3 *in, m4x4 m, v3 *_out, u32 n)
 }
 
 inline
-v3 vecmatmul(v3 v, m4x4 m)
+v3 vecmatmul(v3 v, m4x4 m, float w/* = 1.0f*/)
 {
     v3 result;
-    result.x = m._00 * v.x + m._01 * v.y + m._02 * v.z + m._03 * 1.0f;
-    result.y = m._10 * v.x + m._11 * v.y + m._12 * v.z + m._13 * 1.0f;
-    result.z = m._20 * v.x + m._21 * v.y + m._22 * v.z + m._23 * 1.0f;
+    result.x = m._00 * v.x + m._01 * v.y + m._02 * v.z + m._03 * w;
+    result.y = m._10 * v.x + m._11 * v.y + m._12 * v.z + m._13 * w;
+    result.z = m._20 * v.x + m._21 * v.y + m._22 * v.z + m._23 * w;
     return result;
 }
 
@@ -582,18 +523,17 @@ m4x4 scale_around_point_matrix(v3 scale, v3 point)
 m4x4 rotation_matrix(Quat q)
 {
     //@JAI: Using q;
-    
-    float x = q.x;
-    float y = q.y;
-    float z = q.z;
-    float w = q.w;
+
+    float q0 = q.w;
+    float q1 = q.x;
+    float q2 = q.y;
+    float q3 = q.z;
     
     return make_m4x4(
-        (1.0f - 2.0f*y*y - 2.0f*z*z), (2.0f*x*y + 2.0f*z*w), (2.0f*x*z - 2.0f*y*w), 0,
-        (2.0f*x*y - 2.0f*z*w), (1.0f - 2.0f*x*x - 2.0f*z*z), (2.0f*y*z + 2.0f*x*w), 0,
-        (2.0f*x*z + 2.0f*y*w), (2.0f*y*z - 2.0f*x*w), (1.0f - 2.0f*x*x - 2.0f*y*y), 0,
-        0,                     0,                     0,                            1);
-                     
+        2*(q0*q0+q1*q1)-1, 2*(q1*q2-q0*q3),   2*(q1*q3+q0*q2),    0,
+        2*(q1*q2+q0*q3),   2*(q0*q0+q2*q2)-1, 2*(q2*q3-q0*q1),    0,
+        2*(q1*q3-q0*q2),   2*(q2*q3+q0*q1),   2*(q0*q0+q3*q3)-1,  0,
+        0,                 0,                 0,                  1);
 }
 
 

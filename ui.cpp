@@ -1669,7 +1669,7 @@ UI_World_View *world_view(UI_Context ctx)
     return view;
 }
 
-void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, Room *room, double t)
+void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, Room *room, double t, Asset_Catalog *assets)
 {    
     Assert(e->type == WORLD_VIEW);
     auto *view = &e->world_view;
@@ -1692,7 +1692,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
         v3      entity_hit_p;
         bool    entity_hit_was_on_surface;
         Surface entity_hit_surface;
-        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, &entity_hit_p, &entity_hit_was_on_surface, &entity_hit_surface);
+        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, assets, &entity_hit_p, &entity_hit_was_on_surface, &entity_hit_surface);
         if (entity_hit) {
 
             hovered_entity = entity_hit->id;
@@ -1964,7 +1964,7 @@ void begin_ui_build(UI_Manager *ui)
 #endif
 }
 
-void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, double t, Room *room, Cursor_Icon *_cursor)
+void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, double t, Room *room, Asset_Catalog *assets, Cursor_Icon *_cursor)
 {
     Array<u8, ALLOC_TMP> temp = {0};
     
@@ -2131,7 +2131,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             } break;
             case SLIDER:     update_slider(e, input, hovered_element);     break;
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
-            case WORLD_VIEW: update_world_view(e, input, hovered_element, room, t); break;
+            case WORLD_VIEW: update_world_view(e, input, hovered_element, room, t, assets); break;
 
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 

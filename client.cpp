@@ -1387,8 +1387,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(wv->click_state & CLICKED_ENABLED)
             {
                 v3 tp = room->placement_tp;
-
-                Quat q = axis_rotation(V3_Z, PI); // @Norelease
+                
+                Quat q = Q_IDENTITY; // @Norelease
+                // Quat q = axis_rotation(V3_Z, random_float() * TAU); // @Norelease
 
                 if (can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room))
                 {
@@ -1404,11 +1405,11 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         action.type = PLAYER_ACT_PLACE_FROM_INVENTORY;
                         action.place_from_inventory.item = item_to_place->id;
                         action.place_from_inventory.tp   = tp;
-                        action.place_from_inventory.q   = q;
+                        action.place_from_inventory.q    = q;
                 
                         request(&action, client);
 
-                        Entity preview_entity = create_preview_item_entity(item_to_place, tp_from_index(wv->clicked_tile_ix), world_t);
+                        Entity preview_entity = create_preview_item_entity(item_to_place, tp, q, world_t);
 
                         // NOTE: We add a preview entity and remove the placed item locally, before
                         //       we know if the operation succeeds.
@@ -1810,7 +1811,7 @@ int client_entry_point(int num_args, char **arguments)
                 }
                     
                 double t = platform_get_time(); // @Robustness: This is safe to do, right?
-                end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &cursor);
+                end_ui_build(ui, &client.input, &client.fonts, t, &client.room, &client.assets, &cursor);
                 // //////// //
 
                 reset_temporary_memory();

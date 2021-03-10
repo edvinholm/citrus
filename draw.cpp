@@ -60,15 +60,19 @@ void pop_vertex_destination(Graphics *gfx)
 }
 
 
-void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, float screen_z = 0)
+void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, float screen_z = 0, v4 color = C_WHITE)
 {
     Assert(!buffer->current_vertex_object_began);
 
     auto &obj = buffer->current_vertex_object;
     obj.type      = VERTEX_OBJECT;
-    obj.transform = transform;
-    obj.vertex0   = buffer->vertices.n;
+    
     obj.screen_z  = screen_z;
+    
+    obj.transform = transform;
+    obj.color     = color;
+    
+    obj.vertex0   = buffer->vertices.n;
     
     buffer->current_vertex_object_began = true;
 }
@@ -125,12 +129,19 @@ void draw_vao(VAO *vao, Graphics *gfx)
     unbind_vao(gfx);
 }
 
+void set_gpu_uniforms_for_render_object(Render_Object *obj, Graphics *gfx)
+{
+    auto *vs = &gfx->vertex_shader;
+    gpu_set_uniform_m4x4(vs->transform_uniform,        obj->transform);
+    gpu_set_uniform_v4  (vs->color_multiplier_uniform, obj->color);
+}
+
 template<Allocator_ID A>
 void draw_vertex_render_object(Render_Object *obj, Vertex_Buffer<A> *vertex_buffer, bool do_dynamic_draw_now, GPU_Buffer_Set *buffer_set, Graphics *gfx)
 {
     Assert(obj->type == VERTEX_OBJECT);
-    
-    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
+
+    set_gpu_uniforms_for_render_object(obj, gfx);
     
     auto vertex0 = obj->vertex0;
     auto num_vertices = (obj->vertex1 - vertex0);
@@ -153,8 +164,7 @@ void draw_render_object(Render_Object *obj, Render_Object_Buffer *object_buffer,
         } break;
 
         case MESH_OBJECT: {
-            gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform, obj->transform);
-    
+            set_gpu_uniforms_for_render_object(obj, gfx);
             draw_vao(obj->mesh_vao, gfx);            
         } break;
 
@@ -312,4 +322,25 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
             }
         }
     }
+}
+
+void draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE)
+{
+    Assert(!object_buffer->current_vertex_object_began);
+    
+    Render_Object obj = {0};
+    obj.type      = MESH_OBJECT;
+    
+    obj.transform = transform;
+    obj.color     = color;
+    
+    obj.mesh_vao  = mesh_vao;
+    obj.screen_z  = screen_z;
+
+    array_add(object_buffer->objects, obj);
+}
+
+void draw_mesh(Mesh_ID mesh, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE) {
+    Assert(mesh >= 0 && mesh < ARRLEN(gfx->assets->mesh_vaos));
+    draw_mesh(&gfx->assets->mesh_vaos[mesh], transform , object_buffer, gfx, screen_z, color);
 }

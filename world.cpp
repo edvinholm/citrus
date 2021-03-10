@@ -85,7 +85,20 @@ double world_time_for_room(Room *room, double system_time)
 }
 
 
-Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p = NULL, bool *_did_hit_surface = NULL, Surface *_hit_surface = NULL)
+Mesh_ID mesh_for_entity(Entity *e)
+{
+    if(e->type != ENTITY_ITEM) return MESH_NONE_OR_NUM;
+
+    switch(e->item_e.item.type) {
+        case ITEM_CHAIR:   return MESH_CHAIR;
+        case ITEM_BLENDER: return MESH_BLENDER;
+
+        default: return MESH_NONE_OR_NUM;
+    }
+}
+        
+
+Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Catalog *assets, v3 *_hit_p = NULL, bool *_did_hit_surface = NULL, Surface *_hit_surface = NULL)
 {
     Entity *closest_hit   = NULL;
     float   closest_ray_t = FLT_MAX;
@@ -94,33 +107,61 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, v3 *_hit_p
     {
         auto *e = &room->entities[i];
 
-        AABB bbox = entity_aabb(e, world_t, room);
+        v3 p;
+        Quat q;
+        get_entity_transform(e, world_t, room, &p, &q);
+    
+        AABB bbox = entity_aabb(e, p, q);
         
-        float ray_t;
         v3 intersection;
+        float ray_t;
         if(ray_intersects_aabb(ray, bbox, &intersection, &ray_t)) {
             if(ray_t < closest_ray_t) {
-                closest_hit = e;
-                closest_ray_t = ray_t;
+
+                bool did_hit = true;
+       
+                Mesh_ID mesh = mesh_for_entity(e);
+                if(mesh != MESH_NONE_OR_NUM) {
+                    m4x4 m = rotation_matrix(q) * translation_matrix(p);
+                    m4x4 inverse = inverse_of(m);
+                
+                    Ray mesh_space_ray;
+                    mesh_space_ray.p0  = vecmatmul(ray.p0,  inverse);
+                    mesh_space_ray.dir = vecmatmul(ray.dir, inverse, 0);
+
+                    v3 mesh_space_intersection;
+                    did_hit = ray_intersects_mesh(mesh_space_ray, &assets->meshes[mesh], &mesh_space_intersection, &ray_t);
+                
+                    if(did_hit) {
+                        intersection = vecmatmul(mesh_space_intersection, m);
+                    }
+                }
+
+                if(did_hit) {
+                           
+                    closest_hit = e;
+                    closest_ray_t = ray_t;
                     
-                if(_hit_p) *_hit_p = intersection;
+                    if(_hit_p) *_hit_p = intersection;
 
-                if(_did_hit_surface) {
-                    *_did_hit_surface = false;
+                    if(_did_hit_surface) {
+                        *_did_hit_surface = false;
 
-                    auto surfaces = item_entity_surfaces(e, world_t, room);
-                    for(int i = 0; i < surfaces.n; i++) {
-                        auto &surf = surfaces[i];
-                        if(!floats_equal(intersection.z, surf.p.z)) continue;
+                        auto surfaces = item_entity_surfaces(e, world_t, room);
+                        for(int i = 0; i < surfaces.n; i++) {
+                            auto &surf = surfaces[i];
+                            if(!floats_equal(intersection.z, surf.p.z)) continue;
 
-                        Rect rect = { surf.p.xy, surf.s };
-                        if(point_inside_rect(intersection.xy, rect)) {
-                            *_did_hit_surface = true;
-                            if(_hit_surface) *_hit_surface = surf;
+                            Rect rect = { surf.p.xy, surf.s };
+                            if(point_inside_rect(intersection.xy, rect)) {
+                                *_did_hit_surface = true;
+                                if(_hit_surface) *_hit_surface = surf;
+                            }
                         }
                     }
-                    
                 }
+                
+                
             }
         }
     }
@@ -150,20 +191,22 @@ m4x4 world_projection_matrix(Rect viewport, float z_offset/* = 0*/)
 
     // TODO @Speed: @Cleanup: Combine matrices
 
+    float z_mul = -0.01;
+
     m4x4 world_projection = make_m4x4(
         x_mul, 0, 0, 0,
         0, y_mul, 0, 0,
-        0, 0, -0.01, z_offset,
+        0, 0, z_mul, z_offset,
         0, 0, 0, 1);
 
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, TAU * 0.125));
+    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, -TAU * 0.125));
     world_projection = matmul(rotation, world_projection);
 
-    rotation = rotation_matrix(axis_rotation(V3_Z, TAU * -0.125));
+    rotation = rotation_matrix(axis_rotation(V3_Z, TAU * 0.125));
     world_projection = matmul(rotation, world_projection);
 
     float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
-   
+        
     m4x4 scale = scale_matrix(V3_ONE * (2.0 / diagonal_length));
     world_projection = matmul(scale, world_projection);
 
@@ -187,7 +230,7 @@ Ray screen_point_to_ray(v2 p, Rect viewport, m4x4 projection_inverse)
     /* Unproject */
     Ray ray;
     ray.p0  = vecmatmul(u, projection_inverse);
-    ray.dir = normalize(vecmatmul(V3_Z, projection_inverse));
+    ray.dir = normalize(vecmatmul(V3_Z, projection_inverse, 0));
 
     return ray;
 }
@@ -205,7 +248,7 @@ v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
 
 
 // NOTE: tp is tile position.
-Entity create_preview_item_entity(Item *item, v3 tp, double world_t, Quat q = Q_IDENTITY)
+Entity create_preview_item_entity(Item *item, v3 tp, Quat q, double world_t)
 {
     v3 p = item_entity_p_from_tp(tp, item);
     

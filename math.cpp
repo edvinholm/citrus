@@ -42,7 +42,7 @@
 #include "v4s.h"
 #include "v4u.h"
 
-v3 vecmatmul(v3 v, m4x4 m);
+v3 vecmatmul(v3 v, m4x4 m, float w = 1.0f);
 
 
 #include "v4.cpp"
@@ -479,18 +479,18 @@ v3 barycentric(v3 p, v3 a, v3 b, v3 c)
 
 bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_ray_t = NULL)
 {
-    v3    center = bbox.p + bbox.s * (1 / 2.0f);
-    float radius = max(max(bbox.s.x, bbox.s.y), bbox.s.z) / 2.0f;
-
-    // Sphere
-    if(point_ray_distance(center, ray) > radius) return false;
-
     v3 bbox_p1 = bbox.p + bbox.s;
 
+    v3 center = bbox.p + bbox.s * 0.5f;
+    float max_radius = magnitude(bbox_p1 - center); // Distance to a corner from center
+    
+    // Sphere
+    if(point_ray_distance(center, ray) > max_radius) return false;
+    
     float x0 = bbox.p.x;
     float y0 = bbox.p.y;
     float z0 = bbox.p.z;
-    
+
     float x1 = bbox_p1.x;
     float y1 = bbox_p1.y;
     float z1 = bbox_p1.z;
@@ -571,7 +571,7 @@ bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_r
         // Plane
         v3 intersection;
         float ray_t;
-        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) return false;
+        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) continue;
         if(any_hit && ray_t >= closest_hit_t) continue;
 
         
@@ -595,7 +595,7 @@ bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_r
     }
 
     if(!any_hit) return false;
-
+    
     if(_intersection) *_intersection = closest_hit;
     if(_ray_t)        *_ray_t        = closest_hit_t;
     return true;

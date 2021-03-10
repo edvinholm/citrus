@@ -805,7 +805,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room 
     {
         if(item_to_place)
         {
-            Quat q = axis_rotation(V3_Z, PI); // @Norelease
+            Quat q = axis_rotation(V3_Z, 0.5f * PI); // @Norelease
             
             // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
             
@@ -817,7 +817,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room 
                 can_be_placed = false;
             }
             
-            Entity preview_entity = create_preview_item_entity(item_to_place, tp, world_t, q);
+            Entity preview_entity = create_preview_item_entity(item_to_place, tp, q, world_t);
             draw_entity(&preview_entity, world_t, room, client, gfx, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
@@ -894,7 +894,7 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         }
 
         // DRAW WORLD //
-        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity);
+        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity, wv->mouse_ray);
 
         // SURFACE HIGHLIGHT //
         if(wv->surface_is_hovered) {

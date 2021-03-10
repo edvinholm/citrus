@@ -143,8 +143,6 @@ bool read_obj_position(u8 **at, u8 *end, OBJ_Reader<A> *reader)
 {
     v3 p;
     if(!read_obj_v3(at, end, &p)) return false;
-
-    swap(&p.y, &p.z); // NOTE
     
     ensure_obj_reader_capacity(reader->num_positions + 1, reader);
     reader->positions[reader->num_positions++] = p;
@@ -157,8 +155,6 @@ bool read_obj_normal(u8 **at, u8 *end, OBJ_Reader<A> *reader)
 {
     v3 n;
     if(!read_obj_v3(at, end, &n)) return false;
-    
-    swap(&n.y, &n.z); // NOTE
        
     ensure_obj_reader_capacity(reader->num_normals + 1, reader);
     reader->normals[reader->num_normals++] = n;

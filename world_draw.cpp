@@ -154,6 +154,40 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
+void draw_aabb(AABB bbox, Graphics *gfx)
+{    
+    v3 p0 = bbox.p;
+    v3 p1 = bbox.p + bbox.s;
+        
+    v3 a = { p0.x, p0.y, p0.z };
+    v3 b = { p0.x, p1.y, p0.z };
+    v3 c = { p0.x, p0.y, p1.z };
+    v3 d = { p0.x, p1.y, p1.z };
+        
+    v3 e = { p1.x, p0.y, p0.z };
+    v3 f = { p1.x, p1.y, p0.z };
+    v3 g = { p1.x, p0.y, p1.z };
+    v3 h = { p1.x, p1.y, p1.z };
+
+    float line_w = .1f;
+
+    draw_line(a, b, -V3_X, line_w, C_GREEN, gfx);
+    draw_line(a, c, -V3_X, line_w, C_GREEN, gfx);
+    draw_line(b, d, -V3_X, line_w, C_GREEN, gfx);
+    draw_line(c, d, -V3_X, line_w, C_GREEN, gfx);
+        
+    draw_line(e, f,  V3_X, line_w, C_GREEN, gfx);
+    draw_line(e, g,  V3_X, line_w, C_GREEN, gfx);
+    draw_line(f, h,  V3_X, line_w, C_GREEN, gfx);
+    draw_line(g, h,  V3_X, line_w, C_GREEN, gfx);
+        
+    draw_line(a, e, -V3_Y, line_w, C_GREEN, gfx);
+    draw_line(c, g, -V3_Y, line_w, C_GREEN, gfx);
+        
+    draw_line(b, f,  V3_Y, line_w, C_GREEN, gfx);
+    draw_line(d, h,  V3_Y, line_w, C_GREEN, gfx);
+}
+
 void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool cannot_be_placed = false)
 {
     auto *s_e = static_cast<S__Entity *>(e);
@@ -166,6 +200,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     v3 center;
     Quat q;
     get_entity_transform(s_e, world_t, room, &center, &q);
+
     
     float scale = 1.0f;
     
@@ -207,14 +242,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         if(item->type == ITEM_CHESS_BOARD) {
             volume.z = 0.1f;
-        }
-
-        if(item->type == ITEM_CHAIR) {
-            scale = .35f;
-            mesh = MESH_CHAIR;
-        }
-        else if (item->type == ITEM_BLENDER) {
-            mesh = MESH_BLENDER;
         }
     }
     else if(e->type == ENTITY_PLAYER)
@@ -274,12 +301,30 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         base_color.b /= 1.5f;
     }
 
+    mesh = mesh_for_entity(e);
+
     if(mesh != MESH_NONE_OR_NUM) {
-        draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx);
+        draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx, 0.0f, base_color);
     }
+
+    
+    // DEBUG AABB //
+    if(tweak_bool(TWEAK_SHOW_ENTITY_BOUNDING_BOXES)) {
+        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        AABB bbox = entity_aabb(e, center, q);
+
+        draw_aabb(bbox, gfx);
+    }
+    // ////////// //
+
     
     _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_matrix(q) * translation_matrix(center));
 
+    // Forward vector
+    if(tweak_bool(TWEAK_SHOW_ENTITY_FORWARD_VECTORS))
+        draw_line(V3_ZERO + V3_Z * 1.0f, V3_ZERO + V3_Z * 1.0f + V3_X * 3.0f, V3_Z, 0.5f, C_CYAN, gfx);
+    
+    
     v3 origin  = V3_ZERO;
     origin.xy -= volume.xy * 0.5f;
         
@@ -320,7 +365,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
 
         // hair
-        v3 hair_s = { head_size * 1.1f, head_size * 0.8f, head_size * 0.6f };
+        v3 hair_s = { head_size * 0.8f, head_size * 1.1f, head_size * 0.6f };
         v3 hair_p = head_center + V3(-0.55f, -0.55f, -0.05f) * head_size;
         draw_cube_ps(hair_p, hair_s, { 0.20, 0.09, 0.02, 1 }, gfx);
 
@@ -357,9 +402,11 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             }
         }
     }
+    
 }
 
-void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx, Entity_ID hovered_entity = NO_ENTITY, bool entity_surface_hovered = false)
+void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx,
+                Entity_ID hovered_entity = NO_ENTITY, Ray mouse_ray = {0})
 {
     maybe_update_static_room_vaos(room, gfx);
     
@@ -381,8 +428,7 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
         for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
             bool hovered = (e->id == hovered_entity);
-            bool surface_hovered = (hovered && entity_surface_hovered);
-            draw_entity(e, world_t, room, client, gfx, hovered, surface_hovered);
+            draw_entity(e, world_t, room, client, gfx, hovered);
         }
     }
 

@@ -27,6 +27,8 @@ enum Tweak_ID {
     TWEAK_SHOW_WINDOW_SIZES,
     TWEAK_SHOW_ENTITY_ACTION_POSITIONS,
     TWEAK_SHOW_PLAYER_ENTITY_PARTS,
+    TWEAK_SHOW_ENTITY_FORWARD_VECTORS,
+    TWEAK_SHOW_ENTITY_BOUNDING_BOXES,
 
     TWEAK_RUN_PROFILER,
     TWEAK_SHOW_PROFILER,
@@ -75,7 +77,9 @@ struct Tweaks
         { "startup_room",            TWEAK_TYPE_UINT, 1 },
         { "show_window_sizes",       TWEAK_TYPE_BOOL, 1 },
         { "show_entity_action_positions", TWEAK_TYPE_BOOL, 1 },
-        { "show_player_entity_parts", TWEAK_TYPE_BOOL, 1 },
+        { "show_player_entity_parts",     TWEAK_TYPE_BOOL, 1 },
+        { "show_entity_forward_vectors",  TWEAK_TYPE_BOOL, 1 },
+        { "show_entity_bounding_boxes",  TWEAK_TYPE_BOOL, 1 },
         
         { "run_profiler",            TWEAK_TYPE_BOOL,  1 },
         { "show_profiler",           TWEAK_TYPE_BOOL,  1 },

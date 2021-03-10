@@ -343,7 +343,7 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
                     double t1 = t0 + dur;
                     if(world_t < t1) {
 
-                        *_q = axis_rotation(V3_Z, atan2(diff.x, diff.y));
+                        *_q = axis_rotation(V3_Z, atan2(diff.y, diff.x));
                     
                         if(is_zero(dur)) {
                             *_p = p1;
@@ -363,7 +363,7 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
                 v3 p1 = player_e->walk_path[player_e->walk_path_length-1];
                 v3 diff = p1 - p0;
             
-                *_q = axis_rotation(V3_Z, atan2(diff.x, diff.y));
+                *_q = axis_rotation(V3_Z, atan2(diff.y, diff.x));
                 *_p = player_e->walk_path[player_e->walk_path_length-1];
                 return;
             
@@ -501,13 +501,11 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 }
 
 
-
 template<typename ENTITY>
-AABB entity_aabb(ENTITY *e, double world_t, Room *room)
+AABB entity_aabb(ENTITY *e, v3 p, Quat q)
 {
     AABB bbox = {0};
-    auto p = entity_position(e, world_t, room);
-
+    
     switch(e->type) {
         case ENTITY_ITEM: {
             auto *item_e = &e->item_e;
@@ -532,6 +530,16 @@ AABB entity_aabb(ENTITY *e, double world_t, Room *room)
     bbox.p.z  = p.z;
 
     return bbox;
+}
+
+template<typename ENTITY>
+AABB entity_aabb(ENTITY *e, double world_t, Room *room)
+{
+    v3 p;
+    Quat q;
+    get_entity_transform(e, world_t, room, &p, &q);
+
+    return entity_aabb(e, p, q);
 }
 
 Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room *room)
