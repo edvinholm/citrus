@@ -1363,12 +1363,23 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         room->placing_held_item = ctrl_is_down;
         // // //
     
-        // Placement TP //
+        // PLACEMENT //
+        
+        // position
         room->placement_tp = tp_from_index(wv->hovered_tile_ix);
     
         if(wv->surface_is_hovered) {
             room->placement_tp  = tp_from_p(wv->surface_hit_p);
         }
+
+        // rotation
+        if(!floats_equal(magnitude(room->placement_q), 1.0f))
+            room->placement_q = Q_IDENTITY; // placement_q will be zero the first time, since Rooms are zero-initialized.
+            
+        if(in_array(input->keys_down, VKEY_z))
+            room->placement_q *= axis_rotation(V3_Z, -0.25f * TAU);
+        //--
+            
         // // //
 
         Item *item_to_place = NULL;
@@ -1387,9 +1398,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(wv->click_state & CLICKED_ENABLED)
             {
                 v3 tp = room->placement_tp;
-                
-                Quat q = Q_IDENTITY; // @Norelease
-                // Quat q = axis_rotation(V3_Z, random_float() * TAU); // @Norelease
+                Quat q = room->placement_q;
 
                 if (can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room))
                 {
@@ -1397,6 +1406,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         Player_Action action = {0};
                         action.type = PLAYER_ACT_PUT_DOWN;
                         action.put_down.tp = tp;
+                        action.put_down.q  = q;
 
                         request(&action, client);
                         

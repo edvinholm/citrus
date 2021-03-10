@@ -243,6 +243,7 @@ struct Player_Action
 
         struct {
             v3 tp;
+            Quat q;
         } put_down;
 
         struct {

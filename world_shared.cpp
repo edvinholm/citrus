@@ -3,11 +3,11 @@ const int MAX_SUPPORT_POINTS = 16*16;
 
 
 v3 tp_from_p(v3 p) {
-    return { roundf(p.x), roundf(p.y), roundf(p.z) };
+    return { floorf(p.x), floorf(p.y), floorf(p.z) };
 }
 
 v3s tile_from_p(v3 p) {
-    return { (s32)roundf(p.x), (s32)roundf(p.y), (s32)roundf(p.z) };
+    return { (s32)floorf(p.x), (s32)floorf(p.y), (s32)floorf(p.z) };
 }
 
 
@@ -209,19 +209,19 @@ void update_entity_item(S__Entity *e, double world_t)
 }
 
 
-v3 volume_p_from_tp(v3 tp, v3s volume)
+v3 volume_p_from_tp(v3 tp, v3s volume, Quat q)
 {
     v3 p = tp;
     
-    if(volume.x % 2 != 0) p.x += 0.5f;
-    if(volume.y % 2 != 0) p.y += 0.5f;
+    if(volume.x % 2 != 0) p += rotate_vector(V3_X, q) * 0.5f;
+    if(volume.y % 2 != 0) p += rotate_vector(V3_Y, q) * 0.5f;
 
     return p;
 }
 
-v3 item_entity_p_from_tp(v3 tp, Item *item)
+v3 item_entity_p_from_tp(v3 tp, Item *item, Quat q)
 {
-    return volume_p_from_tp(tp, item_types[item->type].volume);
+    return volume_p_from_tp(tp, item_types[item->type].volume, q);
 }
 
 v3 volume_tp_from_p(v3 p, v3s volume)
@@ -408,6 +408,7 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
     v3 forward = rotate_vector(V3_X, item_e->q);
     v3 left    = rotate_vector(V3_Y, item_e->q);
+    v3 up      = rotate_vector(V3_Z, item_e->q);
 
     // @Cleanup: action should not be optional. We have it here for PUT_DOWN.
     if(action) {
@@ -416,33 +417,32 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
             // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP. 
             case ENTITY_ACT_PICK_UP: {
-
-                v3 tp0  = p;
-                tp0.xy -= volume.xy * 0.5f;
-
+                
+                v3 tp0 = p;
+                tp0 -= forward * volume.x * 0.5f;
+                tp0 -= left    * volume.y * 0.5f;
+                
                 for(auto z = -player_entity_hands_zoffs - 2; z <= 0; z++) {
-                    for(int y = 0; y < volume.y+1; y++) {
-                        for(int x = 0; x < volume.x+1; x++) {
+                    for(int y = 0; y <= volume.y; y++) {
+                        for(int x = 0; x <= volume.x; x++) {
 
-                            v3 pp = tp0;
-                            pp.x += x;
-                            pp.y += y;
-                            pp.z += z;
-                        
                             // @Speed: Continuing on most squares for big volumes.
-                            if(x > 0 && x < volume.x &&
-                               y > 0 && y < volume.y) continue;
+                            if(x > 0 && x < volume.x && y > 0 && y < volume.y) continue;
 
                             const float offs = 1.0f;
-                        
-                            if     (y == 0)        array_add(positions, tile_from_p(pp + left * offs));
-                            else if(y == volume.x) array_add(positions, tile_from_p(pp - left * offs));
+                            
+                            v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * 0.5f; // Rounding (flooring) errors seem to happen sometimes if we don't add half a tile.
+                            
+                            if     (y == 0)        array_add(positions, tile_from_p(pp - left * offs));
+                            else if(y == volume.y) array_add(positions, tile_from_p(pp + left * offs));
                         
                             if     (x == 0)        array_add(positions, tile_from_p(pp - forward * offs));
-                            else if(x == volume.y) array_add(positions, tile_from_p(pp + forward * offs));
+                            else if(x == volume.x) array_add(positions, tile_from_p(pp + forward * offs));
+                            
                         }
                     }
                 }
+
             } break;
 
             case ENTITY_ACT_SIT_OR_UNSIT: {
@@ -494,7 +494,7 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
     }
         
     if(positions.n == 0) {
-        array_add(positions, tile_from_p(p + forward * (volume.y * 0.5f + 1)));
+        array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
     }
     
     return positions;
@@ -505,6 +505,12 @@ template<typename ENTITY>
 AABB entity_aabb(ENTITY *e, v3 p, Quat q)
 {
     AABB bbox = {0};
+
+    float zz = atan2(2.0 * (q.w * q.z + q.x * q.y),
+                     1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+
+    int quadrant = round(zz / (.25 * TAU));
+    bool do_rotate_90_deg = (abs(quadrant % 2) == 1);
     
     switch(e->type) {
         case ENTITY_ITEM: {
@@ -526,8 +532,13 @@ AABB entity_aabb(ENTITY *e, v3 p, Quat q)
         default: Assert(false); break;
     }
     
+    if(do_rotate_90_deg) {
+        swap(&bbox.s.x, &bbox.s.y);
+    }
+    
     bbox.p.xy = p.xy - bbox.s.xy / 2.0f;
     bbox.p.z  = p.z;
+
 
     return bbox;
 }
@@ -548,39 +559,77 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
     
     if(e->type != ENTITY_ITEM) return surfaces;
 
-    v3 p = entity_position(e, world_t, room);
+    
+    v3 p;
+    Quat q;
+    get_entity_transform(e, world_t, room, &p, &q);
     Item *item = &e->item_e.item;
+
+    v2 forward = rotate_vector(V3_X, q).xy;
+    v2 left    = rotate_vector(V3_Y, q).xy;
     
     switch(item->type) {
         case ITEM_TABLE: {
             v3s vol = item_types[item->type].volume;
             
-            Surface surf;
-            surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
-            surf.s = { (float)vol.x, (float)vol.y };
+            Surface surf;            
+            surf.p = p;
+            surf.p.xy -= forward * vol.x * 0.5f;
+            surf.p.xy -= left    * vol.y * 0.5f;
+            surf.p.z  += vol.z;
+
+            surf.s = forward * vol.x + left * vol.y;
+            
             array_add(surfaces, surf);
             
         } break;
 
         case ITEM_BLENDER: {
             v3s vol = item_types[item->type].volume;
-            
-            Surface surf;
-            surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
-            surf.s = { 1.0f, 1.0f };
 
-            float x0 = surf.p.x;
-            for(int y = 0; y < vol.y; y++) {
-                for(int x = 0; x < vol.x; x++) {
-                    array_add(surfaces, surf);
-                    surf.p.x += 1;
+            // ingredients
+            {
+                Surface surf;
+                surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
+                surf.s = { 1.0f, 1.0f };
+
+                float x0 = surf.p.x;
+                for(int y = 0; y < vol.y; y++) {
+                    for(int x = 0; x < vol.x; x++) {
+                        array_add(surfaces, surf);
+                        surf.p.x += 1;
+                    }
+                    surf.p.x = x0;
+                    surf.p.y += 1;
                 }
-                surf.p.x = x0;
-                surf.p.y += 1;
             }
-            
+
+            // container
+            {
+                Surface surf;
+                surf.p = p + V3(-vol.x * 0.5f, -vol.y * 0.5f, .2);
+                surf.s = { (float)vol.x, (float)vol.y };
+                array_add(surfaces, surf);
+            }
+                    
         } break;
     }
+
+    // Make sure sizes are positive
+    for(int i = 0; i < surfaces.n; i++) {
+        auto &surf = surfaces[i];
+        
+        if(surf.s.x < 0) {
+            surf.p.x += surf.s.x;
+            surf.s.x *= -1;
+        }
+    
+        if(surf.s.y < 0) {
+            surf.p.y += surf.s.y;
+            surf.s.y *= -1;
+        }
+    }
+    //--
 
     return surfaces;
 }
@@ -708,7 +757,7 @@ void find_supported_entities(Entity *e, Room *room, Array<Entity *, A> *_support
         while(pp.y < y1) {
             while(pp.x < x1) {
                 Entity *supported_entity = entity_needing_support_intersecting(pp, room->t, room);
-                if(supported_entity) {
+                if(supported_entity && supported_entity != e) {
                     ensure_in_array(*_supported, supported_entity);
                 }
                 pp.x += 1;
@@ -805,7 +854,7 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
 bool item_entity_can_be_at_tp(Entity *my_entity, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
-    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item), q, world_t, room, _supporters);
+    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item, q), q, world_t, room, _supporters);
 }
 
 bool can_place_item_entity(Item *item, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
@@ -816,7 +865,7 @@ bool can_place_item_entity(Item *item, v3 p, Quat q, double world_t, Room *room,
 
 bool can_place_item_entity_at_tp(Item *item, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
-    return can_place_item_entity(item, item_entity_p_from_tp(tp, item), q, world_t, room, _supporters);
+    return can_place_item_entity(item, item_entity_p_from_tp(tp, item, q), q, world_t, room, _supporters);
 }
 
 
@@ -880,8 +929,8 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
 
             if(state.held_item.type != ITEM_NONE_OR_NUM)
             {
-                v3 p = item_entity_p_from_tp(x->tp, &state.held_item);
                 Quat q = Q_IDENTITY; // @Norelease
+                v3 p = item_entity_p_from_tp(x->tp, &state.held_item, q);
                 S__Entity fake_entity = create_item_entity(&state.held_item, p, q, world_t);
 
                 AABB bbox = entity_aabb(&fake_entity, world_t, room);
@@ -915,7 +964,8 @@ bool item_entity_can_be_moved(S__Entity *e, double world_t, Room *room)
         
         while(pp.y < y1) {
             while(pp.x < x1) {
-                if(entity_needing_support_intersecting(pp, world_t, room)) return false; // We are supporting another entity, so we can't be moved.
+                Entity *sup = entity_needing_support_intersecting(pp, world_t, room);
+                if(sup != NULL && sup != e) return false; // We are supporting another entity, so we can't be moved.
                 pp.x += 1;
             }
             pp.x = x0;
@@ -1177,8 +1227,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
 
             if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
 
-            v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item);
             Quat put_down_q = Q_IDENTITY; // @Norelease: Rotation for PUT_DOWN
+            v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item, put_down_q);
             
             S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, put_down_q, world_t);
             

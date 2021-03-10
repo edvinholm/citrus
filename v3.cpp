@@ -197,6 +197,10 @@ v3 compceil(v3 u) {
     return { ceilf(u.x), ceilf(u.y), ceilf(u.z) };
 }
 
+v3 compabs(v3 u) {
+    return { (float)fabs(u.x), (float)fabs(u.y), (float)fabs(u.z) };
+}
+
 
 
 inline

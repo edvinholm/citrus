@@ -35,11 +35,17 @@ namespace Client_Game
         double time_offset; // To get the current World_Time, do <system time> + time_offset.
 
         Array<Entity, ALLOC_MALLOC> entities;
+
+        // @Cleanup
+        // This UI state stuff maybe shouldn't be in the Room struct.
+        // If we have multiple rooms, or multiple world views,
+        // we would want to have multiple sets of these.       -EH, 2021-03-10
         Entity_ID selected_entity;
         
         v3      placement_tp; // If we for example have a selected inventory item, this is where we would try to put it.
+        Quat    placement_q;
         bool    placing_held_item;
-        
+        //-------------
         
         bool static_geometry_up_to_date;
     };

@@ -77,7 +77,7 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
 {
     v3 v[6] = {
         a, d, c,
-        a, d, b
+        a, b, d,
     };
 
     v3 normal = normalize(cross((b-a), (c-a)));

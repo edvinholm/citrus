@@ -317,6 +317,24 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     }
     // ////////// //
 
+
+
+    if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
+        if(e->id == room->selected_entity) {
+
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+            
+            Entity_Action dummy_action = {0};
+            dummy_action.type = ENTITY_ACT_PICK_UP;
+            auto action_positions = entity_action_positions(e, &dummy_action, player_entity_hands_zoffs, world_t, room);
+            for(int i = 0; i < action_positions.n; i++) {
+                auto p = V3(action_positions[i]) + V3_Z * 0.05f;
+                draw_quad(p - V3_XY * 0.15f, V3_X * 0.3f, V3_Y * 0.3f, C_MAGENTA, gfx);
+            }
+        }
+    }
+            
+    
     
     _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_matrix(q) * translation_matrix(center));
 
@@ -390,17 +408,6 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             draw_chess_board(board, a, gfx);
         }
         
-        if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
-            if(e->id == room->selected_entity) {
-                Entity_Action dummy_action = {0};
-                dummy_action.type = ENTITY_ACT_PICK_UP;
-                auto action_positions = entity_action_positions(e, &dummy_action, player_entity_hands_zoffs, world_t, room);
-                for(int i = 0; i < action_positions.n; i++) {
-                    auto p = V3(action_positions[i]) + V3_Z * 0.05f;
-                    draw_quad(p - V3_XY * 0.15f, V3_X * 0.3f, V3_Y * 0.3f, C_MAGENTA, gfx);
-                }
-            }
-        }
     }
     
 }

@@ -26,7 +26,7 @@ profiler_yscale 250
 # color_tiles_by_position true
 
 
-# show_entity_action_positions true
+show_entity_action_positions true
 
 # show_player_entity_parts true
 # show_entity_forward_vectors true

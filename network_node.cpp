@@ -1045,7 +1045,8 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
             
         case PLAYER_ACT_PUT_DOWN: {
             auto *x = &_action->put_down;
-            Read_To_Ptr(v3, &x->tp, node);
+            Read_To_Ptr(v3,   &x->tp, node);
+            Read_To_Ptr(Quat, &x->q,  node);
         } break;
             
         case PLAYER_ACT_PLACE_FROM_INVENTORY: {
@@ -1079,7 +1080,8 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
             
         case PLAYER_ACT_PUT_DOWN: {
             auto *x = &action.put_down;
-            Write(v3, x->tp, node);
+            Write(v3,   x->tp, node);
+            Write(Quat, x->q,  node);
         } break;
 
         case PLAYER_ACT_PLACE_FROM_INVENTORY: {

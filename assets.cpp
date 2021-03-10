@@ -3,6 +3,7 @@ enum Mesh_ID
 {
     MESH_CHAIR,
     MESH_BLENDER,
+    MESH_TABLE,
 
     MESH_NONE_OR_NUM
 };
@@ -25,7 +26,8 @@ void clear(Asset_Catalog *cat) {
 
 char *mesh_filenames[] = {
     "res/meshes/chair.obj",
-    "res/meshes/blender.obj"
+    "res/meshes/blender.obj",
+    "res/meshes/table.obj"
 };
 static_assert(ARRLEN(mesh_filenames) == MESH_NONE_OR_NUM);
 static_assert(ARRLEN(mesh_filenames) == ARRLEN(Asset_Catalog::meshes));

@@ -92,6 +92,7 @@ Mesh_ID mesh_for_entity(Entity *e)
     switch(e->item_e.item.type) {
         case ITEM_CHAIR:   return MESH_CHAIR;
         case ITEM_BLENDER: return MESH_BLENDER;
+        case ITEM_TABLE:   return MESH_TABLE;
 
         default: return MESH_NONE_OR_NUM;
     }
@@ -118,7 +119,10 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Cata
         if(ray_intersects_aabb(ray, bbox, &intersection, &ray_t)) {
             if(ray_t < closest_ray_t) {
 
-                bool did_hit = true;
+                bool e_hit = false;
+                
+                bool e_did_hit_surface = false;
+                Surface e_hit_surface = {0};
        
                 Mesh_ID mesh = mesh_for_entity(e);
                 if(mesh != MESH_NONE_OR_NUM) {
@@ -130,33 +134,48 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Cata
                     mesh_space_ray.dir = vecmatmul(ray.dir, inverse, 0);
 
                     v3 mesh_space_intersection;
-                    did_hit = ray_intersects_mesh(mesh_space_ray, &assets->meshes[mesh], &mesh_space_intersection, &ray_t);
-                
-                    if(did_hit) {
+                    if(ray_intersects_mesh(mesh_space_ray, &assets->meshes[mesh], &mesh_space_intersection, &ray_t)) {
+                        e_hit = true;
                         intersection = vecmatmul(mesh_space_intersection, m);
                     }
                 }
+                else e_hit = true;
 
-                if(did_hit) {
-                           
+                auto surfaces = item_entity_surfaces(e, world_t, room);
+                for(int i = 0; i < surfaces.n; i++) {
+                    auto &surf = surfaces[i];
+
+                    v3 quad_a = surf.p;
+                    v3 quad_d = surf.p + V3(surf.s.x, surf.s.y, 0);
+                    
+                    v3 quad_b = quad_a;
+                    quad_b.x  = quad_d.x;
+                    
+                    v3 quad_c = quad_a;
+                    quad_c.y  = quad_d.y;
+
+                    v3 quad_intersection;
+                    float quad_ray_t;
+                    if(!ray_intersects_quad(ray, quad_a, quad_b, quad_c, quad_d, &quad_intersection, &quad_ray_t)) continue;
+                    if(e_hit && ray_t < quad_ray_t) continue;
+
+                    e_hit = true;
+                    intersection = quad_intersection;
+                    ray_t = quad_ray_t;
+                    
+                    e_did_hit_surface = true;
+                    e_hit_surface = surf;
+                }
+
+                if(e_hit) {
                     closest_hit = e;
                     closest_ray_t = ray_t;
                     
                     if(_hit_p) *_hit_p = intersection;
-
                     if(_did_hit_surface) {
-                        *_did_hit_surface = false;
-
-                        auto surfaces = item_entity_surfaces(e, world_t, room);
-                        for(int i = 0; i < surfaces.n; i++) {
-                            auto &surf = surfaces[i];
-                            if(!floats_equal(intersection.z, surf.p.z)) continue;
-
-                            Rect rect = { surf.p.xy, surf.s };
-                            if(point_inside_rect(intersection.xy, rect)) {
-                                *_did_hit_surface = true;
-                                if(_hit_surface) *_hit_surface = surf;
-                            }
+                        *_did_hit_surface = e_did_hit_surface;
+                        if(_hit_surface) {
+                            *_hit_surface = e_hit_surface;
                         }
                     }
                 }
@@ -250,7 +269,7 @@ v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
 // NOTE: tp is tile position.
 Entity create_preview_item_entity(Item *item, v3 tp, Quat q, double world_t)
 {
-    v3 p = item_entity_p_from_tp(tp, item);
+    v3 p = item_entity_p_from_tp(tp, item, q);
     
     Entity e = {0};
     *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, world_t);

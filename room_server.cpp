@@ -1,4 +1,6 @@
 
+// @Norelease @Security: When placing objects, snap them to grid!
+
 #include "room_server_bound.cpp"
 
 #define RCB_OUTBOUND
@@ -58,7 +60,7 @@ void create_dummy_entities(Room *room, Room_Server *server)
     Quat q = axis_rotation(V3_Z, PI);
     
     v3 pp = { room_size_x/2 + 8, room_size_y/2 };
-    for(int i = 0; i < 2; i++)
+    for(int i = 0; i < 0; i++)
     {
         Item_Type_ID item_type_id = (i == 0) ? ITEM_CHESS_BOARD : ITEM_CHAIR;
         Item_Type *item_type = item_types + item_type_id;
@@ -880,7 +882,7 @@ Entity *add_entity(Entity *entity, Room *room)
 
 void do_create_item_entity_at_tp(Item *item, v3 tp, Quat q, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
 {
-    v3 p = item_entity_p_from_tp(tp, item);
+    v3 p = item_entity_p_from_tp(tp, item, q);
                             
     Entity e = {0};
     *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, room->t);
@@ -1140,8 +1142,8 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             Assert(held->held_by == player->id);
             Assert(held->type == ENTITY_ITEM);
 
-            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item);
-            Quat q = Q_IDENTITY; // @Norelease
+            Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
+            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item, q);
             Assert(item_entity_can_be_at(held, p, q, room->t, room));
             
             //--
@@ -1149,6 +1151,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             auto &new_supporters = prediction_info.put_down.supporters;
             
             held->item_e.p = p;
+            held->item_e.q = q;
             set_held(held, player, false);
 
             post_item_entity_move(held, NULL, 0, new_supporters.e, new_supporters.n, room, server);
@@ -1539,7 +1542,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
                 Item_ID item_id = p->item;
                 v3   tp = p->tp;
-                Quat q  = p->q;
+                Quat q  = p->q; // @Norelease: @Security: Snap to 90 degrees
                 
                 // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
                 //            This is so the game client can know when to for example remove preview entities.

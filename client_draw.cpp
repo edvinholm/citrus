@@ -798,14 +798,14 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
     {
         if(item_to_place)
         {
-            Quat q = axis_rotation(V3_Z, 0.5f * PI); // @Norelease
+            Quat q = placement_q;
             
             // @Norelease: Should show where the player must stand when putting the item down, so we know why it is not possible if the player position is blocked, but the item is not.
             
@@ -823,12 +823,9 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, double world_t, Room 
             Assert(preview_entity.type == ENTITY_ITEM);
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+            AABB bbox = entity_aabb(&preview_entity, tp, q);
+            draw_quad(bbox.p + V3_Z * 0.001f, {bbox.s.x, 0, 0}, {0, bbox.s.y, 0}, shadow_color, gfx);
             
-            v3 p0 = preview_entity.item_e.p;
-            auto vol = item_types[item_to_place->type].volume;
-            p0.xy -= vol.xy * 0.5f;
-
-            draw_quad(p0 + V3_Z * 0.001f, {(float)vol.x, 0, 0}, {0, (float)vol.y, 0}, shadow_color, gfx);
         }
         else {
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
@@ -911,7 +908,7 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
             if(item_to_place) hovered_tp = room->placement_tp;
             else              hovered_tp = tp_from_index(wv->hovered_tile_ix);
 
-            draw_tile_hover_indicator(hovered_tp, item_to_place, world_t, room, input, client, gfx);
+            draw_tile_hover_indicator(hovered_tp, item_to_place, room->placement_q, world_t, room, input, client, gfx);
         }
     }
 

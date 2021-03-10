@@ -195,19 +195,16 @@ bool operator == (Quat q, Quat r)
         floats_equal(q.w, r.w);
 }
 
+float magnitude(Quat q) {
+    return magnitude(V4(q.x, q.y, q.z, q.w));
+}
+
 
 
 inline
 double deg_to_rad(double degrees)
 {
     return degrees * 0.0174532925;
-}
-
-//I'm just guessing how this works.
-inline
-float euler_angle(Vector_Component axis, Quat q)
-{
-    return q.comp[axis] * q.w;
 }
 
 //NOTE: angle is in radians.
@@ -472,8 +469,30 @@ v3 barycentric(v3 p, v3 a, v3 b, v3 c)
 }
 
 
+
+// NOTE: a, b, c, d must be in the same plane, obviously.
+bool ray_intersects_quad(Ray ray, v3 a, v3 b, v3 c, v3 d, v3 *_intersection, float *_ray_t)
+{
+    v4 plane = triangle_plane(a, b, c);
+
+    // Plane
+    if(!ray_intersects_plane(ray, plane, _intersection, _ray_t)) return false;
+
+    // Triangles
+    v3 bc;
+    
+    bc = barycentric(*_intersection, a, b, c);
+    if(bc.x >= 0 && bc.y >= 0 && bc.z >= 0) return true;
+    
+    bc = barycentric(*_intersection, b, c, d);
+    if(bc.x >= 0 && bc.y >= 0 && bc.z >= 0) return true;
+
+    return false;
+}
+
+
 /*
-  NOTE: This function could be dramatically faster!
+  NOTE: This function could be dramatically faster! @Speed
         Especially if we know that the ray won't come from "behind".
  */
 
@@ -566,28 +585,11 @@ bool ray_intersects_aabb(Ray ray, AABB bbox, v3 *_intersection = NULL, float *_r
                 break;
         }
 
-        v4 plane = triangle_plane(quad_a, quad_b, quad_c);
 
-        // Plane
         v3 intersection;
         float ray_t;
-        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) continue;
+        if(!ray_intersects_quad(ray, quad_a, quad_b, quad_c, quad_d, &intersection, &ray_t)) continue;
         if(any_hit && ray_t >= closest_hit_t) continue;
-
-        
-        bool hit = false;
-        
-        // Triangles
-        v3 b;
-
-        b = barycentric(intersection, quad_a, quad_b, quad_c);
-        if(b.x >= 0 && b.y >= 0 && b.z >= 0) hit = true;
-        
-        b = barycentric(intersection, quad_b, quad_c, quad_d);
-        if(b.x >= 0 && b.y >= 0 && b.z >= 0) hit = true;
-
-        if(!hit) continue;
-        
 
         any_hit = true;
         closest_hit   = intersection;
