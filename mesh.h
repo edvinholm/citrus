@@ -78,6 +78,8 @@ Mesh copy_mesh(Mesh *mesh, Allocator *allocator)
 
 bool ray_intersects_mesh(Ray ray, Mesh *mesh, v3 *_intersection, float *_ray_t)
 {
+    Function_Profile();
+    
     bool  any_hit = false;
     float closest_hit_t = FLT_MAX;
     v3    closest_hit;

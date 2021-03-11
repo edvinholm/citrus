@@ -212,10 +212,10 @@ void update_entity_item(S__Entity *e, double world_t)
 v3 volume_p_from_tp(v3 tp, v3s volume, Quat q)
 {
     v3 p = tp;
-    
-    if(volume.x % 2 != 0) p += rotate_vector(V3_X, q) * 0.5f;
-    if(volume.y % 2 != 0) p += rotate_vector(V3_Y, q) * 0.5f;
 
+    if(volume.x % 2 != 0) p += compabs(rotate_vector(V3_X, q)) * 0.5f;
+    if(volume.y % 2 != 0) p += compabs(rotate_vector(V3_Y, q)) * 0.5f;
+    
     return p;
 }
 
@@ -558,27 +558,23 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
     Static_Array<Surface, 8> surfaces = {0};
     
     if(e->type != ENTITY_ITEM) return surfaces;
-
     
     v3 p;
     Quat q;
     get_entity_transform(e, world_t, room, &p, &q);
     Item *item = &e->item_e.item;
 
-    v2 forward = rotate_vector(V3_X, q).xy;
-    v2 left    = rotate_vector(V3_Y, q).xy;
+    v3 forward = rotate_vector(V3_X, q);
+    v3 left    = rotate_vector(V3_Y, q);
+    v3 up      = rotate_vector(V3_Z, q);
     
     switch(item->type) {
         case ITEM_TABLE: {
             v3s vol = item_types[item->type].volume;
             
-            Surface surf;            
-            surf.p = p;
-            surf.p.xy -= forward * vol.x * 0.5f;
-            surf.p.xy -= left    * vol.y * 0.5f;
-            surf.p.z  += vol.z;
-
-            surf.s = forward * vol.x + left * vol.y;
+            Surface surf = {0}; 
+            surf.p = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f) + (up * vol.z);
+            surf.s = (forward * vol.x + left * vol.y).xy;
             
             array_add(surfaces, surf);
             
@@ -589,26 +585,29 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
 
             // ingredients
             {
-                Surface surf;
-                surf.p = { p.x - vol.x * 0.5f, p.y - vol.y * 0.5f, p.z + vol.z };
-                surf.s = { 1.0f, 1.0f };
 
-                float x0 = surf.p.x;
+                Surface surf = {0};
+                surf.type = SURF_TYPE_MACHINE_INPUT;
+                surf.s = (forward * 1 + left * 1).xy;
+
+                v3 p0 = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f) + (up * vol.z);
                 for(int y = 0; y < vol.y; y++) {
                     for(int x = 0; x < vol.x; x++) {
+                        surf.p = p0 + (forward * x) + (left * y);
                         array_add(surfaces, surf);
-                        surf.p.x += 1;
                     }
-                    surf.p.x = x0;
-                    surf.p.y += 1;
                 }
             }
 
             // container
             {
-                Surface surf;
-                surf.p = p + V3(-vol.x * 0.5f, -vol.y * 0.5f, .2);
-                surf.s = { (float)vol.x, (float)vol.y };
+                Surface surf = {0};
+                surf.type   = SURF_TYPE_MACHINE_OUTPUT;
+                surf.flags |= SURF_EXCLUSIVE;
+                surf.flags |= SURF_CENTERING;
+                surf.p = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f) + up * 0.2f;
+                surf.s = (forward * vol.x + left * vol.y).xy;
+                surf.max_height = 1;
                 array_add(surfaces, surf);
             }
                     
@@ -695,29 +694,184 @@ Entity *entity_needing_support_intersecting(v3 p, double world_t, Room *room)
 
 
 
+struct Support
+{
+    Entity *supported;
+    bool is_first_support_of_supported; // When we find supports, we set this to true if it is the first time we see this supported entity.
+    
+    int          surface_index; // Out of supporter's surfaces.
+    Surface_Type surface_type;
+    
+    Entity *supporter;
+};
 
-bool is_supported_by(v3 *support_points, int num_support_points, Entity *potential_supporter, double world_t, Room *room, bool *support_point_satisfied_array = NULL)
+// @Speed
+// NOTE: This does not work like find_supported_entities().
+//       The difference is: elements are added to supports (if they are not already there),
+//                          without setting supports->n to 0 at the beginning.
+template<Allocator_ID A>
+void find_given_supports_from_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, S__Entity *entity_to_ignore = NULL)
+{
+    float x0 = surf->p.x + 0.5f;
+    v3 pp = { x0, surf->p.y + 0.5f, surf->p.z + 0.5f};
+    float x1 = pp.x + surf->s.x;
+    float y1 = pp.y + surf->s.y;
+    while(pp.y < y1) {
+        while(pp.x < x1) {
+
+            Entity *supported_entity = NULL;
+
+            // @Speed
+            // @Speed
+            // @Speed
+            // @Boilerplate: entity_needing_support_intersecting()
+            for (int i = 0; i < Num_Entities(room); i++) {
+                auto *e = Entities(room) + i;
+                if (!Entity_Exists(e)) continue;
+
+                if (e == surface_owner || e == entity_to_ignore) continue;
+
+                AABB bbox = entity_aabb(e, world_t, room);
+                if (aabb_contains_point(bbox, pp)) {
+                    supported_entity = e;
+                    break;
+                }
+            }
+
+
+            if(supported_entity &&
+               supported_entity != surface_owner &&
+               supported_entity != entity_to_ignore)
+            {
+                Support support = {0};
+                support.supported     = supported_entity;
+                support.surface_index = surface_index;
+                support.surface_type  = surf->type;
+                support.supporter     = surface_owner;
+
+                bool support_of_supported_already_added = false;
+                bool already_added = false;
+                for(int i = 0; i < supports->n; i++) {
+                    auto &sup = (*supports)[i];
+
+                    if(sup.supported     != support.supported)     continue;
+                    support_of_supported_already_added = true;
+                    
+                    if(sup.surface_index != support.surface_index) continue;
+                    if(sup.supporter     != support.supporter)     continue;
+                    
+                    already_added = true;
+                    break;
+                }
+
+                if(!already_added) {
+                    support.is_first_support_of_supported = !support_of_supported_already_added;
+                    array_add(*supports, support);
+                }
+            }
+            
+            pp.x += 1;
+        }
+        pp.x = x0;
+        pp.y += 1;
+    }
+}
+
+// NOTE: *_supported should be in a valid state when passed! We set .n to zero, though.
+template<Allocator_ID A>
+void find_given_supports(Entity *e, double world_t, Room *room, Array<Support, A> *_supports)
+{
+    _supports->n = 0;
+    
+    auto surfaces = item_entity_surfaces(e, room->t, room);
+    for(int i = 0; i < surfaces.n; i++) {
+        find_given_supports_from_surface(&surfaces[i], i, e, world_t, room, _supports);
+    }
+
+#if DEBUG
+    for(int i = 0; i < _supports->n; i++) {
+        Assert((*_supports)[i].supported != e);
+        Assert((*_supports)[i].supporter == e);
+    }
+#endif
+    
+}
+
+
+
+bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_support_points, s32 supported_height,
+                     Entity *potential_supporter, double world_t, Room *room, bool *support_point_satisfied_array = NULL)
 {
     auto surfaces = item_entity_surfaces(potential_supporter, world_t, room);
 
     bool supported = false;
+
+    Array<Support, ALLOC_TMP> tmp_supports = {0}; // Potentially used many times during our loop. Not actually "global", just here so that we can reuse it.
     
     for(int i = 0; i < surfaces.n; i++) {
         auto &surf = surfaces[i];
-        for(int i = 0; i < num_support_points; i++)
+
+        if(surf.max_height > 0 &&
+           surf.max_height < supported_height) continue;
+
+        if(surf.flags & SURF_EXCLUSIVE) {
+            // An exclusive surface can only support one entity at a time.
+            // @Speed
+
+            tmp_supports.n = 0;
+            find_given_supports_from_surface(&surf, i, potential_supporter, world_t, room, &tmp_supports, supported_entity);
+            if(tmp_supports.n > 0) continue; // This surface is already supporting someone.
+        }
+
+        bool any_point_satisfied_by_this_surface = false;
+        bool points_satisfied_by_this_surface[MAX_SUPPORT_POINTS] = {0};
+        Assert(num_support_points < ARRLEN(points_satisfied_by_this_surface));
+        
+        for(int j = 0; j < num_support_points; j++)
         {
-            auto &sp = support_points[i];
+            auto &sp = support_points[j];
 
             if(!floats_equal(sp.z, surf.p.z)) continue; // @Speed: We might be able to skip this surface entirely here, if all support points have the same z.
 
             Rect rect = { surf.p.xy, surf.s };
             if(point_inside_rect(sp.xy, rect)) {
                 if(support_point_satisfied_array) {
-                    support_point_satisfied_array[i] = true;
+                    points_satisfied_by_this_surface[j] = true;
+                    any_point_satisfied_by_this_surface = true;
                 }
-                supported = true;
             }
         }
+
+        if(surf.flags & SURF_EXCLUSIVE) {
+
+            /*
+              Exclusive surfaces only support if all support points
+              are satisfied by it.
+             */
+
+            if(!any_point_satisfied_by_this_surface) continue;
+
+            bool all_points_satisfied_by_this_surface = true;
+            for(int i = 0; i < num_support_points; i++) {
+                if(!points_satisfied_by_this_surface[i]) {
+                    all_points_satisfied_by_this_surface = false;
+                    break;
+                }
+            }
+
+            if(all_points_satisfied_by_this_surface) {       
+                static_assert(sizeof(*points_satisfied_by_this_surface) == sizeof(*support_point_satisfied_array));
+                memcpy(support_point_satisfied_array, points_satisfied_by_this_surface, sizeof(*support_point_satisfied_array) * num_support_points);
+                return true;
+            }
+            
+        } else if(any_point_satisfied_by_this_surface) {
+            for(int i = 0; i < num_support_points; i++) {
+                if(points_satisfied_by_this_surface[i]) support_point_satisfied_array[i] = true;
+            }
+            supported = true;
+        }
+        
     }
 
     return supported;
@@ -740,34 +894,6 @@ void get_support_points(AABB bbox, Static_Array<v3, MAX_SUPPORT_POINTS> *_points
     }
 }
 
-// NOTE: *_supported should be in a valid state when passed! We set .n to zero, though.
-template<Allocator_ID A>
-void find_supported_entities(Entity *e, Room *room, Array<Entity *, A> *_supported)
-{
-    _supported->n = 0;
-    
-    auto surfaces = item_entity_surfaces(e, room->t, room);
-    for(int i = 0; i < surfaces.n; i++) {
-        auto &surf = surfaces[i];
-
-        float x0 = surf.p.x + 0.5f;
-        v3 pp = { x0, surf.p.y + 0.5f, surf.p.z + 0.5f};
-        float x1 = pp.x + surf.s.x;
-        float y1 = pp.y + surf.s.y;
-        while(pp.y < y1) {
-            while(pp.x < x1) {
-                Entity *supported_entity = entity_needing_support_intersecting(pp, room->t, room);
-                if(supported_entity && supported_entity != e) {
-                    ensure_in_array(*_supported, supported_entity);
-                }
-                pp.x += 1;
-            }
-            pp.x = x0;
-            pp.y += 1;
-        }
-    }
-}
-
 
 // @Speed!
 Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double world_t, Room *room)
@@ -783,7 +909,9 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
         auto *potential_supporter = &Entities(room)[i];
         if(!Entity_Exists(potential_supporter)) continue;
         
-        if(is_supported_by(support_points.e, support_points.n, potential_supporter, world_t, room)) {
+        if(is_supported_by(e, support_points.e, support_points.n, bbox.s.z,
+                           potential_supporter, world_t, room))
+        {
             array_add(supporters, potential_supporter);
         }
     }
@@ -794,10 +922,14 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
 
 bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
+    Function_Profile();
+    
     Assert(my_entity->type == ENTITY_ITEM);
 
     Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = { 0 };
     defer(if(_supporters) *_supporters = supporters;);
+
+    Static_Array<Surface, MAX_SUPPORT_POINTS> supporter_surfaces = { 0 };
     
     if(_supporters) {
         Zero(*_supporters);
@@ -828,16 +960,22 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
         
         AABB other_bbox = entity_aabb(e, world_t, room);
 
-        if(aabb_intersects_aabb(my_bbox, other_bbox))
-            return false;
         
         // @Speed: We look up the entity's position, bbox etc both in is_supported_by and entity_aabb.  -EH, 2021-03-02
 
         if(in_array(supporters, e)) continue;
 
         // Are we supported by this entity?
-        if(is_supported_by(support_points.e, support_points.n, e, world_t, room, support_point_satisfied)) {
+        if(is_supported_by(&copy, support_points.e, support_points.n, my_bbox.s.z,
+                           e, world_t, room, support_point_satisfied))
+        {
             array_add(supporters, e);
+        }
+        else {
+
+            // For now, we allow colliding with supporters.
+            if(aabb_intersects_aabb(my_bbox, other_bbox))
+                return false;
         }
         
     }
@@ -929,7 +1067,7 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
 
             if(state.held_item.type != ITEM_NONE_OR_NUM)
             {
-                Quat q = Q_IDENTITY; // @Norelease
+                Quat q = x->q;
                 v3 p = item_entity_p_from_tp(x->tp, &state.held_item, q);
                 S__Entity fake_entity = create_item_entity(&state.held_item, p, q, world_t);
 

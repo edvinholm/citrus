@@ -1244,6 +1244,7 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                     for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
                         Read_To_Ptr(Entity_ID, &blender->recipe_inputs.e[i], node);
                     }
+                    Read_To_Ptr(Entity_ID, &blender->recipe_output_container, node);
                 } break;
             }
 
@@ -1336,6 +1337,7 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                     for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
                         Write(Entity_ID, blender->recipe_inputs.e[i], node);
                     }
+                    Write(Entity_ID, blender->recipe_output_container, node);
 
                 } break;
             }

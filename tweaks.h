@@ -33,6 +33,10 @@ enum Tweak_ID {
     TWEAK_RUN_PROFILER,
     TWEAK_SHOW_PROFILER,
     TWEAK_PROFILER_YSCALE,
+
+    TWEAK_CAMERA_ROTATION_OFFSET,
+    TWEAK_CAMERA_TRANSLATION_OFFSET,
+    TWEAK_CAMERA_SCALE_MULTIPLIER,
     //
 
     TWEAK_NONE_OR_NUM
@@ -83,7 +87,11 @@ struct Tweaks
         
         { "run_profiler",            TWEAK_TYPE_BOOL,  1 },
         { "show_profiler",           TWEAK_TYPE_BOOL,  1 },
-        { "profiler_yscale",         TWEAK_TYPE_FLOAT, 1 }
+        { "profiler_yscale",         TWEAK_TYPE_FLOAT, 1 },
+
+        { "camera_rotation_offset",    TWEAK_TYPE_FLOAT, 3 },
+        { "camera_translation_offset", TWEAK_TYPE_FLOAT, 2 },
+        { "camera_scale_multiplier",   TWEAK_TYPE_FLOAT, 1 }
         //
     };
     static_assert(ARRLEN(infos) == TWEAK_NONE_OR_NUM);

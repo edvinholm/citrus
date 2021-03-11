@@ -212,17 +212,33 @@ m4x4 world_projection_matrix(Rect viewport, float z_offset/* = 0*/)
 
     float z_mul = -0.01;
 
+    float cam_scale_mul = tweak_float(TWEAK_CAMERA_SCALE_MULTIPLIER);
+    if(cam_scale_mul > 0) {
+        x_mul *= cam_scale_mul;
+        y_mul *= cam_scale_mul;
+    }
+    
+    v2 cam_trans_offs = tweak_v2(TWEAK_CAMERA_TRANSLATION_OFFSET);
+    float dx = -cam_trans_offs.x * x_mul;
+    float dy = -cam_trans_offs.y * y_mul;
+
     m4x4 world_projection = make_m4x4(
-        x_mul, 0, 0, 0,
-        0, y_mul, 0, 0,
+        x_mul, 0, 0, dx,
+        0, y_mul, 0, dy,
         0, 0, z_mul, z_offset,
         0, 0, 0, 1);
+    
+    v3 cam_rot_offs = tweak_v3(TWEAK_CAMERA_ROTATION_OFFSET);
 
-    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, -TAU * 0.125));
+    m4x4 rotation = rotation_matrix(axis_rotation(V3_X, TAU * (-0.125 + cam_rot_offs.x / 360.0 )));
     world_projection = matmul(rotation, world_projection);
 
-    rotation = rotation_matrix(axis_rotation(V3_Z, TAU * 0.125));
+    rotation = rotation_matrix(axis_rotation(V3_Y, TAU * (0 + cam_rot_offs.y / 360.0)));
     world_projection = matmul(rotation, world_projection);
+    
+    rotation = rotation_matrix(axis_rotation(V3_Z, TAU * (0.125 + cam_rot_offs.z / 360.0)));
+    world_projection = matmul(rotation, world_projection);
+    
 
     float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
         

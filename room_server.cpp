@@ -1,5 +1,7 @@
 
 // @Norelease @Security: When placing objects, snap them to grid!
+//                       If on surface, make sure z = surface.z (not always snapped to grid)
+//                          If surface is CENTERING, make sure item is centered.
 
 #include "room_server_bound.cpp"
 
@@ -723,8 +725,6 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
         bool was_same_start_and_end_tile;
         if(player_walk_to(p1, e, room, &dur, &p0, false, &was_same_start_and_end_tile))
         {
-            Assert(dur > 0);
-
             // @Norelease.    
             // @Hack: We don't know if the walk path has to do with the current action.
             if (player_e->action_queue_length > 0)

@@ -43,3 +43,8 @@ show_entity_bounding_boxes false
 run_profiler    false
 show_profiler   false
 profiler_yscale 100.0
+
+
+# camera_rotation_offset    0 0 0
+# camera_translation_offset 0 0 0
+# camera_scale_multiplier     1   # If this is <= 0, it will be ignored.

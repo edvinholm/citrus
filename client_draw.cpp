@@ -823,7 +823,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, dou
             Assert(preview_entity.type == ENTITY_ITEM);
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            AABB bbox = entity_aabb(&preview_entity, tp, q);
+            AABB bbox = entity_aabb(&preview_entity, world_t, room);
             draw_quad(bbox.p + V3_Z * 0.001f, {bbox.s.x, 0, 0}, {0, bbox.s.y, 0}, shadow_color, gfx);
             
         }
@@ -896,9 +896,15 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         // SURFACE HIGHLIGHT //
         if(wv->surface_is_hovered) {
             auto surf = wv->hovered_surface;
+
+            v4 color = C_YELLOW;
+            switch(surf.type) {
+                case SURF_TYPE_MACHINE_INPUT:  color = C_RED; break;
+                case SURF_TYPE_MACHINE_OUTPUT: color = C_GREEN; break;
+            }
             
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            draw_quad(surf.p + V3_Z * 0.002f, V3_X * surf.s.x, V3_Y * surf.s.y, C_YELLOW, gfx);
+            draw_quad(surf.p + V3_Z * 0.002f, V3_X * surf.s.x, V3_Y * surf.s.y, color, gfx);
         }
 
         // HOVERED TILE, ITEM PREVIEW //

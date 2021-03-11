@@ -23,7 +23,10 @@ enum Item_Type_ID
     ITEM_WATERING_CAN,
     ITEM_CHESS_BOARD,
     ITEM_BARREL,
+    
     ITEM_BLENDER,
+    ITEM_BLENDER_CONTAINER,
+    
     ITEM_FRUIT,
 
     ITEM_NONE_OR_NUM
@@ -92,7 +95,10 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), ITEM_IS_LQ_CONTAINER },
     { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"), 0 },
     { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"), ITEM_IS_LQ_CONTAINER },
-    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), ITEM_IS_LQ_CONTAINER },
+    
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), 0 },
+    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), ITEM_IS_LQ_CONTAINER },
+    
     { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), 0 }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
@@ -290,6 +296,7 @@ struct S__Entity
                     
                     //NOTE: These are only valid if t_on_recipe_begin + recipe_duration > t
                     Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_inputs;
+                    Entity_ID recipe_output_container;
                     //--
                     
                 } blender;
@@ -383,9 +390,29 @@ void clear(S__Room *room) {
     
 }
 
+enum Surface_Flag_
+{
+    SURF_EXCLUSIVE = 0x01,
+    SURF_CENTERING = 0x02 // Items are centered on this surface.
+};
+
+typedef u8 Surface_Flags;
+
+enum Surface_Type: u8
+{
+    SURF_TYPE_DEFAULT = 0,
+    SURF_TYPE_MACHINE_INPUT,
+    SURF_TYPE_MACHINE_OUTPUT
+};
 
 struct Surface
 {
     v3 p;
     v2 s;
+
+    s32 max_height; // For entities supported by it. Zero means no limit.
+    
+    Surface_Flags flags;
+    Surface_Type  type;
 };
+

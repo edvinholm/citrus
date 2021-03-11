@@ -90,7 +90,15 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                    slot.item.type != ITEM_BLENDER)
                 {
                     float capacity = liquid_container_capacity(&slot.item);
-                    slot.item.liquid_container.amount = floorf(random_float() * capacity);
+
+                    float r = random_float();
+                    if(r < .25) {
+                        slot.item.liquid_container.amount = 0;
+                    } else if (r > .75) {
+                        slot.item.liquid_container.amount = capacity;
+                    } else {
+                        slot.item.liquid_container.amount = floorf(random_float() * capacity);
+                    }
                 }
             }
             

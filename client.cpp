@@ -1369,7 +1369,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         room->placement_tp = tp_from_index(wv->hovered_tile_ix);
     
         if(wv->surface_is_hovered) {
-            room->placement_tp  = tp_from_p(wv->surface_hit_p);
+            if(wv->hovered_surface.flags & SURF_CENTERING) {
+                room->placement_tp   = wv->hovered_surface.p + V3(wv->hovered_surface.s) * .5;
+            } else {
+                room->placement_tp   = tp_from_p(wv->surface_hit_p);
+                room->placement_tp.z = wv->surface_hit_p.z;
+            }
         }
 
         // rotation

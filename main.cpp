@@ -1,5 +1,46 @@
 
 
+/*
+---------------------------------------------------------------------------
+  SLOW PARTS (That we ignore for now -- don't even think about it!)
+  ----------
+  * ray_intersects_mesh()
+  * pathfinding
+  * find_ui_element()
+---------------------------------------------------------------------------
+
+  TO DO:
+  ------
+  
+  * Look at whiteboard!
+
+  * filter press
+
+  * Apple Tree: .num_fruits ??
+  * Apple Tree: Harvest -> Pick Up Apple, tree.num_fruits--;
+  
+  * When destroying entity A, unlock all entities where .locked_by == A.
+  
+  * Check if chair is occupied.
+
+ */
+
+
+/*  
+// @Continue:
+
+///////////////////////////
+
+THEN, WE WANT TO CONNECT THE OBJECTS PLACED ON TOP OF TABLES TO THE TABLES, SO THAT THEY
+MOVE WHEN THE TABLE MOVES!
+
+THEEEEEEEEEEEEEEN! WE SHOULD MAKE CONTAINERS, THAT HOLDS OTHER ENTITIES!!!!!!!!!!!!!
+ 
+/////////////////////
+
+*/
+
+
 #define Fail_If_True(Condition) \
     if(Condition) { Debug_Print("[FAILURE] Condition met: %s at %s:%d\n", #Condition, __FILE__, __LINE__); return false; }
 

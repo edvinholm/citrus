@@ -1,4 +1,5 @@
 
+
 bool is_ascii_newline(u8 ch) {
     return (ch == '\n');
 }
@@ -107,9 +108,15 @@ bool parse_uint_ascii(u8 **at, u8 *end, u32 *_value, bool skip_whitespace)
     return true;
 }
 
-bool parse_int_ascii(u8 **at, u8 *end, s32 *_value, bool skip_whitespace, bool allow_negative = true)
+// NOTE: Even if this function returns false, *_is_negative will be set to true if we found a '-' before failing.
+bool parse_int_ascii(u8 **at, u8 *end, s32 *_value, bool skip_whitespace, bool *_is_negative = NULL, bool allow_negative = true)
 {
     bool negative = false;
+    defer(if(_is_negative) *_is_negative = negative;);
+
+    if (skip_whitespace) {
+        skip_whitespace_ascii(at, end, false);
+    }
 
     if(allow_negative && **at == '-') {
         negative = true;
@@ -127,15 +134,16 @@ bool parse_int_ascii(u8 **at, u8 *end, s32 *_value, bool skip_whitespace, bool a
 
     s32 result = uint;
     if(negative) result *= -1;
-    
+
     *_value = result;
     return true;
 }
 
 bool parse_float_ascii(u8 **at, u8 *end, float *_value)
-{
+{   
     s32 left;
-    if(!parse_int_ascii(at, end, &left, true)) {
+    bool left_is_negative;
+    if(!parse_int_ascii(at, end, &left, true, &left_is_negative)) {
         left = 0;
         if(**at != '.') return false;
     }
@@ -155,12 +163,20 @@ bool parse_float_ascii(u8 **at, u8 *end, float *_value)
     result += abs(left);
     if(left < 0) result *= -1;
 
+    if (left >= 0 && left_is_negative) result *= -1;
+
     *_value = result;
     return true;
 }
 
-bool parse_tweaks(u8 *start, u8 *end) {
+void reset_tweaks() {
+    for(int i = 0; i < ARRLEN(tweaks.values); i++) {
+        Zero(tweaks.values[i]);
+    }
+}
 
+bool parse_tweaks(u8 *start, u8 *end) {
+    
     bool result = true;
 
     u8 *at = start;
@@ -283,6 +299,8 @@ bool load_tweaks(char *filename)
 // NOTE: If you pass a dev_user_id with length > 0, sb can not be NULL.
 bool load_tweaks(String dev_user_id = EMPTY_STRING) {
 
+    reset_tweaks();
+    
     load_tweaks("tweaks\\global.tweaks");
 
     if(dev_user_id.length != 0) {
