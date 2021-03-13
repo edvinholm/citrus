@@ -823,8 +823,11 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, dou
             Assert(preview_entity.type == ENTITY_ITEM);
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            AABB bbox = entity_aabb(&preview_entity, world_t, room);
-            draw_quad(bbox.p + V3_Z * 0.001f, {bbox.s.x, 0, 0}, {0, bbox.s.y, 0}, shadow_color, gfx);
+            auto hitbox = entity_hitbox(&preview_entity, world_t, room);
+            draw_quad(hitbox.base.p + V3_Z * 0.001f,
+                      {hitbox.base.s.x, 0, 0},
+                      {0, hitbox.base.s.y, 0},
+                      shadow_color, gfx);
             
         }
         else {
@@ -891,11 +894,12 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         }
 
         // DRAW WORLD //
-        draw_world(room, world_t, projection, client, gfx, wv->hovered_entity, wv->mouse_ray);
+        auto hovered_entity = (item_to_place != NULL) ? NO_ENTITY : wv->hovered_entity;
+        draw_world(room, world_t, projection, client, gfx, hovered_entity, wv->mouse_ray);
 
         // SURFACE HIGHLIGHT //
-        if(wv->surface_is_hovered) {
-            auto surf = wv->hovered_surface;
+        Surface surf;
+        if(get(wv->hovered_surface, &surf) && item_to_place != NULL) {
 
             v4 color = C_YELLOW;
             switch(surf.type) {
@@ -908,7 +912,7 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         }
 
         // HOVERED TILE, ITEM PREVIEW //
-        if(wv->hovered_entity == NO_ENTITY || wv->surface_is_hovered)
+        if(wv->hovered_entity == NO_ENTITY || item_to_place != NULL)
         {
             v3 hovered_tp;
             if(item_to_place) hovered_tp = room->placement_tp;

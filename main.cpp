@@ -4,17 +4,24 @@
 ---------------------------------------------------------------------------
   SLOW PARTS (That we ignore for now -- don't even think about it!)
   ----------
-  * ray_intersects_mesh()
   * pathfinding
   * find_ui_element()
 ---------------------------------------------------------------------------
 
   TO DO:
   ------
+
+  * NUGGET CONTAINERS!
+
+  * Filter Press input, output, recipe....
   
+  * Add Nugget_Container property to items...
+    etc
+  * Filter Press
+    
+
   * Look at whiteboard!
 
-  * filter press
 
   * Apple Tree: .num_fruits ??
   * Apple Tree: Harvest -> Pick Up Apple, tree.num_fruits--;
@@ -49,6 +56,19 @@ THEEEEEEEEEEEEEEN! WE SHOULD MAKE CONTAINERS, THAT HOLDS OTHER ENTITIES!!!!!!!!!
 
 #ifndef DEVELOPER
 #define DEVELOPER 0
+#endif
+
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+#ifndef DEBUG_SLOW
+#define DEBUG_SLOW 0
+#endif
+
+#if DEBUG_SLOW
+#undef DEBUG
+#define DEBUG 1
 #endif
 
 

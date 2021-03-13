@@ -49,10 +49,10 @@ void generate_walk_map(Room *room, v3s walker_volume, Walk_Map *_map)
         if(e->type != ENTITY_ITEM) continue;
         if(e->held_by != NO_ENTITY) continue;
         
-        AABB bbox = entity_aabb(e, room->t, room);
-        v3 p1 = bbox.p + bbox.s;
+        auto hitbox = entity_hitbox(e, room->t, room);
+        v3 p1 = compround(hitbox.base.p + hitbox.base.s);
 
-        set_walk_flags_on_area(UNWALKABLE, bbox.p, p1, walker_volume, _map);
+        set_walk_flags_on_area(UNWALKABLE, hitbox.base.p, p1, walker_volume, _map);
     }
 
 

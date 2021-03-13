@@ -11,6 +11,8 @@ struct Mesh
     float *tex;
     
     int n;
+    
+    v3 *real_triangle_normals; // Length of this is n/3.
 };
 
 void clear(Mesh *mesh, Allocator_ID allocator) {
@@ -38,8 +40,17 @@ void ensure_mesh_capacity(u64 required_capacity, u64 *capacity, Mesh *mesh, Allo
     };
 
     static_assert(ARRLEN(buffer_element_sizes) == ARRLEN(buffers));
-    
-    ensure_buffer_set_capacity(required_capacity, capacity, buffers, buffer_element_sizes, ARRLEN(buffers), allocator);
+
+    u64 new_capacity = *capacity;
+    ensure_buffer_set_capacity(required_capacity, &new_capacity, buffers, buffer_element_sizes, ARRLEN(buffers), allocator);
+
+    // Real Triangle Normals //
+    Assert(required_capacity % 3 == 0);
+    u64 triangle_capacity = *capacity / 3;
+    ensure_capacity(&mesh->real_triangle_normals, &triangle_capacity, required_capacity/3, allocator);
+    // // //
+
+    *capacity = new_capacity;
 }
 
 Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, int num_vertices, Allocator *allocator)
@@ -64,6 +75,14 @@ Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, int num_vertices, Allocato
 
     memset(mesh.tex, 0, sizeof(*mesh.tex) * num_vertices);
 
+    for(int t = 0; t < num_vertices/3; t++) {
+        v3 a = mesh.positions[t * 3 + 0];
+        v3 b = mesh.positions[t * 3 + 1];
+        v3 c = mesh.positions[t * 3 + 2];
+
+        mesh.real_triangle_normals[t] = normalize(cross((b-a), (c-a)));
+    }
+
     mesh.n = num_vertices;
     
     return mesh;
@@ -84,18 +103,23 @@ bool ray_intersects_mesh(Ray ray, Mesh *mesh, v3 *_intersection, float *_ray_t)
     float closest_hit_t = FLT_MAX;
     v3    closest_hit;
     
-    int i = 0;
-    while(i < mesh->n)
+    int t = -1;
+    int num_triangles = mesh->n/3;
+    while(++t < num_triangles)
     {
-        v3 a = mesh->positions[i++];
-        v3 b = mesh->positions[i++];
-        v3 c = mesh->positions[i++];
+        v3 normal = mesh->real_triangle_normals[t];
+        
+        if(dot(normal, ray.dir) >= 0) continue;
+        
+        v3 a = mesh->positions[t*3+0];
+        v3 b = mesh->positions[t*3+1];
+        v3 c = mesh->positions[t*3+2];
 
-        v4 plane = triangle_plane(a, b, c);
-
-        v3    intersection;
-        float ray_t;
-        if(!ray_intersects_plane(ray, plane, &intersection, &ray_t)) continue;
+        float plane_d = -dot(a, normal);
+        
+        float ray_t     = (-plane_d - normal.x*ray.p0.x - normal.y*ray.p0.y - normal.z*ray.p0.z) / (normal.x*ray.dir.x + normal.y*ray.dir.y + normal.z*ray.dir.z);
+        v3 intersection = ray.p0 + ray.dir * ray_t;
+        
         if(any_hit && ray_t >= closest_hit_t) continue;
 
         auto bc = barycentric(intersection, a, b, c);

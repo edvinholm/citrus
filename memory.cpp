@@ -270,7 +270,7 @@ bool realloc_needed(U current_capacity, U required_capacity, U *_new_capacity = 
 // NOTE: May change *allocation and *capacity
 // NOTE: U should be an integer type
 template<typename T, typename U>
-void ensure_capacity(T **allocation, U *capacity, U required_capacity, Allocator_ID allocator, U min_capacity = 1, bool copy_data = false)
+void ensure_capacity(T **allocation, U *capacity, U required_capacity, Allocator *allocator, U min_capacity = 1, bool copy_data = false)
 {
     U new_capacity = max(min_capacity, *capacity);
     while(new_capacity < required_capacity)
@@ -285,7 +285,7 @@ void ensure_capacity(T **allocation, U *capacity, U required_capacity, Allocator
         }
         
         if(*allocation)
-            dealloc(*allocation, allocator);
+            dealloc_if_legal(*allocation, allocator);
 
         *allocation = new_allocation;
         *capacity   = new_capacity;

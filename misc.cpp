@@ -20,6 +20,9 @@ struct Optional {
         this->value = v;
     }
 
+    operator bool() {
+        return present;
+    }
 };
 
 template<typename T>

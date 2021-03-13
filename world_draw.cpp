@@ -154,7 +154,7 @@ void maybe_update_static_room_vaos(Room *room, Graphics *gfx)
 }
 
 
-void draw_aabb(AABB bbox, Graphics *gfx)
+void draw_aabb(AABB bbox, v4 color, Graphics *gfx)
 {    
     v3 p0 = bbox.p;
     v3 p1 = bbox.p + bbox.s;
@@ -171,21 +171,21 @@ void draw_aabb(AABB bbox, Graphics *gfx)
 
     float line_w = .1f;
 
-    draw_line(a, b, -V3_X, line_w, C_GREEN, gfx);
-    draw_line(a, c, -V3_X, line_w, C_GREEN, gfx);
-    draw_line(b, d, -V3_X, line_w, C_GREEN, gfx);
-    draw_line(c, d, -V3_X, line_w, C_GREEN, gfx);
+    draw_line(a, b, -V3_X, line_w, color, gfx);
+    draw_line(a, c, -V3_X, line_w, color, gfx);
+    draw_line(b, d, -V3_X, line_w, color, gfx);
+    draw_line(c, d, -V3_X, line_w, color, gfx);
         
-    draw_line(e, f,  V3_X, line_w, C_GREEN, gfx);
-    draw_line(e, g,  V3_X, line_w, C_GREEN, gfx);
-    draw_line(f, h,  V3_X, line_w, C_GREEN, gfx);
-    draw_line(g, h,  V3_X, line_w, C_GREEN, gfx);
+    draw_line(e, f,  V3_X, line_w, color, gfx);
+    draw_line(e, g,  V3_X, line_w, color, gfx);
+    draw_line(f, h,  V3_X, line_w, color, gfx);
+    draw_line(g, h,  V3_X, line_w, color, gfx);
         
-    draw_line(a, e, -V3_Y, line_w, C_GREEN, gfx);
-    draw_line(c, g, -V3_Y, line_w, C_GREEN, gfx);
+    draw_line(a, e, -V3_Y, line_w, color, gfx);
+    draw_line(c, g, -V3_Y, line_w, color, gfx);
         
-    draw_line(b, f,  V3_Y, line_w, C_GREEN, gfx);
-    draw_line(d, h,  V3_Y, line_w, C_GREEN, gfx);
+    draw_line(b, f,  V3_Y, line_w, color, gfx);
+    draw_line(d, h,  V3_Y, line_w, color, gfx);
 }
 
 void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool cannot_be_placed = false)
@@ -229,7 +229,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         base_color = item_type->color;
 
-        if(item_type->flags & ITEM_IS_LQ_CONTAINER)
+        if(item_type->container_type == LIQUID_CONTAINER)
         {
             float capacity = liquid_container_capacity(item) / 10.0f;
 
@@ -311,9 +311,11 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     // DEBUG AABB //
     if(tweak_bool(TWEAK_SHOW_ENTITY_BOUNDING_BOXES)) {
         _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-        AABB bbox = entity_aabb(e, center, q);
+        auto hitbox = entity_hitbox(e, center, q);
 
-        draw_aabb(bbox, gfx);
+        draw_aabb(hitbox.base,      C_GREEN, gfx);
+        for(int i = 0; i < hitbox.num_exclusions; i++)
+            draw_aabb(hitbox.exclusions[i], C_RED,   gfx);
     }
     // ////////// //
 

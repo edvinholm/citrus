@@ -29,6 +29,41 @@ v3 tp_from_index(s32 tile_index)
     return { (float)x, (float)y, 0 };
 }
 
+bool hitbox_intersects_hitbox(Entity_Hitbox a, Entity_Hitbox b)
+{
+    AABB intersection;
+    if(!get_aabb_aabb_intersection(a.base, b.base, &intersection)) return false;
+
+    float intersection_volume = (intersection.s.x * intersection.s.y * intersection.s.z);
+
+    // Subtract volume of intersection with a's exclusions. (We assume they don't overlap)
+    for(int i = 0; i < a.num_exclusions; i++) {
+        AABB exclusion_intersection;
+        if(!get_aabb_aabb_intersection(a.exclusions[i], intersection, &exclusion_intersection)) continue;
+        intersection_volume -= (exclusion_intersection.s.x * exclusion_intersection.s.y * exclusion_intersection.s.z);
+    }
+
+    // Subtract volume of intersection with b's exclusions. (We assume they don't overlap)    
+    for(int i = 0; i < b.num_exclusions; i++){
+        AABB exclusion_intersection;
+        if(!get_aabb_aabb_intersection(b.exclusions[i], intersection, &exclusion_intersection)) continue;
+        intersection_volume -= (exclusion_intersection.s.x * exclusion_intersection.s.y * exclusion_intersection.s.z);
+    }
+
+    // Add the volumes we've added twice, which is the intersections of (the intersections of a's and b's exclusions) and the intersection volume.
+    for(int i = 0; i < a.num_exclusions; i++) {
+        for(int j = 0; j < b.num_exclusions; j++) {
+            AABB intersection_a;
+            if(!get_aabb_aabb_intersection(a.exclusions[i], b.exclusions[j], &intersection_a)) continue;
+            AABB intersection_b;
+            if(!get_aabb_aabb_intersection(intersection_a, intersection, &intersection_b)) continue;
+            intersection_volume += (intersection_b.s.x * intersection_b.s.y * intersection_b.s.z);
+        }
+    }
+    
+    return intersection_volume > (0.01f * 0.01f * 0.01f);
+}
+
 
 Liquid_Type liquid_type_of_container(Liquid_Container *lc)
 {
@@ -138,7 +173,7 @@ Liquid_Amount liquid_container_capacity(Item *item)
     Item_Type *item_type = item_types + item->type;
     
 #if DEBUG
-    Assert(item_type->flags & ITEM_IS_LQ_CONTAINER);
+    Assert(item_type->container_type == LIQUID_CONTAINER);
 #endif
 
     auto vol = item_type->volume;
@@ -197,7 +232,7 @@ void update_entity_item(S__Entity *e, double world_t)
     }
 
     auto *type = &item_types[item->type];
-    if(type->flags & ITEM_IS_LQ_CONTAINER) {
+    if(type->container_type == LIQUID_CONTAINER) {
         item->liquid_container = liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t);
 
         // Continue simulating properties after lerp t1
@@ -276,7 +311,7 @@ S__Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
         } break;
     }
 
-    if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+    if(item_types[item->type].container_type == LIQUID_CONTAINER) {
         e.item_e.lc0 = item->liquid_container;
         e.item_e.lc1 = item->liquid_container;
         e.item_e.lc_t0 = world_t;
@@ -502,15 +537,13 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
 
 template<typename ENTITY>
-AABB entity_aabb(ENTITY *e, v3 p, Quat q)
+Entity_Hitbox entity_hitbox(ENTITY *e, v3 p, Quat q)
 {
-    AABB bbox = {0};
+    Entity_Hitbox hb = {0};
 
-    float zz = atan2(2.0 * (q.w * q.z + q.x * q.y),
-                     1.0 - 2.0 * (q.y * q.y + q.z * q.z));
-
-    int quadrant = round(zz / (.25 * TAU));
-    bool do_rotate_90_deg = (abs(quadrant % 2) == 1);
+    v3 forward = rotate_vector(V3_X, q);
+    v3 left    = rotate_vector(V3_Y, q);
+    v3 up      = rotate_vector(V3_Z, q);
     
     switch(e->type) {
         case ENTITY_ITEM: {
@@ -518,39 +551,97 @@ AABB entity_aabb(ENTITY *e, v3 p, Quat q)
             Assert(item_e->item.type != ITEM_NONE_OR_NUM);
     
             auto *type = &item_types[item_e->item.type];
-    
-            bbox.s = { (float)type->volume.x, (float)type->volume.y, (float)type->volume.z };
+            auto vol = type->volume;
+
+            v3 p0 = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f);
+
+            hb.base.p = p0;
+            hb.base.s = (forward * vol.x) + (left * vol.y) + (up * vol.z);
+
+            switch(item_e->item.type) {
+
+                case ITEM_TABLE: {
+                    hb.exclusions[0].p = p0 + (left * 1);
+                    hb.exclusions[0].s = (forward * vol.x) + (left * (vol.y-2)) + (up * 1);
+                    hb.num_exclusions = 1;
+                } break;
+                
+                case ITEM_BLENDER: {
+                    hb.exclusions[0].p = p0 + up * .2;
+                    hb.exclusions[0].s = (forward * vol.x) + (left * vol.y) + (up * 1);
+                    hb.num_exclusions = 1;
+                } break;
+
+                case ITEM_FILTER_PRESS: {
+                    { // Underneath
+                        AABB excl = {0};
+                        excl.p = p0 + (left * 1);
+                        excl.s = (forward * 3) + (left * 3) + (up * 2);
+
+                        Assert(hb.num_exclusions < ARRLEN(hb.exclusions));
+                        hb.exclusions[hb.num_exclusions++] = excl;
+                    }
+
+                    { // Over input platform
+                        AABB excl = {0};
+                        excl.p = p0 + (forward * vol.x) + (left * vol.y) + (up * vol.z);
+                        excl.s = -(forward * 2) -(left * 2) -(up * 2);
+
+                        Assert(hb.num_exclusions < ARRLEN(hb.exclusions));
+                        hb.exclusions[hb.num_exclusions++] = excl;
+                    }
+
+                    { // Under input platform
+                        AABB excl = {0};
+                        excl.p = p0 + (forward * vol.x) + (left * vol.y);
+                        excl.s = -(forward * (vol.x-1)) -(left * 2) + (up * 1);
+
+                        Assert(hb.num_exclusions < ARRLEN(hb.exclusions));
+                        hb.exclusions[hb.num_exclusions++] = excl;
+                    }
+                    
+                    { // "Behind" input platform
+                        AABB excl = {0};
+                        excl.p = p0 + (left * vol.y) + (up * vol.z);
+                        excl.s = (forward * 1) -(left * 2) - (up * (vol.z));
+
+                        Assert(hb.num_exclusions < ARRLEN(hb.exclusions));
+                        hb.exclusions[hb.num_exclusions++] = excl;
+                    }
+                } break;
+            }
+            
         } break;
 
         case ENTITY_PLAYER: {
-            bbox.s = V3(player_entity_volume);
+            hb.base.s = V3(player_entity_volume);
+
+            hb.base.p = p - (forward * hb.base.s.x * 0.5f) - (left * hb.base.s.y * 0.5f);
 
             // @Hack for raycasting
-            bbox.s *= 0.8f;
+            hb.base.s *= 0.8f;
         } break;
 
         default: Assert(false); break;
     }
-    
-    if(do_rotate_90_deg) {
-        swap(&bbox.s.x, &bbox.s.y);
-    }
-    
-    bbox.p.xy = p.xy - bbox.s.xy / 2.0f;
-    bbox.p.z  = p.z;
 
+    Assert(hb.num_exclusions <= ARRLEN(hb.exclusions));
 
-    return bbox;
+    ensure_positive_aabb_size(&hb.base);
+    for(int i = 0; i < hb.num_exclusions; i++)
+        ensure_positive_aabb_size(&hb.exclusions[i]);
+
+    return hb;
 }
 
 template<typename ENTITY>
-AABB entity_aabb(ENTITY *e, double world_t, Room *room)
+Entity_Hitbox entity_hitbox(ENTITY *e, double world_t, Room *room)
 {
     v3 p;
     Quat q;
     get_entity_transform(e, world_t, room, &p, &q);
 
-    return entity_aabb(e, p, q);
+    return entity_hitbox(e, p, q);
 }
 
 Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room *room)
@@ -585,7 +676,6 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
 
             // ingredients
             {
-
                 Surface surf = {0};
                 surf.type = SURF_TYPE_MACHINE_INPUT;
                 surf.s = (forward * 1 + left * 1).xy;
@@ -611,6 +701,32 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
                 array_add(surfaces, surf);
             }
                     
+        } break;
+
+        case ITEM_FILTER_PRESS: {
+            v3s vol = item_types[item->type].volume;
+
+            // input
+            {
+                Surface surf = {0};
+                surf.type   = SURF_TYPE_MACHINE_INPUT;
+                surf.flags |= SURF_EXCLUSIVE;
+                surf.p = p + (forward * vol.x * 0.5f) + (left * vol.y * 0.5f) + (up * 2);
+                surf.s = (-forward * 2  -left * 2).xy;
+                array_add(surfaces, surf);
+            }
+            
+            // output
+            {
+                Surface surf = {0};
+                surf.type   = SURF_TYPE_MACHINE_OUTPUT;
+                surf.flags |= SURF_EXCLUSIVE;
+                surf.p = p - (forward * vol.x * 0.5f) - (left * (vol.y * 0.5f - 1));
+                surf.s = (forward * 3 + left * 3).xy;
+                surf.max_height = 2;
+                array_add(surfaces, surf);
+            }
+            
         } break;
     }
 
@@ -686,8 +802,8 @@ Entity *entity_needing_support_intersecting(v3 p, double world_t, Room *room)
         auto *e = Entities(room) + i;
         if(!Entity_Exists(e)) continue;
 
-        AABB bbox = entity_aabb(e, world_t, room);
-        if(aabb_contains_point(bbox, p)) return e;
+        auto hitbox = entity_hitbox(e, world_t, room);
+        if(aabb_contains_point(hitbox.base, p)) return e;
     }
     return NULL;
 }
@@ -710,10 +826,10 @@ struct Support
 //       The difference is: elements are added to supports (if they are not already there),
 //                          without setting supports->n to 0 at the beginning.
 template<Allocator_ID A>
-void find_given_supports_from_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, S__Entity *entity_to_ignore = NULL)
+void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, S__Entity *entity_to_ignore = NULL)
 {
     float x0 = surf->p.x + 0.5f;
-    v3 pp = { x0, surf->p.y + 0.5f, surf->p.z + 0.5f};
+    v3 pp = { x0, surf->p.y + 0.5f, surf->p.z};
     float x1 = pp.x + surf->s.x;
     float y1 = pp.y + surf->s.y;
     while(pp.y < y1) {
@@ -731,8 +847,10 @@ void find_given_supports_from_surface(Surface *surf, int surface_index, Entity *
 
                 if (e == surface_owner || e == entity_to_ignore) continue;
 
-                AABB bbox = entity_aabb(e, world_t, room);
-                if (aabb_contains_point(bbox, pp)) {
+                auto hitbox = entity_hitbox(e, world_t, room);
+                if(!floats_equal(hitbox.base.p.z, pp.z)) continue;
+                
+                if (point_inside_rect(pp.xy, { hitbox.base.p.xy, hitbox.base.s.xy })) {
                     supported_entity = e;
                     break;
                 }
@@ -785,7 +903,7 @@ void find_given_supports(Entity *e, double world_t, Room *room, Array<Support, A
     
     auto surfaces = item_entity_surfaces(e, room->t, room);
     for(int i = 0; i < surfaces.n; i++) {
-        find_given_supports_from_surface(&surfaces[i], i, e, world_t, room, _supports);
+        find_given_supports_by_surface(&surfaces[i], i, e, world_t, room, _supports);
     }
 
 #if DEBUG
@@ -800,8 +918,11 @@ void find_given_supports(Entity *e, double world_t, Room *room, Array<Support, A
 
 
 bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_support_points, s32 supported_height,
-                     Entity *potential_supporter, double world_t, Room *room, bool *support_point_satisfied_array = NULL)
+                     Entity *potential_supporter, double world_t, Room *room,
+                     bool *support_point_satisfied_array = NULL, bool *_actively_rejected = NULL)
 {
+    if(_actively_rejected) *_actively_rejected = false;
+    
     auto surfaces = item_entity_surfaces(potential_supporter, world_t, room);
 
     bool supported = false;
@@ -814,13 +935,17 @@ bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_su
         if(surf.max_height > 0 &&
            surf.max_height < supported_height) continue;
 
+        bool surface_already_supporting_someone = false;
+        
         if(surf.flags & SURF_EXCLUSIVE) {
             // An exclusive surface can only support one entity at a time.
             // @Speed
 
             tmp_supports.n = 0;
-            find_given_supports_from_surface(&surf, i, potential_supporter, world_t, room, &tmp_supports, supported_entity);
-            if(tmp_supports.n > 0) continue; // This surface is already supporting someone.
+            find_given_supports_by_surface(&surf, i, potential_supporter, world_t, room, &tmp_supports, supported_entity);
+            if(tmp_supports.n > 0) {
+                surface_already_supporting_someone = true;
+            }
         }
 
         bool any_point_satisfied_by_this_surface = false;
@@ -851,6 +976,11 @@ bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_su
 
             if(!any_point_satisfied_by_this_surface) continue;
 
+            if(surface_already_supporting_someone) {
+                if(_actively_rejected) *_actively_rejected = true;
+                return false; // This surface is already supporting someone.
+            }
+
             bool all_points_satisfied_by_this_surface = true;
             for(int i = 0; i < num_support_points; i++) {
                 if(!points_satisfied_by_this_surface[i]) {
@@ -863,6 +993,10 @@ bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_su
                 static_assert(sizeof(*points_satisfied_by_this_surface) == sizeof(*support_point_satisfied_array));
                 memcpy(support_point_satisfied_array, points_satisfied_by_this_surface, sizeof(*support_point_satisfied_array) * num_support_points);
                 return true;
+            }
+            else {
+                if(_actively_rejected) *_actively_rejected = true;
+                return false;
             }
             
         } else if(any_point_satisfied_by_this_surface) {
@@ -900,16 +1034,16 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
 {
     Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = {0};
 
-    AABB bbox = entity_aabb(e, world_t, room);
+    auto hitbox = entity_hitbox(e, world_t, room);
     
     Static_Array<v3, MAX_SUPPORT_POINTS> support_points = {0};
-    get_support_points(bbox, &support_points);
+    get_support_points(hitbox.base, &support_points);
     
     for(int i = 0; i < Num_Entities(room); i++) {
         auto *potential_supporter = &Entities(room)[i];
         if(!Entity_Exists(potential_supporter)) continue;
         
-        if(is_supported_by(e, support_points.e, support_points.n, bbox.s.z,
+        if(is_supported_by(e, support_points.e, support_points.n, hitbox.base.s.z,
                            potential_supporter, world_t, room))
         {
             array_add(supporters, potential_supporter);
@@ -939,16 +1073,14 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
     copy.item_e.p = p;
     copy.held_by = NO_ENTITY;
 
-    AABB my_bbox = entity_aabb(&copy, world_t, room);
+    auto my_hitbox = entity_hitbox(&copy, world_t, room);
 
     bool supported_by_floor = (p.z <= 0);
     
     // FIND SUPPORT POINTS //
     Static_Array<v3, MAX_SUPPORT_POINTS> support_points = {0}; // @Speed: If we would want bigger items than this, we would probably need to do the check in some other way, anyway.
     bool support_point_satisfied[MAX_SUPPORT_POINTS] = {0};
-    if(!supported_by_floor) { // NOTE: If this is false, we will end up with zero support points, which means 100% of them are satisfied.
-        get_support_points(my_bbox, &support_points);
-    }
+    get_support_points(my_hitbox.base, &support_points);
     // // //
     
     for(int i = 0; i < Num_Entities(room); i++)
@@ -958,31 +1090,30 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
         
         if(e->id == my_entity->id) continue;
         
-        AABB other_bbox = entity_aabb(e, world_t, room);
-
+        auto other_hitbox = entity_hitbox(e, world_t, room);
+        if(hitbox_intersects_hitbox(my_hitbox, other_hitbox)) return false;
         
         // @Speed: We look up the entity's position, bbox etc both in is_supported_by and entity_aabb.  -EH, 2021-03-02
 
         if(in_array(supporters, e)) continue;
 
         // Are we supported by this entity?
-        if(is_supported_by(&copy, support_points.e, support_points.n, my_bbox.s.z,
-                           e, world_t, room, support_point_satisfied))
+        bool actively_rejected;
+        if(support_points.n > 0 && 
+           is_supported_by(&copy, support_points.e, support_points.n, my_hitbox.base.s.z, e, world_t, room,
+                           support_point_satisfied, &actively_rejected))
         {
             array_add(supporters, e);
         }
-        else {
-
-            // For now, we allow colliding with supporters.
-            if(aabb_intersects_aabb(my_bbox, other_bbox))
-                return false;
-        }
-        
+        else if(actively_rejected)
+            return false;
     }
 
     // CHECK IF WE ARE FULLY SUPPORTED //
-    for(int i = 0; i < support_points.n; i++) {
-        if(!support_point_satisfied[i]) return false;
+    if(!supported_by_floor) {
+        for(int i = 0; i < support_points.n; i++) {
+            if(!support_point_satisfied[i]) return false;
+        }
     }
     // // //
 
@@ -1060,7 +1191,10 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
         if(act->type == PLAYER_ACT_PUT_DOWN)
         {
             auto *x = &act->put_down;
-            
+
+            // @Speed: Cache player state!
+            // @Speed: Cache player state!
+            // @Speed: Cache player state!
             // Apply actions up til before this PUT_DOWN.
             apply_actions_to_player_state(&state, player_e->action_queue + num_actions_applied_to_state, i - num_actions_applied_to_state, world_t, room, user);
             num_actions_applied_to_state = i;
@@ -1071,8 +1205,8 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
                 v3 p = item_entity_p_from_tp(x->tp, &state.held_item, q);
                 S__Entity fake_entity = create_item_entity(&state.held_item, p, q, world_t);
 
-                AABB bbox = entity_aabb(&fake_entity, world_t, room);
-                volumes[(*_num)++] = bbox;
+                auto hitbox = entity_hitbox(&fake_entity, world_t, room);
+                volumes[(*_num)++] = hitbox.base;
                 Assert(*_num < max_volumes);
             }
         }        
@@ -1082,7 +1216,7 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
 }
 
 
-bool item_entity_can_be_moved(S__Entity *e, double world_t, Room *room)
+bool item_entity_can_be_moved(Entity *e, double world_t, Room *room)
 {
     Assert(e->type == ENTITY_ITEM);
             
@@ -1091,26 +1225,10 @@ bool item_entity_can_be_moved(S__Entity *e, double world_t, Room *room)
     
     if(item_e->locked_by != NO_ENTITY) return false;
 
-    auto surfaces = item_entity_surfaces(e, world_t, room);
-    for(int i = 0; i < surfaces.n; i++) {
-        auto &surf = surfaces[i];
-            
-        float x0 = surf.p.x + 0.5f;
-        v3 pp = { x0, surf.p.y + 0.5f, surf.p.z + 0.5f };
-        float y1 = surf.p.y + surf.s.y;
-        float x1 = surf.p.x + surf.s.x;
-        
-        while(pp.y < y1) {
-            while(pp.x < x1) {
-                Entity *sup = entity_needing_support_intersecting(pp, world_t, room);
-                if(sup != NULL && sup != e) return false; // We are supporting another entity, so we can't be moved.
-                pp.x += 1;
-            }
-            pp.x = x0;
-            pp.y += 1;
-        }
-    }
-
+    Array<Support, ALLOC_TMP> given_supports = {0};
+    find_given_supports(e, world_t, room, &given_supports); // @Speed: We should have a do_we_support_anyone function that just returns the first time it finds a supporter, instead of building an array!
+    if(given_supports.n > 0) return false; // We are supporting another entity, so we can't be moved.
+    
     switch(item->type) {
         case ITEM_MACHINE: {
             auto *machine = &item_e->machine;
@@ -1143,7 +1261,7 @@ bool item_entity_can_be_moved(S__Entity *e, double world_t, Room *room)
 // NOTE: @Norelease: We can't yet pass another world_t than the room's t. If we want
 //                   to do that, we need to simulate the room up to that t (temporarily)
 //                   before we check the state of entities!
-bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player_State *player_state, double world_t, Room *room, bool *_sitting_allowed, S__User *user = NULL)
+bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_State *player_state, double world_t, Room *room, bool *_sitting_allowed, S__User *user = NULL)
 {
     Function_Profile();
     
@@ -1244,7 +1362,7 @@ bool entity_action_predicted_possible(Entity_Action action, S__Entity *e, Player
 
             auto *plant_e = &e->item_e.plant;
 
-            if(!(item_types[player_state->held_item.type].flags & ITEM_IS_LQ_CONTAINER)) return false;
+            if(item_types[player_state->held_item.type].container_type != LIQUID_CONTAINER) return false;
             auto *lc = &player_state->held_item.liquid_container;
 
             if(lc->liquid.type != LQ_WATER) return false;
@@ -1333,7 +1451,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             
             auto *entity_act = &action->entity;
 
-            S__Entity *e = find_entity(entity_act->target, room);
+            Entity *e = find_entity(entity_act->target, room);
             if(!e) return false;
 
             if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, room, &sitting_allowed, user)) return false;
@@ -1592,7 +1710,7 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_WATER: {
-                        Assert(item_types[state->held_item.type].flags & ITEM_IS_LQ_CONTAINER); // player_action_predicted_possible() should have checked this.
+                        Assert(item_types[state->held_item.type].container_type == LIQUID_CONTAINER); // player_action_predicted_possible() should have checked this.
                         auto *lc = &state->held_item.liquid_container;
 
                         Assert(lc->liquid.type == LQ_WATER); // player_action_predicted_possible() should have checked this.

@@ -28,6 +28,8 @@
 #include "game_server.h"
 using namespace Server_Game;
 
+#include "world_shared.h"
+
 #include "user.h"
 using namespace Server_User;
 

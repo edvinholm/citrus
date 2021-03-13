@@ -304,11 +304,10 @@ struct UI_World_View
     s32 clicked_tile_ix; // -1 == no tile
 
     Entity_ID hovered_entity;
-    v3   hovered_entity_hit_p;
+    v3        hovered_entity_hit_p;
 
-    bool    surface_is_hovered;
-    Surface hovered_surface;
-    v3      surface_hit_p;
+    Optional<Surface> hovered_surface;
+    v3                hovered_surface_hit_p;
     
     Entity_ID pressed_entity;
     Entity_ID clicked_entity;

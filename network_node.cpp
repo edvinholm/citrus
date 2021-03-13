@@ -662,7 +662,7 @@ bool read_Item(Item *_item, Network_Node *node)
     }
 
     // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    if(item_types[_item->type].flags & ITEM_IS_LQ_CONTAINER) {
+    if(item_types[_item->type].container_type == LIQUID_CONTAINER) {
         Read_To_Ptr(Liquid_Container, &_item->liquid_container, node);
     }
     
@@ -683,7 +683,7 @@ bool write_Item(Item item, Network_Node *node)
     }
 
     // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    if(item_types[item.type].flags & ITEM_IS_LQ_CONTAINER) {
+    if(item_types[item.type].container_type == LIQUID_CONTAINER) {
         Write(Liquid_Container, item.liquid_container, node);
     }
     
@@ -1249,7 +1249,7 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             }
 
             auto *type = &item_types[x->item.type];
-            if(type->flags & ITEM_IS_LQ_CONTAINER) {
+            if(type->container_type == LIQUID_CONTAINER) {
                 Read_To_Ptr(World_Time, &x->lc_t0, node);
                 Read_To_Ptr(World_Time, &x->lc_t1, node);
                 Read_To_Ptr(Liquid_Container, &x->lc0, node);
@@ -1344,7 +1344,7 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
 
             
             auto *type = &item_types[x->item.type];
-            if(type->flags & ITEM_IS_LQ_CONTAINER) {
+            if(type->container_type == LIQUID_CONTAINER) {
                 Write(World_Time, x->lc_t0, node);
                 Write(World_Time, x->lc_t1, node);
                 Write(Liquid_Container, x->lc0, node);

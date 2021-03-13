@@ -26,7 +26,7 @@ profiler_yscale 250
 # color_tiles_by_position true
 
 
-# show_entity_action_positions true
+ show_entity_action_positions true
 
 # show_player_entity_parts true
 # show_entity_forward_vectors true
@@ -35,6 +35,7 @@ profiler_yscale 250
 
 
 
-# camera_rotation_offset    -45  0 45
-# camera_translation_offset   .25  .3  0
-# camera_scale_multiplier     4
+# camera_rotation_offset      45  0 -45
+# camera_translation_offset   .25  .3
+# camera_scale_multiplier     2
+

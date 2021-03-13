@@ -10,7 +10,7 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *outpu
     }
 
     Assert(output_container->type == ENTITY_ITEM &&
-           item_types[output_container->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER);
+           item_types[output_container->item_e.item.type].container_type == LIQUID_CONTAINER);
     Item *output_container_item = &output_container->item_e.item;
 
     lock_item_entity(output_container, e->id);
@@ -52,7 +52,7 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity *outpu
         
         auto *item = &input_entity->item_e.item;
         if(recipe->inputs[i].is_liquid) {
-            Assert(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER);
+            Assert(item_types[item->type].container_type == LIQUID_CONTAINER);
             
             input_entity->item_e.lc_t0 = t0;
             input_entity->item_e.lc_t1 = t1;
@@ -171,7 +171,7 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
 
     // OUTPUT LIQUID CONTAINER //
     Assert(supported_output->type == ENTITY_ITEM);
-    if(!(item_types[supported_output->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER)) return;
+    if(item_types[supported_output->item_e.item.type].container_type != LIQUID_CONTAINER) return;
     Item *output_container_item = &supported_output->item_e.item;
 
     if(!can_be_used_as_recipe_output_container(supported_output, room->t)) return;
@@ -206,7 +206,7 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
                 if(!can_be_used_as_recipe_input(supported, room->t)) continue;
 
                 if(input.is_liquid) {
-                    if(!(item_types[supported->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER)) continue;
+                    if(item_types[supported->item_e.item.type].container_type != LIQUID_CONTAINER) continue;
                     auto *lc = &supported->item_e.item.liquid_container;
                     if(lc->liquid.type != input.liquid.type) continue;
                     if(lc->amount < input.liquid.amount) continue;
@@ -280,7 +280,7 @@ void update_blender(Entity *e, Room *room)
             auto *input_entity = find_entity(blender->recipe_inputs[i], room);
             Assert(input_entity); // Because we should have locked it.
 
-            if(item_types[input_entity->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER) {
+            if(item_types[input_entity->item_e.item.type].container_type == LIQUID_CONTAINER) {
                 unlock_item_entity(input_entity, e->id, room);
             } else {
                 schedule_for_destruction(input_entity, room, e->id);

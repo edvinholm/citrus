@@ -1680,38 +1680,31 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
     s32       hovered_tile_ix    = -1;
-    Entity_ID hovered_entity     = NO_ENTITY;
-    bool      surface_is_hovered = false;
     
     if(e == hovered_element)
     {
         Assert(point_inside_rect(mouse->p, view->a));
 
         double world_t = world_time_for_room(room, t);
+
+        Entity *hovered_entity = NULL;
         
-        v3      entity_hit_p;
-        bool    entity_hit_was_on_surface;
-        Surface entity_hit_surface;
-        Entity *entity_hit = raycast_against_entities(view->mouse_ray, room, world_t, assets, &entity_hit_p, &entity_hit_was_on_surface, &entity_hit_surface);
-        if (entity_hit) {
+        raycast_against_entities_and_surfaces(view->mouse_ray, room, world_t, assets,
+                                              &hovered_entity,        &view->hovered_entity_hit_p,
+                                              &view->hovered_surface, &view->hovered_surface_hit_p);
 
-            hovered_entity = entity_hit->id;
-            view->hovered_entity_hit_p   = entity_hit_p;
-            
-            surface_is_hovered = entity_hit_was_on_surface;
-            view->hovered_surface    = entity_hit_surface;
-            view->surface_hit_p      = entity_hit_p;
+        view->hovered_entity = (hovered_entity) ? hovered_entity->id : NO_ENTITY;
 
-            if (view->click_state & PRESSED_NOW) {
-                view->pressed_entity = hovered_entity;
-            }
+        if (view->click_state & PRESSED_NOW) {
+            view->pressed_entity = view->hovered_entity;
+        }
 
-            if (view->click_state & CLICKED_ENABLED) {
-                if (view->pressed_entity == hovered_entity) {
-                    view->clicked_entity = view->pressed_entity;
-                }
+        if (view->click_state & CLICKED_ENABLED) {
+            if (view->pressed_entity == view->hovered_entity) {
+                view->clicked_entity = view->pressed_entity;
             }
         }
+        
         
         v3 ground_hit;
         if(raycast_against_floor(view->mouse_ray, &ground_hit)) {
@@ -1735,8 +1728,6 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     }
 
     view->hovered_tile_ix    = hovered_tile_ix;
-    view->hovered_entity     = hovered_entity;
-    view->surface_is_hovered = surface_is_hovered;
 
     if(!(view->click_state & PRESSED))
         view->pressed_tile_ix = -1;

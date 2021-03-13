@@ -28,16 +28,25 @@ enum Item_Type_ID
     ITEM_BLENDER_CONTAINER,
     
     ITEM_FRUIT,
+    ITEM_BOX,
+    ITEM_FILTER_PRESS,
 
     ITEM_NONE_OR_NUM
 };
 
 enum Item_Type_Flag_: u8 {
-    ITEM_IS_LQ_CONTAINER = 0x01
 };
 
 typedef u8 Item_Type_Flags;
 static_assert(sizeof(Item_Type_Flags) == sizeof(Item_Type_Flag_));
+
+enum Container_Type: u8
+{
+    LIQUID_CONTAINER,
+    NUGGET_CONTAINER,
+
+    CONTAINER_TYPE_NONE_OR_NUM
+};
 
 struct Item_Type
 {
@@ -46,6 +55,8 @@ struct Item_Type
 
     String name;
 
+    Container_Type container_type;
+    
     Item_Type_Flags flags;
 };
 
@@ -87,19 +98,22 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), 0 },
-    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   0 },
-    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), 0 },
-    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), 0 },
-    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"), 0 },
-    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), ITEM_IS_LQ_CONTAINER },
-    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"), 0 },
-    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"), ITEM_IS_LQ_CONTAINER },
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), CONTAINER_TYPE_NONE_OR_NUM },
+    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   CONTAINER_TYPE_NONE_OR_NUM },
+    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), CONTAINER_TYPE_NONE_OR_NUM },
+    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), CONTAINER_TYPE_NONE_OR_NUM },
+    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      CONTAINER_TYPE_NONE_OR_NUM },
+    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), LIQUID_CONTAINER },
+    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  CONTAINER_TYPE_NONE_OR_NUM },
+    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"),       LIQUID_CONTAINER },
     
-    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"), 0 },
-    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), ITEM_IS_LQ_CONTAINER },
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"),           CONTAINER_TYPE_NONE_OR_NUM },
+    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), LIQUID_CONTAINER },
     
-    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), 0 }
+    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), CONTAINER_TYPE_NONE_OR_NUM },
+
+    { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), NUGGET_CONTAINER },
+    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), CONTAINER_TYPE_NONE_OR_NUM }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -183,6 +197,20 @@ bool equal(Liquid_Container *a, Liquid_Container *b) {
     return true;
 }
 
+enum Nugget_Type
+{
+    NUGGET_YEAST
+};
+
+typedef u32 Nugget_Amount;
+
+struct Nugget_Container
+{
+    Nugget_Type   type;
+    Nugget_Amount amount;
+};
+
+
 struct Item {
     Item_ID id;
     Item_Type_ID type;
@@ -193,8 +221,11 @@ struct Item {
             float grow_progress;
         } plant;
     };
-    
-    Liquid_Container liquid_container; // If item_types[.type].flags & ITEM_IS_LQ_CONTAINER
+
+    union {
+        Liquid_Container liquid_container; // If item_types[.type].container_type == LIQUID_CONTAINER
+        Nugget_Container nugget_container; // If item_types[.type].container_type == NUGGET_CONTAINER
+    };
 };
 
 bool equal(Item *a, Item *b)
@@ -389,30 +420,3 @@ struct S__Room
 void clear(S__Room *room) {
     
 }
-
-enum Surface_Flag_
-{
-    SURF_EXCLUSIVE = 0x01,
-    SURF_CENTERING = 0x02 // Items are centered on this surface.
-};
-
-typedef u8 Surface_Flags;
-
-enum Surface_Type: u8
-{
-    SURF_TYPE_DEFAULT = 0,
-    SURF_TYPE_MACHINE_INPUT,
-    SURF_TYPE_MACHINE_OUTPUT
-};
-
-struct Surface
-{
-    v3 p;
-    v2 s;
-
-    s32 max_height; // For entities supported by it. Zero means no limit.
-    
-    Surface_Flags flags;
-    Surface_Type  type;
-};
-

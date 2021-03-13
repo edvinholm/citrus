@@ -1052,7 +1052,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(water_container);
                     Assert(water_container->type == ENTITY_ITEM);
                     
-                    Assert(item_types[water_container->item_e.item.type].flags & ITEM_IS_LQ_CONTAINER);
+                    Assert(item_types[water_container->item_e.item.type].container_type == LIQUID_CONTAINER);
                     auto *lc = &water_container->item_e.item.liquid_container;
 
                     auto *water_level = &lc->amount;

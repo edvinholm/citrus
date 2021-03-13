@@ -72,6 +72,7 @@
 #include "recipe.h"
 
 #include "game_shared.h"
+#include "world_shared.h"
 #include "user.h"
 #include "market.h"
 

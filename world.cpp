@@ -90,19 +90,26 @@ Mesh_ID mesh_for_entity(Entity *e)
     if(e->type != ENTITY_ITEM) return MESH_NONE_OR_NUM;
 
     switch(e->item_e.item.type) {
-        case ITEM_CHAIR:   return MESH_CHAIR;
-        case ITEM_BLENDER: return MESH_BLENDER;
-        case ITEM_TABLE:   return MESH_TABLE;
+        case ITEM_CHAIR:        return MESH_CHAIR;
+        case ITEM_BLENDER:      return MESH_BLENDER;
+        case ITEM_TABLE:        return MESH_TABLE;
+        case ITEM_BARREL:       return MESH_BARREL;
+        case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
 
         default: return MESH_NONE_OR_NUM;
     }
 }
         
 
-Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Catalog *assets, v3 *_hit_p = NULL, bool *_did_hit_surface = NULL, Surface *_hit_surface = NULL)
+void raycast_against_entities_and_surfaces(Ray ray, Room *room, double world_t, Asset_Catalog *assets,
+                                           Entity **_hit_entity, v3 *_entity_hit_p = NULL,
+                                           Optional<Surface> *_hit_surface = NULL, v3 *_surface_hit_p = NULL)
 {
-    Entity *closest_hit   = NULL;
-    float   closest_ray_t = FLT_MAX;
+    Entity *closest_entity   = NULL;
+    float   closest_entity_ray_t = FLT_MAX;
+    
+    Optional<Surface> closest_surface = {0};
+    float   closest_surface_ray_t = FLT_MAX;
 
     for(int i = 0; i < room->entities.n; i++)
     {
@@ -112,35 +119,46 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Cata
         Quat q;
         get_entity_transform(e, world_t, room, &p, &q);
     
-        AABB bbox = entity_aabb(e, p, q);
+        auto hitbox = entity_hitbox(e, p, q);
         
-        v3 intersection;
-        float ray_t;
-        if(ray_intersects_aabb(ray, bbox, &intersection, &ray_t)) {
-            if(ray_t < closest_ray_t) {
-
-                bool e_hit = false;
+        v3 bbox_intersection;
+        float bbox_ray_t;
+        if(ray_intersects_aabb(ray, hitbox.base, &bbox_intersection, &bbox_ray_t))
+        {
+            // ENTITY //
+            if(bbox_ray_t < closest_entity_ray_t) {
+                bool did_hit = false;
                 
-                bool e_did_hit_surface = false;
-                Surface e_hit_surface = {0};
+                v3 intersection = bbox_intersection;
+                float ray_t = bbox_ray_t;
        
                 Mesh_ID mesh = mesh_for_entity(e);
                 if(mesh != MESH_NONE_OR_NUM) {
                     m4x4 m = rotation_matrix(q) * translation_matrix(p);
                     m4x4 inverse = inverse_of(m);
-                
+                        
                     Ray mesh_space_ray;
                     mesh_space_ray.p0  = vecmatmul(ray.p0,  inverse);
                     mesh_space_ray.dir = vecmatmul(ray.dir, inverse, 0);
-
+                        
                     v3 mesh_space_intersection;
                     if(ray_intersects_mesh(mesh_space_ray, &assets->meshes[mesh], &mesh_space_intersection, &ray_t)) {
-                        e_hit = true;
+                        did_hit = true;
                         intersection = vecmatmul(mesh_space_intersection, m);
-                    }
+                    }                        
                 }
-                else e_hit = true;
+                else did_hit = true;
 
+                if(did_hit && ray_t < closest_entity_ray_t) {
+                    closest_entity       = e;
+                    closest_entity_ray_t = ray_t;
+                        
+                    if(_entity_hit_p) *_entity_hit_p = intersection;
+                }
+            }
+
+            // SURFACES //
+            if(bbox_ray_t < closest_surface_ray_t) {
                 auto surfaces = item_entity_surfaces(e, world_t, room);
                 for(int i = 0; i < surfaces.n; i++) {
                     auto &surf = surfaces[i];
@@ -154,38 +172,25 @@ Entity *raycast_against_entities(Ray ray, Room *room, double world_t, Asset_Cata
                     v3 quad_c = quad_a;
                     quad_c.y  = quad_d.y;
 
-                    v3 quad_intersection;
-                    float quad_ray_t;
-                    if(!ray_intersects_quad(ray, quad_a, quad_b, quad_c, quad_d, &quad_intersection, &quad_ray_t)) continue;
-                    if(e_hit && ray_t < quad_ray_t) continue;
+                    v3 intersection;
+                    float ray_t;
+                    if(!ray_intersects_quad(ray, quad_a, quad_b, quad_c, quad_d, &intersection, &ray_t)) continue;
 
-                    e_hit = true;
-                    intersection = quad_intersection;
-                    ray_t = quad_ray_t;
-                    
-                    e_did_hit_surface = true;
-                    e_hit_surface = surf;
-                }
+                    if(!closest_surface.present ||
+                       ray_t < closest_surface_ray_t)
+                    {
+                        closest_surface = surf;
+                        closest_surface_ray_t = ray_t;
 
-                if(e_hit) {
-                    closest_hit = e;
-                    closest_ray_t = ray_t;
-                    
-                    if(_hit_p) *_hit_p = intersection;
-                    if(_did_hit_surface) {
-                        *_did_hit_surface = e_did_hit_surface;
-                        if(_hit_surface) {
-                            *_hit_surface = e_hit_surface;
-                        }
+                        if(_surface_hit_p) *_surface_hit_p = intersection;
                     }
                 }
-                
-                
-            }
+            }                
         }
     }
 
-    return closest_hit;
+    *_hit_entity  = closest_entity;
+    *_hit_surface = closest_surface;
 }
 
 bool raycast_against_floor(Ray ray, v3 *_hit)

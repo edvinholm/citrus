@@ -871,7 +871,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     }
 
 
-    if(item_types[item->type].flags & ITEM_IS_LQ_CONTAINER) {
+    if(item_types[item->type].container_type == LIQUID_CONTAINER) {
         { _TOP_CUT_(40);
             ui_liquid_container(P(ctx), &item->liquid_container, liquid_container_capacity(item));
         }
@@ -1367,13 +1367,16 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         
         // position
         room->placement_tp = tp_from_index(wv->hovered_tile_ix);
-    
-        if(wv->surface_is_hovered) {
-            if(wv->hovered_surface.flags & SURF_CENTERING) {
-                room->placement_tp   = wv->hovered_surface.p + V3(wv->hovered_surface.s) * .5;
+
+        bool ignore_surfaces = alt_is_down;
+        
+        Surface hovered_surface;
+        if(!ignore_surfaces && get(wv->hovered_surface, &hovered_surface)) {
+            if(hovered_surface.flags & SURF_CENTERING) {
+                room->placement_tp   = hovered_surface.p + V3(hovered_surface.s) * .5;
             } else {
-                room->placement_tp   = tp_from_p(wv->surface_hit_p);
-                room->placement_tp.z = wv->surface_hit_p.z;
+                room->placement_tp   = tp_from_p(wv->hovered_surface_hit_p);
+                room->placement_tp.z = wv->hovered_surface_hit_p.z;
             }
         }
 

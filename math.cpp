@@ -469,6 +469,24 @@ v3 barycentric(v3 p, v3 a, v3 b, v3 c)
 }
 
 
+void ensure_positive_aabb_size(AABB *a)
+{
+    if(a->s.x < 0) {
+        a->p.x += a->s.x;
+        a->s.x *= -1;
+    }
+    
+    if(a->s.y < 0) {
+        a->p.y += a->s.y;
+        a->s.y *= -1;
+    }
+    
+    if(a->s.z < 0) {
+        a->p.z += a->s.z;
+        a->s.z *= -1;
+    }
+}
+
 
 // NOTE: a, b, c, d must be in the same plane, obviously.
 bool ray_intersects_quad(Ray ray, v3 a, v3 b, v3 c, v3 d, v3 *_intersection, float *_ray_t)
@@ -620,6 +638,50 @@ bool aabb_intersects_aabb(AABB a, AABB b)
     return true;
 }
 
+bool get_aabb_aabb_intersection(AABB a, AABB b, AABB *_intersection)
+{
+    v3 a_p1 = a.p + a.s;
+    v3 b_p1 = b.p + b.s;
+
+    v3 r_p1 = compmin(a_p1, b_p1);
+    
+    AABB r;
+    r.p = compmax(a.p, b.p);
+
+    v3 delta = r_p1 - r.p;
+    
+    if(delta.x > 0 && delta.y > 0 && delta.z > 0) {
+        r.s = delta;
+        *_intersection = r;
+        return true;
+    }
+
+    return false;
+}
+
+// NOTE: Tests if a contains b.
+bool aabb_contains_aabb(AABB a, AABB b)
+{
+    // @Speed: Do we want to represent AABBs as centerpoint, "radiuses" instead, so we don't need to calculate that here?
+    
+    auto a_r = compround(10 *a.s * 0.5f) * 0.1f;
+    auto a_c = a.p + a_r;
+    
+    auto b_r = b.s * 0.5f;
+    auto b_c = b.p + b_r;
+
+    
+    float i = fabs(b_c.x - a_c.x) + b_r.x;
+    float j = fabs(b_c.y - a_c.y) + b_r.y;
+    float k = fabs(b_c.z - a_c.z) + b_r.z;
+    
+    if(i > a_r.x && !floats_equal(i, a_r.x)) return false;
+    if(j > a_r.y && !floats_equal(j, a_r.y)) return false;
+    if(k > a_r.z && !floats_equal(k, a_r.z)) return false;
+
+    return true;
+}
+
 bool aabb_contains_point(AABB bbox, v3 p)
 {
     v3 bbox_p1 = bbox.p + bbox.s;
@@ -627,3 +689,4 @@ bool aabb_contains_point(AABB bbox, v3 p)
             p.x < bbox_p1.x && p.y < bbox_p1.y && p.z < bbox_p1.z);
        
 }
+
