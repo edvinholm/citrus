@@ -11,16 +11,10 @@
   TO DO:
   ------
 
-  * NUGGET CONTAINERS!
-
-  * Filter Press input, output, recipe....
   
-  * Add Nugget_Container property to items...
-    etc
-  * Filter Press
-    
-
   * Look at whiteboard!
+  
+  * Make amount of yeast in water matter when Filter Pressing.
 
 
   * Apple Tree: .num_fruits ??

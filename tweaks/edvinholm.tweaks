@@ -35,7 +35,7 @@ profiler_yscale 250
 
 
 
-# camera_rotation_offset      45  0 -45
+# camera_rotation_offset      -22  0 45
 # camera_translation_offset   .25  .3
 # camera_scale_multiplier     2
 

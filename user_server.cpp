@@ -86,18 +86,26 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                 slot.flags |= INV_SLOT_FILLED;
                 slot.item   = create_item(type, user.id, server);
 
-                if((item_types[slot.item.type].container_type == LIQUID_CONTAINER) &&
+                if((item_types[slot.item.type].container_form == FORM_LIQUID) &&
                    slot.item.type != ITEM_BLENDER)
                 {
                     float capacity = liquid_container_capacity(&slot.item);
 
-                    float r = random_float();
-                    if(r < .25) {
-                        slot.item.liquid_container.amount = 0;
-                    } else if (r > .75) {
-                        slot.item.liquid_container.amount = capacity;
-                    } else {
-                        slot.item.liquid_container.amount = floorf(random_float() * capacity);
+                    if(random_float() > .5f)
+                        slot.item.liquid_container.liquid.type = (Liquid_Type)random_int(0, LQ_NONE_OR_NUM);
+                    else
+                        slot.item.liquid_container.liquid.type = LQ_WATER;
+                    
+                    if(slot.item.liquid_container.liquid.type != LQ_NONE_OR_NUM)
+                    {
+                        float r = random_float();
+                        if(r < .25) {
+                            slot.item.liquid_container.amount = 0;
+                        } else if (r > .75) {
+                            slot.item.liquid_container.amount = capacity;
+                        } else {
+                            slot.item.liquid_container.amount = floorf((0.5f + 0.5f * random_float()) * capacity);
+                        }
                     }
                 }
             }

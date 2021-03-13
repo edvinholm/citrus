@@ -1,5 +1,5 @@
 
-struct Recipe_Component
+struct Recipe_Input
 {
     bool is_liquid;
     union {
@@ -14,31 +14,42 @@ struct Recipe_Component
     };
 };
 
+struct Recipe_Output
+{
+    Item_Form form;
+    union {
+        Liquid_Container liquid;
+        Nugget_Container nugget;
+    };
+};
+
 struct Recipe
 {
-    Recipe_Component inputs[MAX_RECIPE_INPUTS];
+    Recipe_Input inputs[MAX_RECIPE_INPUTS];
     u8 num_inputs;
 
-    Liquid_Container output;
+    Recipe_Output outputs[MAX_RECIPE_OUTPUTS];
+    u8 num_outputs;
 };
-static_assert(MAX_RECIPE_INPUTS <= U8_MAX); // Because Recipe.num_inputs is a u8
+static_assert(MAX_RECIPE_INPUTS  <= U8_MAX); // Because Recipe.num_inputs is a u8
+static_assert(MAX_RECIPE_OUTPUTS <= U8_MAX); // Because Recipe.num_outputs is a u8
 
 
-Recipe recipes[3];
+Recipe recipes[4];
 static_assert(ARRLEN(recipes) <= S32_MAX); // Because Recipe_ID is s32
 
-Recipe_Component liquid_recipe_component(Liquid_Type type, Liquid_Amount amount)
+Recipe_Input liquid_recipe_input(Liquid_Type type, Liquid_Amount amount)
 {
-    Recipe_Component component = {0};
+    Recipe_Input component = {0};
     component.is_liquid = true;
     component.liquid.type = type;
     component.liquid.amount = amount;
     return component;
 }
 
-Recipe_Component item_recipe_component(Item_Type_ID type)
+Recipe_Input item_recipe_input(Item_Type_ID type)
 {
-    Recipe_Component component = {0};
+    Recipe_Input component = {0};
     component.item.type = type;
     return component;
 }
@@ -70,32 +81,65 @@ void init_recipes()
     Assert(ix < ARRLEN(recipes));
     { // [PLANT, PLANT, PLANT] -> WATER
         auto &r = recipes[ix++];
-        r.inputs[r.num_inputs++] = item_recipe_component(ITEM_PLANT);
-        r.inputs[r.num_inputs++] = item_recipe_component(ITEM_PLANT);
-        r.inputs[r.num_inputs++] = item_recipe_component(ITEM_PLANT);
+        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
+        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
+        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
         Assert(r.num_inputs < ARRLEN(r.inputs));
-        r.output.liquid = water();
-        r.output.amount = 15;
+
+        r.outputs[0].form = FORM_LIQUID;
+        r.outputs[0].liquid.liquid = water();
+        r.outputs[0].liquid.amount = 15;
+        r.num_outputs = 1;
+        Assert(r.num_outputs < ARRLEN(r.outputs));
     }
 
     Assert(ix < ARRLEN(recipes));
     { // [WATER] -> WATER
         auto &r = recipes[ix++];
-        r.inputs[r.num_inputs++] = liquid_recipe_component(LQ_WATER, 10);
+        r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_WATER, 10);
         Assert(r.num_inputs < ARRLEN(r.inputs));
-        r.output.liquid = water();
-        r.output.amount = 10;
+        
+        r.outputs[0].form = FORM_LIQUID;
+        r.outputs[0].liquid.liquid = water();
+        r.outputs[0].liquid.amount = 10;
+        r.num_outputs = 1;
+        Assert(r.num_outputs < ARRLEN(r.outputs));
     }
     
     Assert(ix < ARRLEN(recipes));
     { // [WATER, FRUIT] -> YEAST_WATER
         auto &r = recipes[ix++];
-        r.inputs[r.num_inputs++] = liquid_recipe_component(LQ_WATER, 9);
-        r.inputs[r.num_inputs++] = item_recipe_component(ITEM_FRUIT);
+        r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_WATER, 9);
+        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_FRUIT);
         // @Norelease: Add sugar.
         Assert(r.num_inputs < ARRLEN(r.inputs));
-        r.output.liquid = yeast_water(10, 190);
-        r.output.amount = 10;
+        
+        r.outputs[0].form = FORM_LIQUID;
+        r.outputs[0].liquid.liquid = yeast_water(10, 190);
+        r.outputs[0].liquid.amount = 10;
+        r.num_outputs = 1;
+        Assert(r.num_outputs < ARRLEN(r.outputs));
+    }
+
+
+    
+    Assert(ix < ARRLEN(recipes));
+    { // [YEAST_WATER] -> YEAST
+        auto &r = recipes[ix++];
+        r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_YEAST_WATER, 10);
+        Assert(r.num_inputs < ARRLEN(r.inputs));
+
+        static_assert(ARRLEN(r.inputs) >= 2);
+        
+        r.outputs[0].form = FORM_NUGGET;
+        r.outputs[0].nugget.type   = NUGGET_YEAST;
+        r.outputs[0].nugget.amount = 10; // @Norelease: This should depend on the amount of yeast in the water.
+
+        r.outputs[1].form = FORM_LIQUID;
+        r.outputs[1].liquid.liquid = water();
+        r.outputs[1].liquid.amount = 10; // @Norelease: This should ALSO(!) depend on the amount of yeast in the water.
+        
+        r.num_outputs = 2;
     }
     
 }

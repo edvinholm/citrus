@@ -40,12 +40,12 @@ enum Item_Type_Flag_: u8 {
 typedef u8 Item_Type_Flags;
 static_assert(sizeof(Item_Type_Flags) == sizeof(Item_Type_Flag_));
 
-enum Container_Type: u8
+enum Item_Form: u8
 {
-    LIQUID_CONTAINER,
-    NUGGET_CONTAINER,
+    FORM_LIQUID,
+    FORM_NUGGET,
 
-    CONTAINER_TYPE_NONE_OR_NUM
+    FORM_NONE_OR_NUM
 };
 
 struct Item_Type
@@ -55,7 +55,7 @@ struct Item_Type
 
     String name;
 
-    Container_Type container_type;
+    Item_Form container_form;
     
     Item_Type_Flags flags;
 };
@@ -98,22 +98,22 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), CONTAINER_TYPE_NONE_OR_NUM },
-    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   CONTAINER_TYPE_NONE_OR_NUM },
-    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), CONTAINER_TYPE_NONE_OR_NUM },
-    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), CONTAINER_TYPE_NONE_OR_NUM },
-    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      CONTAINER_TYPE_NONE_OR_NUM },
-    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), LIQUID_CONTAINER },
-    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  CONTAINER_TYPE_NONE_OR_NUM },
-    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"),       LIQUID_CONTAINER },
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), FORM_NONE_OR_NUM },
+    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   FORM_NONE_OR_NUM },
+    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), FORM_NONE_OR_NUM },
+    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), FORM_NONE_OR_NUM },
+    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      FORM_NONE_OR_NUM },
+    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), FORM_LIQUID },
+    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  FORM_NONE_OR_NUM },
+    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"),       FORM_LIQUID },
     
-    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"),           CONTAINER_TYPE_NONE_OR_NUM },
-    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), LIQUID_CONTAINER },
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"),           FORM_NONE_OR_NUM },
+    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), FORM_LIQUID },
     
-    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), CONTAINER_TYPE_NONE_OR_NUM },
+    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), FORM_NONE_OR_NUM },
 
-    { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), NUGGET_CONTAINER },
-    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), CONTAINER_TYPE_NONE_OR_NUM }
+    { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), FORM_NUGGET },
+    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), FORM_NONE_OR_NUM }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -193,14 +193,28 @@ struct Liquid_Container
 };
 bool equal(Liquid_Container *a, Liquid_Container *b) {
     if(!equal(&a->liquid, &b->liquid)) return false;
-    if(!floats_equal(a->amount, b->amount)) return false;
+    if(a->amount != b->amount) return false;
     return true;
 }
 
-enum Nugget_Type
+enum Nugget_Type: u8
 {
-    NUGGET_YEAST
+    NUGGET_YEAST,
+
+    NUGGET_NONE_OR_NUM
 };
+
+String nugget_names[] = {
+    STRING("YEAST")
+};
+static_assert(ARRLEN(nugget_names) == NUGGET_NONE_OR_NUM);
+
+#if !(SERVER)
+v4 nugget_colors[] = {
+    { 1.00, 0.95, 0.62, 1.0f }
+};
+static_assert(ARRLEN(nugget_colors) == NUGGET_NONE_OR_NUM);
+#endif
 
 typedef u32 Nugget_Amount;
 
@@ -209,6 +223,12 @@ struct Nugget_Container
     Nugget_Type   type;
     Nugget_Amount amount;
 };
+
+bool equal(Nugget_Container *a, Nugget_Container *b) {
+    if(a->type != b->type) return false;
+    if(a->amount != b->amount) return false;
+    return true;
+}
 
 
 struct Item {
@@ -223,8 +243,8 @@ struct Item {
     };
 
     union {
-        Liquid_Container liquid_container; // If item_types[.type].container_type == LIQUID_CONTAINER
-        Nugget_Container nugget_container; // If item_types[.type].container_type == NUGGET_CONTAINER
+        Liquid_Container liquid_container; // If item_types[.type].container_form == FORM_LIQUID
+        Nugget_Container nugget_container; // If item_types[.type].container_form == FORM_NUGGET
     };
 };
 
@@ -292,6 +312,17 @@ struct Player_Action
 };
 
 
+struct Machine
+{
+    World_Time t_on_recipe_begin; // NOTE: We are currently "doing" a recipe if t_on_recipe_begin + recipe_duration > t.
+    World_Time recipe_duration;
+                    
+    //NOTE: These are only valid if t_on_recipe_begin + recipe_duration > t
+    Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_inputs;
+    Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_outputs;
+    //--
+};
+
 struct S__Entity
 {
     Entity_ID id;
@@ -322,24 +353,34 @@ struct S__Entity
                 } machine;
 
                 struct {
-                    World_Time t_on_recipe_begin; // NOTE: We are currently "doing" a recipe if t_on_recipe_begin + recipe_duration > t.
-                    World_Time recipe_duration;
-                    
-                    //NOTE: These are only valid if t_on_recipe_begin + recipe_duration > t
-                    Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_inputs;
-                    Entity_ID recipe_output_container;
-                    //--
-                    
+                    Machine machine;
                 } blender;
+
+                struct {
+                    Machine machine;
+                } filter_press;
 
                 Chess_Board chess_board;
             };
 
-            // NOTE: Only valid if item's type's flags & ITEM_IS_LQ_CONTAINER.
-            World_Time lc_t0;
-            World_Time lc_t1;
-            Liquid_Container lc0;
-            Liquid_Container lc1;
+            struct {
+                
+                World_Time t0;
+                World_Time t1;
+
+                union {
+                    struct {
+                        Liquid_Container c0;
+                        Liquid_Container c1;
+                    } liquid;
+
+                    struct {
+                        Nugget_Container c0;
+                        Nugget_Container c1;
+                    } nugget;
+                };
+                
+            } container;
             
         } item_e;
 

@@ -120,6 +120,7 @@ enum UI_Element_Type
     
     UI_INVENTORY_SLOT,
     UI_LIQUID_CONTAINER,
+    UI_NUGGET_CONTAINER,
     UI_CHAT,
     
     UI_CHESS_BOARD,
@@ -221,10 +222,21 @@ struct UI_Liquid_Container
     Rect a;
 
     Liquid_Container lc;
-    Liquid_Amount capacity;
+    Liquid_Amount    capacity;
 
     v4 text_color; // NOTE: If we never use a custom text color, and always use the theme's color, we could just store the theme (pointer/id) here.
 };
+
+struct UI_Nugget_Container
+{
+    Rect a;
+
+    Nugget_Container nc;
+    Nugget_Amount    capacity;
+
+    v4 text_color; // NOTE: If we never use a custom text color, and always use the theme's color, we could just store the theme (pointer/id) here.
+};
+
 
 struct UI_Inventory_Slot
 {
@@ -364,6 +376,7 @@ struct UI_Element
         UI_Graph graph;
 
         UI_Liquid_Container liquid_container;
+        UI_Nugget_Container nugget_container;
         UI_Inventory_Slot inventory_slot;
         UI_Chat chat;
 

@@ -114,6 +114,16 @@ void ui_set(UI_Element *e, Liquid_Container *dest, Liquid_Container *new_value)
 }
 
 
+inline
+void ui_set(UI_Element *e, Nugget_Container *dest, Nugget_Container *new_value)
+{
+    if(equal(dest, new_value)) return;
+
+    *dest = *new_value;
+    e->needs_redraw = true;
+}
+
+
 
 inline
 void assert_state_valid(UI_ID_Manager *manager)
@@ -640,6 +650,24 @@ void ui_liquid_container(UI_Context ctx, Liquid_Container *lc, Liquid_Amount cap
     ui_set(e, &ui_lc->capacity, capacity);
 
     ui_set(e, &ui_lc->text_color, theme->text);
+}
+
+void ui_nugget_container(UI_Context ctx, Nugget_Container *nc, Nugget_Amount capacity)
+{
+    U(ctx);
+
+    auto id = ctx.get_id();
+    UI_Element *e = find_or_create_ui_element(id, UI_NUGGET_CONTAINER, ctx.manager);
+
+    Rect a = area(ctx.layout);
+    auto *theme = current_color_theme(ctx.manager);
+
+    auto *ui_nc = &e->nugget_container;
+    ui_set(e, &ui_nc->a,  a);
+    ui_set(e, &ui_nc->nc, nc);
+    ui_set(e, &ui_nc->capacity, capacity);
+
+    ui_set(e, &ui_nc->text_color, theme->text);
 }
 
 UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enabled = true, bool selected = false)
@@ -1905,6 +1933,7 @@ Rect ui_element_rect(UI_Element *e)
         case UI_TEXT:   return e->text.a;
 
         case UI_LIQUID_CONTAINER: return e->liquid_container.a;
+		case UI_NUGGET_CONTAINER: return e->nugget_container.a;
         case UI_INVENTORY_SLOT: return e->inventory_slot.a;
 
         case WORLD_VIEW: return e->world_view.a;

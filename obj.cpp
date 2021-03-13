@@ -190,6 +190,12 @@ bool read_obj_face(u8 **at, u8 *end, OBJ_Reader<A> *reader)
                 if(*at >= end || **at != '/') return false;
                 (*at)++;
             }
+            
+            skip_whitespace(at, end, false);
+            if(**at == '/') {
+                vertex.comp[i] = 0;
+                continue; // The index is unspecified.
+            }
         
             if(!read_obj_index(at, end, &vertex.comp[i])) return false;
         }
@@ -249,14 +255,6 @@ bool read_obj(String contents, OBJ_Reader<Reader_Allocator> *reader, Allocator *
         }
     }
 
-    for(int i = 0; i < min(32, reader->num_faces); i++) {
-        Debug_Print("f ");
-        for(int v = 0; v < 3; v++) {
-            Debug_Print("%d/%d/%d  ", reader->faces[i].vertices[v].x, reader->faces[i].vertices[v].y, reader->faces[i].vertices[v].z);
-        }
-        Debug_Print("\n");
-    }
-
 
     ensure_mesh_capacity(reader->num_faces * 3, &reader->mesh_capacity, &reader->mesh, allocators[Reader_Allocator]);
     reader->mesh.n = reader->num_faces * 3;
@@ -269,11 +267,9 @@ bool read_obj(String contents, OBJ_Reader<Reader_Allocator> *reader, Allocator *
             auto *vertex = &face->vertices[j];
             auto ix = i * 3 + j;
 
-            // @Incomplete: We don't detect if positon/uv/normal is unspecified, like  f 1//3
-            
-            reader->mesh.positions[ix] = reader->positions[vertex->x-1];
-            reader->mesh.uvs[ix]       = reader->uvs      [vertex->y-1];
-            reader->mesh.normals[ix]   = reader->normals  [vertex->z-1];
+            reader->mesh.positions[ix] = (vertex->x > 0) ? reader->positions[vertex->x-1] : V3_ZERO;
+            reader->mesh.uvs[ix]       = (vertex->y > 0) ? reader->uvs      [vertex->y-1] : V2_ZERO;
+            reader->mesh.normals[ix]   = (vertex->z > 0) ? reader->normals  [vertex->z-1] : V3_ZERO;
         }
     }
     

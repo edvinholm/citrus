@@ -14,6 +14,20 @@ enum Surface_Type: u8
     SURF_TYPE_MACHINE_OUTPUT
 };
 
+enum Filter_Press_Surface_ID {
+    FILTER_PRESS_SURF_INPUT,
+    
+    FILTER_PRESS_SURF_NUGGET_OUTPUT,
+    FILTER_PRESS_SURF_LIQUID_OUTPUT
+};
+
+// IMPORTANT: Keep this small, because we copy it into every Support!
+struct Surface_Owner_Specifics {
+    union {
+        Filter_Press_Surface_ID filter_press_surface_id;
+    };
+};
+
 struct Surface
 {
     v3 p;
@@ -23,6 +37,8 @@ struct Surface
     
     Surface_Flags flags;
     Surface_Type  type;
+
+    Surface_Owner_Specifics owner_specifics;
 };
 
 struct Entity_Hitbox

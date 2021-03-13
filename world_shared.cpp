@@ -61,8 +61,47 @@ bool hitbox_intersects_hitbox(Entity_Hitbox a, Entity_Hitbox b)
         }
     }
     
-    return intersection_volume > (0.01f * 0.01f * 0.01f);
+    return intersection_volume > 0.5f;
 }
+
+
+Nugget_Type nugget_type_of_container(Nugget_Container *nc)
+{
+    return (nc->amount == 0) ? NUGGET_NONE_OR_NUM : nc->type;
+}
+
+
+bool can_blend(Nugget_Container *a, Nugget_Container *b)
+{
+    auto a_type = nugget_type_of_container(a);
+    auto b_type = nugget_type_of_container(b);
+
+    if(a_type == NUGGET_NONE_OR_NUM || b_type == NUGGET_NONE_OR_NUM) return true;
+    if(a_type == b_type) return true;
+
+    return false;
+}
+
+Nugget_Container blend(Nugget_Container *a, Nugget_Container *b)
+{
+    Assert(can_blend(a, b));
+
+    auto a_type = nugget_type_of_container(a);
+    auto b_type = nugget_type_of_container(b);
+
+    if(a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
+
+    Nugget_Container result;
+    Zero(result);
+    
+    result.amount = a->amount + b->amount;
+
+    if(a_type == NUGGET_NONE_OR_NUM) result.type = b->type;
+    else                             result.type = a->type;
+    
+    return result;
+}
+
 
 
 Liquid_Type liquid_type_of_container(Liquid_Container *lc)
@@ -131,6 +170,58 @@ Liquid_Container blend(Liquid_Container *a, Liquid_Container *b)
     return result;
 }
 
+// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
+// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
+// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
+Nugget_Container nugget_container_lerp(Nugget_Container *a, Nugget_Container *b, float t)
+{
+    Assert(a->type == b->type ||
+           nugget_type_of_container(a) == NUGGET_NONE_OR_NUM ||
+           nugget_type_of_container(b) == NUGGET_NONE_OR_NUM);
+
+    auto a_type = nugget_type_of_container(a);
+    auto b_type = nugget_type_of_container(b);
+
+    if (a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
+    
+    Nugget_Container result = *a;
+    
+    result.type = a_type;
+    if(result.type == NUGGET_NONE_OR_NUM) result.type = b_type;
+    
+    float amt = lerp((float)result.amount, (float)b->amount, t);
+    result.amount = floorf(amt);
+    
+    return result;
+}
+
+Nugget_Container nugget_container_lerp(Nugget_Container *nc0, Nugget_Container *nc1, double t0, double t1, double t)
+{
+    double dur = t1 - t0;
+    double t_norm = (dur <= 0) ? 1 : clamp((t - t0) / dur);
+    return nugget_container_lerp(nc0, nc1, t_norm);
+}
+
+Nugget_Amount nugget_container_capacity(Item *item)
+{
+    Item_Type *item_type = item_types + item->type;
+    
+#if DEBUG
+    Assert(item_type->container_form == FORM_NUGGET);
+#endif
+
+    auto vol = item_type->volume;
+
+    switch(item->type) {
+        default: return vol.x * vol.y * vol.z * 10;
+    }
+
+    Assert(false);
+    return 0;
+}
+
+
+
 // NOTE *_continuous_amount is 10 times smaller than Liquid_Container.amount.
 Liquid_Container liquid_container_lerp(Liquid_Container *a, Liquid_Container *b, float t, float *_continuous_amount = NULL /* @Jai: #bake */)
 {
@@ -173,7 +264,7 @@ Liquid_Amount liquid_container_capacity(Item *item)
     Item_Type *item_type = item_types + item->type;
     
 #if DEBUG
-    Assert(item_type->container_type == LIQUID_CONTAINER);
+    Assert(item_type->container_form == FORM_LIQUID);
 #endif
 
     auto vol = item_type->volume;
@@ -232,13 +323,28 @@ void update_entity_item(S__Entity *e, double world_t)
     }
 
     auto *type = &item_types[item->type];
-    if(type->container_type == LIQUID_CONTAINER) {
-        item->liquid_container = liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t);
 
-        // Continue simulating properties after lerp t1
-        double extra_dt = world_t - e->item_e.lc_t1;
-        if(extra_dt > 0) {
-            simulate_liquid_properties(&item->liquid_container, extra_dt);
+    if(type->container_form != FORM_NONE_OR_NUM) {
+        auto *c = &e->item_e.container;
+        switch(type->container_form) { // @Jai: #complete
+            case FORM_LIQUID: {
+                auto *l = &c->liquid;
+                item->liquid_container = liquid_container_lerp(&l->c0, &l->c1, c->t0, c->t1, world_t);
+                
+                // Continue simulating properties after lerp t1
+                double extra_dt = world_t - c->t1;
+                if(extra_dt > 0) {
+                    simulate_liquid_properties(&item->liquid_container, extra_dt);
+                }
+                
+            } break;
+
+            case FORM_NUGGET: {
+                auto *n = &c->nugget;
+                item->nugget_container = nugget_container_lerp(&n->c0, &n->c1, c->t0, c->t1, world_t); 
+            } break;
+
+            default: Assert(false); break;
         }
     }
 }
@@ -311,13 +417,29 @@ S__Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
         } break;
     }
 
-    if(item_types[item->type].container_type == LIQUID_CONTAINER) {
-        e.item_e.lc0 = item->liquid_container;
-        e.item_e.lc1 = item->liquid_container;
-        e.item_e.lc_t0 = world_t;
-        e.item_e.lc_t1 = world_t;
-    }
+    auto container_form = item_types[item->type].container_form;
+    if(container_form != FORM_NONE_OR_NUM) {
+        auto *c = &e.item_e.container;
+        c->t0 = world_t;
+        c->t1 = world_t;
 
+        switch(container_form) { // @Jai: #complete
+            case FORM_LIQUID: {
+                auto *l = &c->liquid;
+                l->c0 = item->liquid_container;
+                l->c1 = item->liquid_container;
+            } break;
+                
+            case FORM_NUGGET: {
+                auto *n = &c->nugget;
+                n->c0 = item->nugget_container;
+                n->c1 = item->nugget_container;
+            } break;
+
+            default: Assert(false); break;
+        }
+    }
+    
     return e;
 }
 
@@ -711,12 +833,14 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
                 Surface surf = {0};
                 surf.type   = SURF_TYPE_MACHINE_INPUT;
                 surf.flags |= SURF_EXCLUSIVE;
-                surf.p = p + (forward * vol.x * 0.5f) + (left * vol.y * 0.5f) + (up * 2);
-                surf.s = (-forward * 2  -left * 2).xy;
+                surf.p = p - (forward * vol.x * 0.5f) + (left * vol.y * 0.5f) + (up * 2);
+                surf.s = (forward * 2 -left * 2).xy;
+                
+                surf.owner_specifics.filter_press_surface_id = FILTER_PRESS_SURF_INPUT;
                 array_add(surfaces, surf);
             }
             
-            // output
+            // nugget output
             {
                 Surface surf = {0};
                 surf.type   = SURF_TYPE_MACHINE_OUTPUT;
@@ -724,8 +848,24 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
                 surf.p = p - (forward * vol.x * 0.5f) - (left * (vol.y * 0.5f - 1));
                 surf.s = (forward * 3 + left * 3).xy;
                 surf.max_height = 2;
+
+                surf.owner_specifics.filter_press_surface_id = FILTER_PRESS_SURF_NUGGET_OUTPUT;
                 array_add(surfaces, surf);
             }
+            
+            // liquid output
+            {
+                Surface surf = {0};
+                surf.type   = SURF_TYPE_MACHINE_OUTPUT;
+                surf.flags |= SURF_EXCLUSIVE;
+                surf.p = p + (forward * vol.x * 0.5f) + (left * vol.y * 0.5f);
+                surf.s = (-forward * 2 - left * 2).xy;
+                surf.max_height = 2;
+                
+                surf.owner_specifics.filter_press_surface_id = FILTER_PRESS_SURF_LIQUID_OUTPUT;
+                array_add(surfaces, surf);
+            }
+            
             
         } break;
     }
@@ -814,12 +954,14 @@ struct Support
 {
     Entity *supported;
     bool is_first_support_of_supported; // When we find supports, we set this to true if it is the first time we see this supported entity.
-    
-    int          surface_index; // Out of supporter's surfaces.
-    Surface_Type surface_type;
+
+    int                     surface_index; // Out of supporter's surfaces.
+    Surface_Owner_Specifics surface_owner_specifics;
+    Surface_Type            surface_type;
     
     Entity *supporter;
 };
+
 
 // @Speed
 // NOTE: This does not work like find_supported_entities().
@@ -862,10 +1004,11 @@ void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *su
                supported_entity != entity_to_ignore)
             {
                 Support support = {0};
-                support.supported     = supported_entity;
-                support.surface_index = surface_index;
-                support.surface_type  = surf->type;
-                support.supporter     = surface_owner;
+                support.supported               = supported_entity;
+                support.surface_index           = surface_index;
+                support.surface_owner_specifics = surf->owner_specifics;
+                support.surface_type            = surf->type;
+                support.supporter               = surface_owner;
 
                 bool support_of_supported_already_added = false;
                 bool already_added = false;
@@ -1362,7 +1505,7 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
             auto *plant_e = &e->item_e.plant;
 
-            if(item_types[player_state->held_item.type].container_type != LIQUID_CONTAINER) return false;
+            if(item_types[player_state->held_item.type].container_form != FORM_LIQUID) return false;
             auto *lc = &player_state->held_item.liquid_container;
 
             if(lc->liquid.type != LQ_WATER) return false;
@@ -1483,7 +1626,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
 
             if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
 
-            Quat put_down_q = Q_IDENTITY; // @Norelease: Rotation for PUT_DOWN
+            Quat put_down_q = put_down->q;
             v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item, put_down_q);
             
             S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, put_down_q, world_t);
@@ -1710,7 +1853,7 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_WATER: {
-                        Assert(item_types[state->held_item.type].container_type == LIQUID_CONTAINER); // player_action_predicted_possible() should have checked this.
+                        Assert(item_types[state->held_item.type].container_form == FORM_LIQUID); // player_action_predicted_possible() should have checked this.
                         auto *lc = &state->held_item.liquid_container;
 
                         Assert(lc->liquid.type == LQ_WATER); // player_action_predicted_possible() should have checked this.

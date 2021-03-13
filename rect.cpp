@@ -377,6 +377,13 @@ Rect bottom_right_of(Rect a, float w, float h)
 
 
 inline
+v2 bottom_right_of(Rect a)
+{
+    return { a.x + a.w, a.y };
+}
+
+
+inline
 Rect bottom_left_of(Rect a, float w, float h)
 {
     a.x = a.x;
@@ -450,6 +457,12 @@ Rect cut_left_off(Rect *a, float w) // TODO @Cleanup @BadNames everywhere dude
     Rect result = left_of(*a, w);
     *a = removed_left(*a, w);
     return result;
+}
+
+Rect cut_left_square_off(Rect *a)
+{
+    float w = a->h;
+    return cut_left_off(a, w);
 }
 
 

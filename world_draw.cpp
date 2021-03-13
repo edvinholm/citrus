@@ -229,12 +229,15 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         base_color = item_type->color;
 
-        if(item_type->container_type == LIQUID_CONTAINER)
+        if(item_type->container_form == FORM_LIQUID)
         {
+            auto *c = &e->item_e.container;
+            auto *l = &c->liquid;
+            
             float capacity = liquid_container_capacity(item) / 10.0f;
 
             float liquid_amount;
-            liquid_container_lerp(&e->item_e.lc0, &e->item_e.lc1, e->item_e.lc_t0, e->item_e.lc_t1, world_t, &liquid_amount);
+            liquid_container_lerp(&l->c0, &l->c1, c->t0, c->t1, world_t, &liquid_amount);
             
             fill = (capacity > 0) ? liquid_amount / capacity : 0;
             fill_color = liquid_color(item->liquid_container.liquid);
@@ -322,7 +325,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
 
     if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
-        if(e->id == room->selected_entity) {
+        if(e->id == room->selected_entity && e->type == ENTITY_ITEM) {
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             

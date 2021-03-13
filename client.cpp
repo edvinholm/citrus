@@ -871,29 +871,38 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     }
 
 
-    if(item_types[item->type].container_type == LIQUID_CONTAINER) {
-        { _TOP_CUT_(40);
-            ui_liquid_container(P(ctx), &item->liquid_container, liquid_container_capacity(item));
-        }
+    switch(item_types[item->type].container_form) {
+        case FORM_LIQUID: {
+            { _TOP_CUT_(40);
+                ui_liquid_container(P(ctx), &item->liquid_container, liquid_container_capacity(item));
+            }
 
-        // @Cleanup: move to ui_liquid_container.
-        if(liquid_type_of_container(&item->liquid_container) == LQ_YEAST_WATER)
-        {
-            auto *yw = &item->liquid_container.liquid.yeast_water;
+            // @Cleanup: move to ui_liquid_container.
+            if(liquid_type_of_container(&item->liquid_container) == LQ_YEAST_WATER)
+            {
+                auto *yw = &item->liquid_container.liquid.yeast_water;
             
-            { _TOP_CUT_(20);
-                int pre  = yw->yeast / 10; // @Cleanup
-                int post = yw->yeast % 10;
-                String id_str = concat_tmp("Yeast: ", pre, ".", post, "%");
-                ui_text(P(ctx), id_str);
+                { _TOP_CUT_(20);
+                    int pre  = yw->yeast / 10; // @Cleanup
+                    int post = yw->yeast % 10;
+                    String id_str = concat_tmp("Yeast: ", pre, ".", post, "%");
+                    ui_text(P(ctx), id_str);
+                }
+                { _TOP_CUT_(20);
+                    int pre  = yw->nutrition / 10; // @Cleanup
+                    int post = yw->nutrition % 10;
+                    String id_str = concat_tmp("Nutrition: ", pre, ".", post, "%");
+                    ui_text(P(ctx), id_str);
+                }
             }
-            { _TOP_CUT_(20);
-                int pre  = yw->nutrition / 10; // @Cleanup
-                int post = yw->nutrition % 10;
-                String id_str = concat_tmp("Nutrition: ", pre, ".", post, "%");
-                ui_text(P(ctx), id_str);
+            
+        } break;
+
+        case FORM_NUGGET: {
+            { _TOP_CUT_(60);
+                ui_nugget_container(P(ctx), &item->nugget_container, nugget_container_capacity(item));
             }
-        }
+        } break;
     }
 
     
@@ -1408,6 +1417,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                 v3 tp = room->placement_tp;
                 Quat q = room->placement_q;
 
+                // @Norelease: @Robustness For PUT_DOWN we should do entity_action_predicted_possible() instead of can_place_item_entity_at_tp().
                 if (can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room))
                 {
                     if(room->placing_held_item) {

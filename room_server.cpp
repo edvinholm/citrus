@@ -1052,7 +1052,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(water_container);
                     Assert(water_container->type == ENTITY_ITEM);
                     
-                    Assert(item_types[water_container->item_e.item.type].container_type == LIQUID_CONTAINER);
+                    Assert(item_types[water_container->item_e.item.type].container_form == FORM_LIQUID);
                     auto *lc = &water_container->item_e.item.liquid_container;
 
                     auto *water_level = &lc->amount;
@@ -1143,7 +1143,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             Assert(held->type == ENTITY_ITEM);
 
             Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
-            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item, q);
+            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item, q);            
             Assert(item_entity_can_be_at(held, p, q, room->t, room));
             
             //--
@@ -1309,11 +1309,15 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
 
 void update_entity(Entity *e, Room *room, Room_Server *server)
 {
-    
     switch(e->type) {
         case ENTITY_ITEM: {
 
             auto *item = &e->item_e.item;
+
+            Machine *machine;
+            if(is_machine(e, &machine)) {
+                update_machine(machine, room, e);
+            }
 
             switch(item->type) {
                 case ITEM_MACHINE: {
@@ -1336,10 +1340,6 @@ void update_entity(Entity *e, Room *room, Room_Server *server)
                         room->did_change = true;
                     }
                 } break;
-
-                case ITEM_BLENDER: {
-                    update_blender(e, room);
-                } break;
             }
             
         } break;
@@ -1361,8 +1361,20 @@ void update_entity(Entity *e, Room *room, Room_Server *server)
 
 double max_update_step_delta_time_for_entity(Entity *e, Room *room)
 {
+    double result = DBL_MAX;
+    
     switch(e->type) {
         case ENTITY_ITEM: {
+
+            Machine *machine;
+            if(is_machine(e, &machine)) {
+                if(machine->t_on_recipe_begin + machine->recipe_duration < room->t) break;
+
+                Assert(machine->recipe_duration > 0);
+                    
+                auto time_since_start = (room->t - machine->t_on_recipe_begin);
+                result = min(machine->recipe_duration - time_since_start, result);
+            }
 
             switch(e->item_e.item.type) {
                 case ITEM_MACHINE: {
@@ -1372,17 +1384,7 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
                     double time_since_start = room->t - machine->start_t;
                     if(time_since_start >= 3.0) break;
 
-                    return 3.0 - time_since_start;
-                } break;
-
-                case ITEM_BLENDER: {
-                    auto *blender = &e->item_e.blender;
-                    if(blender->t_on_recipe_begin + blender->recipe_duration < room->t) break;
-
-                    Assert(blender->recipe_duration > 0);
-                    
-                    auto time_since_start = (room->t - blender->t_on_recipe_begin);
-                    return blender->recipe_duration - time_since_start;
+                    result = min(3.0 - time_since_start, result);
                 } break;
             }
 
@@ -1400,14 +1402,14 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
                 break;
             }
 
-            return action->next_update_t - room->t;
+            result = min(action->next_update_t - room->t, result);
             
         } break;
 
         default: break;
     }
 
-    return DBL_MAX;
+    return result;
 }
 
 double max_update_step_delta_time_for_room(Room *room)

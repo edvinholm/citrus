@@ -560,6 +560,54 @@ bool write_Item_ID(Item_ID id, Network_Node *node)
     return true;
 }
 
+
+// @Norelease @Security: Check that it is a valid type.
+bool read_Nugget_Type(Nugget_Type *_type, Network_Node *node)
+{
+    static_assert(sizeof(*_type) == sizeof(u8));
+    Read(u8, type, node);
+    *_type = (Nugget_Type)type;
+    return true;
+}
+
+bool write_Nugget_Type(Nugget_Type type, Network_Node *node)
+{
+    static_assert(sizeof(type) == sizeof(u8));
+    Write(u8, type, node);
+    return true;
+}
+
+
+bool read_Nugget_Amount(Nugget_Amount *_amt, Network_Node *node)
+{
+    static_assert(sizeof(*_amt) == sizeof(u32));
+    Read_To_Ptr(u32, _amt, node);
+    return true;
+}
+
+bool write_Nugget_Amount(Nugget_Amount amt, Network_Node *node)
+{
+    static_assert(sizeof(amt) == sizeof(u32));
+    Write(u32, amt, node);
+    return true;
+}
+
+
+bool read_Nugget_Container(Nugget_Container *_nc, Network_Node *node)
+{
+    Read_To_Ptr(Nugget_Type,   &_nc->type, node);
+    Read_To_Ptr(Nugget_Amount, &_nc->amount, node);
+    return true;
+}
+
+bool write_Nugget_Container(Nugget_Container nc, Network_Node *node)
+{
+    Write(Nugget_Type,   nc.type,   node);
+    Write(Nugget_Amount, nc.amount, node);
+    return true;
+}
+
+
 // @Norelease @Security: Check that it is a valid type.
 bool read_Liquid_Type(Liquid_Type *_type, Network_Node *node)
 {
@@ -662,8 +710,18 @@ bool read_Item(Item *_item, Network_Node *node)
     }
 
     // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    if(item_types[_item->type].container_type == LIQUID_CONTAINER) {
-        Read_To_Ptr(Liquid_Container, &_item->liquid_container, node);
+    switch(item_types[_item->type].container_form) {
+        case FORM_LIQUID:
+            Read_To_Ptr(Liquid_Container, &_item->liquid_container, node);
+            break;
+            
+        case FORM_NUGGET:
+            Read_To_Ptr(Nugget_Container, &_item->nugget_container, node);
+            break;
+
+        case FORM_NONE_OR_NUM: break;
+
+        default: Fail_If_True(false); break;
     }
     
     return true;
@@ -683,8 +741,18 @@ bool write_Item(Item item, Network_Node *node)
     }
 
     // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    if(item_types[item.type].container_type == LIQUID_CONTAINER) {
-        Write(Liquid_Container, item.liquid_container, node);
+    switch(item_types[item.type].container_form) {
+        case FORM_LIQUID:
+            Write(Liquid_Container, item.liquid_container, node);
+            break;
+            
+        case FORM_NUGGET:
+            Write(Nugget_Container, item.nugget_container, node);
+            break;
+
+        case FORM_NONE_OR_NUM: break;
+
+        default: Fail_If_True(false); break;
     }
     
     return true;
@@ -1194,6 +1262,49 @@ bool write_Chess_Board(Chess_Board *board, Network_Node *node)
 }
 
 
+bool read_Machine(Machine *_machine, Network_Node *node)
+{
+    Read_To_Ptr(World_Time, &_machine->t_on_recipe_begin, node);
+    Read_To_Ptr(World_Time, &_machine->recipe_duration, node);
+
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Read_To_Ptr(s64, &_machine->recipe_inputs.n, node);
+    Fail_If_True(_machine->recipe_inputs.n > ARRLEN(_machine->recipe_inputs.e));
+    for(s64 i = 0; i < _machine->recipe_inputs.n; i++) {
+        Read_To_Ptr(Entity_ID, &_machine->recipe_inputs.e[i], node);
+    }
+
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Read_To_Ptr(s64, &_machine->recipe_outputs.n, node);
+    Fail_If_True(_machine->recipe_outputs.n > ARRLEN(_machine->recipe_outputs.e));
+    for(s64 i = 0; i < _machine->recipe_outputs.n; i++) {
+        Read_To_Ptr(Entity_ID, &_machine->recipe_outputs.e[i], node);
+    }
+    
+    return true;
+}
+
+bool write_Machine(Machine *machine, Network_Node *node)
+{
+    Write(World_Time, machine->t_on_recipe_begin, node);
+    Write(World_Time, machine->recipe_duration, node);
+    
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Write(s64, machine->recipe_inputs.n, node);
+    for(s64 i = 0; i < machine->recipe_inputs.n; i++) {
+        Write(Entity_ID, machine->recipe_inputs.e[i], node);
+    }
+    
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Write(s64, machine->recipe_outputs.n, node);
+    for(s64 i = 0; i < machine->recipe_outputs.n; i++) {
+        Write(Entity_ID, machine->recipe_outputs.e[i], node);
+    }
+    
+    
+    return true;
+}
+
 bool read_Entity(S__Entity *_entity, Network_Node *node)
 {
     Zero(*_entity);
@@ -1235,25 +1346,36 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
 
                 case ITEM_BLENDER: {
                     auto *blender = &x->blender;
-                    Read_To_Ptr(World_Time, &blender->t_on_recipe_begin, node);
-                    Read_To_Ptr(World_Time, &blender->recipe_duration, node);
+                    Read_To_Ptr(Machine, &blender->machine, node);
+                } break;
 
-                    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-                    Read_To_Ptr(s64, &blender->recipe_inputs.n, node);
-                    Fail_If_True(blender->recipe_inputs.n > ARRLEN(blender->recipe_inputs.e));
-                    for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
-                        Read_To_Ptr(Entity_ID, &blender->recipe_inputs.e[i], node);
-                    }
-                    Read_To_Ptr(Entity_ID, &blender->recipe_output_container, node);
+                case ITEM_FILTER_PRESS: {
+                    auto *press = &x->filter_press;
+                    Read_To_Ptr(Machine, &press->machine, node);
                 } break;
             }
 
             auto *type = &item_types[x->item.type];
-            if(type->container_type == LIQUID_CONTAINER) {
-                Read_To_Ptr(World_Time, &x->lc_t0, node);
-                Read_To_Ptr(World_Time, &x->lc_t1, node);
-                Read_To_Ptr(Liquid_Container, &x->lc0, node);
-                Read_To_Ptr(Liquid_Container, &x->lc1, node);
+            if(type->container_form != FORM_NONE_OR_NUM) {
+                auto *container = &x->container;
+                Read_To_Ptr(World_Time, &container->t0, node);
+                Read_To_Ptr(World_Time, &container->t1, node);
+
+                switch(type->container_form) {
+                    case FORM_LIQUID: {
+                        auto *l = &container->liquid;
+                        Read_To_Ptr(Liquid_Container, &l->c0, node);
+                        Read_To_Ptr(Liquid_Container, &l->c1, node);
+                    } break;
+
+                    case FORM_NUGGET: {
+                        auto *n = &container->nugget;
+                        Read_To_Ptr(Nugget_Container, &n->c0, node);
+                        Read_To_Ptr(Nugget_Container, &n->c1, node);
+                    } break;
+
+                    default: Fail_If_True(false); break;
+                }
             }
             
         } break;
@@ -1329,26 +1451,38 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                     
                 case ITEM_BLENDER: {
                     auto *blender = &x->blender;
-                    Write(World_Time, blender->t_on_recipe_begin, node);
-                    Write(World_Time, blender->recipe_duration, node);
+                    Write(Machine, &blender->machine, node);
+                } break;
 
-                    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-                    Write(s64, blender->recipe_inputs.n, node);
-                    for(s64 i = 0; i < blender->recipe_inputs.n; i++) {
-                        Write(Entity_ID, blender->recipe_inputs.e[i], node);
-                    }
-                    Write(Entity_ID, blender->recipe_output_container, node);
-
+                case ITEM_FILTER_PRESS: {
+                    auto *press = &x->filter_press;
+                    Write(Machine, &press->machine, node);
                 } break;
             }
 
             
             auto *type = &item_types[x->item.type];
-            if(type->container_type == LIQUID_CONTAINER) {
-                Write(World_Time, x->lc_t0, node);
-                Write(World_Time, x->lc_t1, node);
-                Write(Liquid_Container, x->lc0, node);
-                Write(Liquid_Container, x->lc1, node);
+            
+            if(type->container_form != FORM_NONE_OR_NUM) {
+                auto *container = &x->container;
+                Write(World_Time, container->t0, node);
+                Write(World_Time, container->t1, node);
+
+                switch(type->container_form) {
+                    case FORM_LIQUID: {
+                        auto *l = &container->liquid;
+                        Write(Liquid_Container, l->c0, node);
+                        Write(Liquid_Container, l->c1, node);
+                    } break;
+
+                    case FORM_NUGGET: {
+                        auto *n = &container->nugget;
+                        Write(Nugget_Container, n->c0, node);
+                        Write(Nugget_Container, n->c1, node);
+                    } break;
+
+                    default: Fail_If_True(false); break;
+                }
             }
             
         } break;

@@ -400,6 +400,51 @@ void draw_ui_liquid_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     }
 }
 
+void draw_ui_nugget_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    Assert(e->type == UI_NUGGET_CONTAINER);
+    auto &ui_nc = e->nugget_container;
+
+    _OPAQUE_UI_();
+
+    auto *nc = &ui_nc.nc;
+    auto nugget_type = nugget_type_of_container(nc);
+
+    Rect aa = ui_nc.a;
+    Rect bottom_a = cut_bottom_off(&aa, 10);
+    Rect icon_a   = cut_left_square_off(&aa);
+
+    Assert(nugget_type <= ARRLEN(nugget_colors));
+    v4 nugget_color = nugget_colors[nugget_type];
+
+    
+    // ICON //
+    {
+        draw_rect(icon_a, { 0.1, 0.1, 0.1, 1 }, gfx);
+        
+        Rect inner = shrunken(icon_a, 2);
+        draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
+
+        Rect nugget_a = shrunken(inner, 8);
+        draw_rect(nugget_a, nugget_color, gfx);
+
+        if(nugget_type != NUGGET_NONE_OR_NUM) {
+            String str = concat_tmp(nc->amount, "/", ui_nc.capacity);
+            v2 pp = bottom_right_of(inner);
+            draw_string(str, pp + V2_Y * 2, FS_12, FONT_BODY, C_BLACK, gfx, HA_RIGHT, VA_BOTTOM);
+            draw_string(str, pp,            FS_12, FONT_BODY, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
+        }
+    }
+
+    // BOTTOM //
+    {
+        String type_str = (nugget_type != NUGGET_NONE_OR_NUM) ? nugget_names[nugget_type] : STRING("EMPTY");
+        draw_string(type_str, center_left_of(bottom_a), FS_16, FONT_BODY, ui_nc.text_color, gfx, HA_LEFT, VA_CENTER);
+    }
+}
+
+
+
 void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == UI_INVENTORY_SLOT);
@@ -812,6 +857,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, dou
             bool can_be_placed = true;
             
             v4 shadow_color = { 0.12, 0.12, 0.12, 1 };
+            // @Norelease: @Robustness For PUT_DOWN we should do entity_action_predicted_possible() instead of can_place_item_entity_at_tp().
             if(!can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room)) {
                 shadow_color = { 0.4,   0.1,  0.1, 1 };
                 can_be_placed = false;
@@ -1037,6 +1083,7 @@ DWORD render_loop(void *loop_)
                         case GRAPH: draw_graph(e, ui, &gfx); break;
 
                         case UI_LIQUID_CONTAINER: draw_ui_liquid_container(e, ui, &gfx); break;
+                        case UI_NUGGET_CONTAINER: draw_ui_nugget_container(e, ui, &gfx); break;
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
                             
