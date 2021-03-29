@@ -909,7 +909,8 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
 
     
     switch(item->type) {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             auto *plant = &item->plant;
                     
             { _TOP_CUT_(20);   

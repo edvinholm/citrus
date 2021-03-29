@@ -190,10 +190,11 @@ void draw_aabb(AABB bbox, v4 color, Graphics *gfx)
     draw_line(d, h, normal, line_w, color, gfx);
 }
 
-void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool cannot_be_placed = false)
+void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, User *user = NULL, bool hovered = false, bool cannot_be_placed = false, bool do_debug_things = false, World_Render_Buffer *wrb = NULL)
 {
     auto *s_e = static_cast<S__Entity *>(e);
 
+    if(!wrb) wrb = &gfx->world_render_buffer;
 
     Mesh_ID mesh = MESH_NONE_OR_NUM;
     
@@ -201,22 +202,24 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     
     v3 center;
     Quat q;
-    get_entity_transform(s_e, world_t, room, &center, &q);
+    get_entity_transform(s_e, world_t, &center, &q, room);
 
     Entity_Hitbox hitbox = entity_hitbox(e, center, q);
 
-    // @Norelease @Speed!!!
+
     // Keep track of where lightboxes are instead, and look for them here.
     bool use_oven_lightbox = (e->type == ENTITY_ITEM && e->item_e.item.type == ITEM_STOVE);
     v3   oven_p = center; // only valid if use_oven_lightbox
     Quat oven_q = q;
-    if(!use_oven_lightbox) {
+    if(!use_oven_lightbox && room)
+    {
+        // @Norelease @Speed!!!
         for(int i = 0; i < room->entities.n; i++) {
             auto *other = &room->entities[i];
             if(other->type == ENTITY_ITEM && other->item_e.item.type == ITEM_STOVE) {
                 v3 other_p;
                 Quat other_q;
-                get_entity_transform(other, world_t, room, &other_p, &other_q);
+                get_entity_transform(other, world_t, &other_p, &other_q, room);
                 Entity_Hitbox stove_hitbox = entity_hitbox(other, world_t, room);
                 if(aabb_intersects_aabb(stove_hitbox.base, hitbox.base)) {
                     use_oven_lightbox = true;
@@ -247,7 +250,8 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         volume = V3(item_type->volume);
         
-        if(item->type == ITEM_PLANT)
+        if(item->type == ITEM_APPLE_TREE ||
+           item->type == ITEM_WHEAT)
         {
             auto *plant = &e->item_e.item.plant;
             volume.z *= min(1.0f, plant->grow_progress);
@@ -290,19 +294,22 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             base_color.rgb *= 0.8f;
         }
 
-        int num_put_down_volumes;
-        auto *put_down_volumes = find_player_put_down_volumes<ALLOC_TMP>(e, world_t, room, &num_put_down_volumes, current_user(client));
-        if(num_put_down_volumes > 0)
+        if(room && user)
         {
-            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            for(int i = 0; i < num_put_down_volumes; i++)
+            int num_put_down_volumes;
+            auto *put_down_volumes = find_player_put_down_volumes<ALLOC_TMP>(e, world_t, room, &num_put_down_volumes, user);
+            if(num_put_down_volumes > 0)
             {
-                AABB vol = put_down_volumes[i];
-                draw_quad(vol.p + V3_Z * 0.001f, { vol.s.x, 0, 0 }, {0, vol.s.y, 0 }, { 0.2, 0, 0.5, 1 }, gfx);
+                _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+                for(int i = 0; i < num_put_down_volumes; i++)
+                {
+                    AABB vol = put_down_volumes[i];
+                    draw_quad(vol.p + V3_Z * 0.001f, { vol.s.x, 0, 0 }, {0, vol.s.y, 0 }, { 0.2, 0, 0.5, 1 }, gfx);
+                }
             }
         }
         
-        if(tweak_bool(TWEAK_SHOW_PLAYER_PATHS))
+        if(do_debug_things && tweak_bool(TWEAK_SHOW_PLAYER_PATHS))
         {
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
             
@@ -334,9 +341,9 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
 
     if(mesh != MESH_NONE_OR_NUM &&
-       !tweak_bool(TWEAK_HIDE_ENTITY_MESHES))
+       (!do_debug_things || !tweak_bool(TWEAK_HIDE_ENTITY_MESHES)))
     {
-        Render_Object *mesh_obj = draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx, 0.0f, base_color);
+        Render_Object *mesh_obj = draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &wrb->opaque, gfx, 0.0f, base_color);
         if(use_oven_lightbox) { // NOTE: We don't do this on vertex objects, but we don't worry about that right now because everything will probably be meshes in the end anyway.
 
             v3 forward = rotate_vector(V3_X, oven_q);
@@ -352,7 +359,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
     
     // DEBUG AABB //
-    if(tweak_bool(TWEAK_SHOW_ENTITY_BOUNDING_BOXES)) {
+    if(do_debug_things && tweak_bool(TWEAK_SHOW_ENTITY_BOUNDING_BOXES)) {
         _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
         auto hitbox = entity_hitbox(e, center, q);
 
@@ -363,7 +370,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     // ////////// //
 
     // DEBUG ENTITY POSITION //
-    if(tweak_bool(TWEAK_SHOW_ENTITY_POSITIONS)) {
+    if(do_debug_things && tweak_bool(TWEAK_SHOW_ENTITY_POSITIONS)) {
         _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
         float s = .2;
         draw_cube_ps(center - V3_XY * s*.5, {s, s, 10}, C_SKY, gfx);
@@ -371,7 +378,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     // // //
 
     // DEBUG ACTION POSITIONS //
-    if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
+    if(do_debug_things && tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
         if(e->id == room->selected_entity && e->type == ENTITY_ITEM) {
 
             _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
@@ -392,13 +399,18 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         }
     }
     // // //
-            
+
+
+    push(gfx->vertex_buffer, &wrb->opaque.vertices);
+    defer(pop(gfx->vertex_buffer););
     
+    begin_vertex_render_object(&wrb->opaque, rotation_matrix(q) * translation_matrix(center));
+    defer(end_vertex_render_object(&wrb->opaque););
+
     
-    _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_matrix(q) * translation_matrix(center));
 
     // DEBUG FORWARD VECTOR //
-    if(tweak_bool(TWEAK_SHOW_ENTITY_FORWARD_VECTORS))
+    if(do_debug_things && tweak_bool(TWEAK_SHOW_ENTITY_FORWARD_VECTORS))
         draw_line(V3_ZERO + V3_Z * 1.0f, V3_ZERO + V3_Z * 1.0f + V3_X * 3.0f, V3_Z, 0.5f, C_CYAN, gfx);
     
     
@@ -447,7 +459,7 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
         draw_cube_ps(hair_p, hair_s, { 0.20, 0.09, 0.02, 1 }, gfx);
 
         // HANDS Z //
-        if(tweak_bool(TWEAK_SHOW_PLAYER_ENTITY_PARTS)) {
+        if(do_debug_things && tweak_bool(TWEAK_SHOW_PLAYER_ENTITY_PARTS)) {
             v3 pp = center;
             pp.x -= 1.4;
             pp.y -= 1.4;
@@ -492,7 +504,7 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
         for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
             bool hovered = (e->id == hovered_entity);
-            draw_entity(e, world_t, room, client, gfx, hovered);
+            draw_entity(e, world_t, gfx, room, current_user(client), hovered, false, true);
         }
     }
 

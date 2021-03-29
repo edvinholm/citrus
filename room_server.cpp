@@ -1026,18 +1026,42 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(as_user != NO_USER);
                     Assert(target->type == ENTITY_ITEM);
 
-                    Item fruit = create_item(ITEM_FRUIT, as_user, server);
-                    Entity fruit_entity = {0};
-                    *static_cast<S__Entity *>(&fruit_entity) = create_item_entity(&fruit, V3_ZERO, Q_IDENTITY, room->t);
+                    update_entity_item(target, room->t);
+
+                    // nocheckin: Make this a function we call from here and predict_..
+                    Item_Type_ID crop_type = ITEM_NONE_OR_NUM;
+                    switch(target->item_e.item.type) {
+                        case ITEM_APPLE_TREE: crop_type = ITEM_FRUIT;       break;
+                        case ITEM_WHEAT:      crop_type = ITEM_NONE_OR_NUM; break;
+                        default: Assert(false); break;
+                    }
+
+                    
+                    Entity crop_entity = {0};
+
+                    if(crop_type == ITEM_NONE_OR_NUM) {
+                        Item crop = create_item(target->item_e.item.type, as_user, server);
+                        auto id = crop.id;
+                        crop = target->item_e.item; // @Hack: Maybe shouldn't call create_item, but only create_id() or whatever we called it.
+                        crop.id = id;
+                        *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
+
+                        target->item_e.plant.grow_progress_on_plant = 0;
+                        target->item_e.plant.t_on_plant = room->t;
+                    }
+                    else {
+                        Item crop = create_item(ITEM_FRUIT, as_user, server);
+                        *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
+                    }
 
                     Assert(player);
                     
-                    Entity *fruit_added = add_entity(&fruit_entity, room);
-                    set_held(fruit_added, player, true);
+                    Entity *crop_added = add_entity(&crop_entity, room);
+                    set_held(crop_added, player, true);
                     
                     RS_Log("User %llu Harvested entity %llu (Item %llu:%llu), creating held entity %llu (Item %llu:%llu)\n", as_user,
                            target->id, target->item_e.item.id.origin, target->item_e.item.id.number,
-                           fruit_added->id, fruit_added->item_e.item.id.origin, fruit_added->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
+                           crop_added->id, crop_added->item_e.item.id.origin, crop_added->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
                     return true; 
                 } break;
             
@@ -1046,7 +1070,8 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(target->type == ENTITY_ITEM);
                     auto *item_e = &target->item_e;
 
-                    Assert(target->item_e.item.type == ITEM_PLANT);
+                    Assert(target->item_e.item.type == ITEM_APPLE_TREE ||
+                           target->item_e.item.type == ITEM_WHEAT);
                     auto *plant_e = &target->item_e.plant;
 
                     Assert(player);
@@ -1333,11 +1358,11 @@ void update_entity(Entity *e, Room *room, Room_Server *server)
                     double time_since_start = room->t - machine->start_t;
                     if(doubles_equal(time_since_start, 3.0 /* @Robustness: Define this somewhere */))
                     {
-                        Item plant = create_item(ITEM_PLANT, item->owner, server);
+                        Item plant = create_item(ITEM_WHEAT, item->owner, server);
 
                         v3 tp;
                         Quat q;
-                        get_entity_transform(e, room->t, room, &tp, &q);
+                        get_entity_transform(e, room->t, &tp, &q, room);
                         tp += rotate_vector(V3_X, q) * 2;
 
                         place_item_entity_at_tp_if_possible(&plant, tp, q, room, server);

@@ -79,21 +79,6 @@ void init_recipes()
     int ix = 0;
     
     Assert(ix < ARRLEN(recipes));
-    { // [PLANT, PLANT, PLANT] -> WATER
-        auto &r = recipes[ix++];
-        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
-        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
-        r.inputs[r.num_inputs++] = item_recipe_input(ITEM_PLANT);
-        Assert(r.num_inputs < ARRLEN(r.inputs));
-
-        r.outputs[0].form = FORM_LIQUID;
-        r.outputs[0].liquid.liquid = water();
-        r.outputs[0].liquid.amount = 15;
-        r.num_outputs = 1;
-        Assert(r.num_outputs < ARRLEN(r.outputs));
-    }
-
-    Assert(ix < ARRLEN(recipes));
     { // [WATER] -> WATER
         auto &r = recipes[ix++];
         r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_WATER, 10);

@@ -118,7 +118,7 @@ void raycast_against_entities_and_surfaces(Ray ray, Room *room, double world_t, 
 
         v3 p;
         Quat q;
-        get_entity_transform(e, world_t, room, &p, &q);
+        get_entity_transform(e, world_t, &p, &q, room);
     
         auto hitbox = entity_hitbox(e, p, q);
         
@@ -405,7 +405,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
 
     switch(item->type)
     {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             Entity_Action act1 = {0};
             act1.type = ENTITY_ACT_HARVEST;
 

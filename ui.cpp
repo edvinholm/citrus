@@ -703,7 +703,8 @@ UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enab
 
         item_type = item->type;
         switch(item->type) {
-            case ITEM_PLANT: {
+            case ITEM_APPLE_TREE:
+            case ITEM_WHEAT: {
                 fill = clamp(item->plant.grow_progress);
             } break;
         }

@@ -880,6 +880,8 @@ void draw_progress_bar(UI_Element *e, Graphics *gfx)
 // NOTE: selected_item can be null.
 void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
+    User *user = current_user(client);
+    
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
     {
@@ -899,7 +901,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat 
             }
             
             Entity preview_entity = create_preview_item_entity(item_to_place, placement_p, q, world_t);
-            draw_entity(&preview_entity, world_t, room, client, gfx, false, /*cannot_be_placed = */!can_be_placed);
+            draw_entity(&preview_entity, world_t, gfx, room, user, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
 
@@ -1220,6 +1222,7 @@ DWORD render_loop(void *loop_)
         // UPDATE PREVIEWS //
         // @Norelease: @SpeedGpu: Do this on startup.
         update_previews(&gfx);
+        // /////// /////// //
 
         gpu_disable_scissor();
         gpu_set_target_framebuffer(gfx.framebuffer);

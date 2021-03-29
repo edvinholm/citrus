@@ -18,7 +18,10 @@ enum Item_Type_ID
     ITEM_CHAIR,
     ITEM_BED,
     ITEM_TABLE,
-    ITEM_PLANT,
+    
+    ITEM_APPLE_TREE,
+    ITEM_WHEAT,
+    
     ITEM_MACHINE,
     ITEM_WATERING_CAN,
     ITEM_CHESS_BOARD,
@@ -31,6 +34,7 @@ enum Item_Type_ID
     ITEM_BOX,
     ITEM_FILTER_PRESS,
     ITEM_STOVE,
+    ITEM_GRINDER,
 
     ITEM_NONE_OR_NUM
 };
@@ -102,7 +106,10 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), FORM_NONE_OR_NUM },
     { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   FORM_NONE_OR_NUM },
     { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), FORM_NONE_OR_NUM },
-    { {1, 1, 3}, { 0.3,  0.8,  0.1, 1.0}, STRING("Plant"), FORM_NONE_OR_NUM },
+    
+    { {4, 4, 8}, { 0.3,   0.8,  0.1, 1.0}, STRING("Apple Tree"), FORM_NONE_OR_NUM },
+    { {1, 1, 3}, { 1.00, 0.71, 0.26, 1.0}, STRING("Wheat"),      FORM_NONE_OR_NUM },
+    
     { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      FORM_NONE_OR_NUM },
     { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), FORM_LIQUID },
     { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  FORM_NONE_OR_NUM },
@@ -115,7 +122,8 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
 
     { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), FORM_NUGGET },
     { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), FORM_NONE_OR_NUM },
-    { {2, 2, 2}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), FORM_NONE_OR_NUM }
+    { {2, 2, 2}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), FORM_NONE_OR_NUM },
+    { {2, 2, 3}, {0.15, 0.66, 0.24, 1.0}, STRING("Grinder"), FORM_NONE_OR_NUM }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -138,12 +146,16 @@ const Item_ID NO_ITEM = { 0, 0 };
 enum Liquid_Type: u8 {
     LQ_WATER,
     LQ_YEAST_WATER,
+    LQ_BREAD_DOUGH, // Not really a liquid...
+    LQ_FLOUR,       // Not really a liquid...
     LQ_NONE_OR_NUM
 };
 
 String liquid_names[] = {
     STRING("WATER"),
-    STRING("YEAST WATER")
+    STRING("YEAST WATER"),
+    STRING("BREAD DOUGH"),
+    STRING("FLOUR")
 };
 static_assert(ARRLEN(liquid_names) == LQ_NONE_OR_NUM);
 
@@ -158,6 +170,10 @@ struct Liquid
             Liquid_Fraction yeast;
             Liquid_Fraction nutrition;
         } yeast_water;
+
+        struct {
+            float bake_progress;
+        } bread_dough;
     };
 };
 bool equal(Liquid *a, Liquid *b) {
@@ -173,7 +189,9 @@ v4 liquid_color(Liquid lq) {
     
     v4 base_colors[] = {
         C_WATER,
-        { 1.00, 0.95, 0.62, 0.9f }
+        { 1.00, 0.95, 0.62, 0.9 },
+        { 0.95, 0.86, 0.69, 1.0 },
+        { 0.99, 0.97, 0.94, 1.0 }
     };
     static_assert(ARRLEN(base_colors) == LQ_NONE_OR_NUM);
 

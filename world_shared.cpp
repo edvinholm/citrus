@@ -312,7 +312,8 @@ void update_entity_item(S__Entity *e, double world_t)
 
     auto *item = &e->item_e.item;
     switch(item->type) {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             auto *plant = &item->plant;
             auto *state = &e->item_e.plant;
 
@@ -405,7 +406,8 @@ Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
     e.item_e.q = q;
 
     switch(item->type) {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             auto *plant_e = &e.item_e.plant;
             plant_e->t_on_plant = world_t;
             plant_e->grow_progress_on_plant = item->plant.grow_progress;
@@ -444,19 +446,23 @@ Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
 }
 
 template<typename ENTITY>
-void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_q)
+void get_entity_transform(ENTITY *e, double world_t, v3 *_p, Quat *_q, Room *room = NULL)
 {
     ENTITY *holder = NULL;
-    if(e->held_by != NO_ENTITY)
-    {
-        holder = find_entity(e->held_by, room);
+    if(room) {
+        if(e->held_by != NO_ENTITY)
+        {
+            holder = find_entity(e->held_by, room);
+        }
     }
 
     if(holder)
     {
+        Assert(room);
+        
         v3 holder_p;
         Quat holder_q;
-        get_entity_transform(holder, world_t, room, &holder_p, &holder_q);
+        get_entity_transform(holder, world_t, &holder_p, &holder_q, room);
         *_q = holder_q;
         *_p = holder_p + V3_Z * 6;
         return;
@@ -477,11 +483,13 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
 
                 auto *player_e = &e->player_e;
 
-                if(player_e->sitting_on != NO_ENTITY) {
-                    auto *sittee = find_entity(player_e->sitting_on, room);
-                    if(sittee) {
-                        get_entity_transform(sittee, world_t, room, _p, _q);
-                        return;
+                if(room) {
+                    if(player_e->sitting_on != NO_ENTITY) {
+                        auto *sittee = find_entity(player_e->sitting_on, room);
+                        if(sittee) {
+                            get_entity_transform(sittee, world_t, _p, _q, room);
+                            return;
+                        }
                     }
                 }
 
@@ -536,11 +544,11 @@ void get_entity_transform(ENTITY *e, double world_t, Room *room, v3 *_p, Quat *_
 }
 
 template<typename ENTITY>
-v3 entity_position(ENTITY *e, double world_t, Room *room)
+v3 entity_position(ENTITY *e, double world_t, Room *room = NULL)
 {
     v3 p;
     Quat q; // @Unused
-    get_entity_transform(e, world_t, room, &p, &q);
+    get_entity_transform(e, world_t, &p, &q, room);
     return p;
 }
 
@@ -770,7 +778,7 @@ Entity_Hitbox entity_hitbox(ENTITY *e, double world_t, Room *room)
 {
     v3 p;
     Quat q;
-    get_entity_transform(e, world_t, room, &p, &q);
+    get_entity_transform(e, world_t, &p, &q, room);
 
     return entity_hitbox(e, p, q);
 }
@@ -783,7 +791,7 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
     
     v3 p;
     Quat q;
-    get_entity_transform(e, world_t, room, &p, &q);
+    get_entity_transform(e, world_t, &p, &q, room);
     Item *item = &e->item_e.item;
 
     v3 forward = rotate_vector(V3_X, q);
@@ -1498,7 +1506,8 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             if(e->type != ENTITY_ITEM) return false;
 
             auto *item = &e->item_e.item;
-            if(item->type != ITEM_PLANT) return false;
+            if(item->type != ITEM_APPLE_TREE &&
+               item->type != ITEM_WHEAT) return false;
             
             if(item->plant.grow_progress < 0.75f) return false;
 
@@ -1533,7 +1542,8 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             if(e->type != ENTITY_ITEM) return false;
 
             auto *item = &e->item_e.item;
-            if(item->type != ITEM_PLANT) return false;
+            if(item->type != ITEM_APPLE_TREE &&
+               item->type != ITEM_WHEAT) return false;
 
             auto *plant_e = &e->item_e.plant;
 
@@ -1869,10 +1879,25 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_HARVEST: {
-                        Item fruit = {0};
-                        fruit.type = ITEM_FRUIT;
-                        fruit.owner = state->user_id;
-                        state->held_item = fruit;
+                        Item_Type_ID crop_type = ITEM_NONE_OR_NUM;
+                        switch(e->item_e.item.type) {
+                            case ITEM_APPLE_TREE: crop_type = ITEM_FRUIT;       break;
+                            case ITEM_WHEAT:      crop_type = ITEM_NONE_OR_NUM; break;
+                            default: Assert(false); break;
+                        }
+
+                        if(crop_type == ITEM_NONE_OR_NUM) {
+                            Item self_clone = {0};
+                            self_clone.type = e->item_e.item.type;
+                            self_clone.owner = state->user_id;
+                            state->held_item = self_clone;
+                        } else {
+                            Item crop = {0};
+                            crop.type = crop_type;
+                            crop.owner = state->user_id;
+                            state->held_item = crop;
+                        }
+                        
                     } break;
 
                     case ENTITY_ACT_PLACE_IN_INVENTORY: {
@@ -1892,6 +1917,7 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                         
                         // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
                         lc->amount -= 2; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+
 
                     } break;
 

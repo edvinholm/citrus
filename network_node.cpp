@@ -703,7 +703,8 @@ bool read_Item(Item *_item, Network_Node *node)
     Read_To_Ptr(User_ID,      &_item->owner, node);
 
     switch(_item->type) {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             auto *x = &_item->plant;
             Read_To_Ptr(float, &x->grow_progress, node);
         } break;
@@ -734,7 +735,8 @@ bool write_Item(Item item, Network_Node *node)
     Write(User_ID,      item.owner, node);
 
     switch(item.type) {
-        case ITEM_PLANT: {
+        case ITEM_APPLE_TREE:
+        case ITEM_WHEAT: {
             auto *x = &item.plant;
             Write(float, x->grow_progress, node);
         } break;
@@ -1327,7 +1329,8 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             Read_To_Ptr(Entity_ID, &x->locked_by, node);
             
             switch(x->item.type) {
-                case ITEM_PLANT: {
+                case ITEM_APPLE_TREE:
+                case ITEM_WHEAT: {
                     auto *plant = &x->plant;
                     Read_To_Ptr(World_Time, &plant->t_on_plant,             node);
                     Read_To_Ptr(float,      &plant->grow_progress_on_plant, node);
@@ -1432,7 +1435,8 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             Write(Entity_ID, x->locked_by, node);
             
             switch(x->item.type) {
-                case ITEM_PLANT: {
+                case ITEM_APPLE_TREE:
+                case ITEM_WHEAT: {
                     auto *plant = &x->plant;
                     Write(World_Time, plant->t_on_plant,             node);
                     Write(float,      plant->grow_progress_on_plant, node);

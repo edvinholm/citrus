@@ -18,25 +18,16 @@ void update_previews(Graphics *gfx)
     for(int i = 0; i < ITEM_NONE_OR_NUM; i++) {
         Item item = {0};
         item.type = (Item_Type_ID)i;
-        Entity e = create_item_entity(&item, V3_ZERO, Q_IDENTITY, 0);
-        Mesh_ID mesh = mesh_for_entity(&e);
-                
+        
         Item_Type *type = &item_types[item.type];
-         
+        v3 offs = {type->volume.x * 0.5f, type->volume.y * 0.5f, 0};
+        Entity e = create_item_entity(&item, V3_ZERO + offs, axis_rotation(V3_Z, TAU * .25f), 0);
+        
         m4x4 projection = world_projection_matrix(V2_ONE, type->volume.x, type->volume.y, type->volume.z);
         config_gpu_for_world(gfx, { 0, 0, 2048, 2048 }, projection);
 
-        m4x4 transform = rotation_matrix(axis_rotation(V3_Z, -TAU * .25f));
-        transform = matmul(transform, translation_matrix({type->volume.x * 0.5f, type->volume.y * 0.5f, 0})); // @Speed
+        draw_entity(&e, 0, gfx, NULL, NULL, false, false, false, &gfx->previews_render_buffer);
         
-        if(mesh == MESH_NONE_OR_NUM) {
-            _VERTEX_OBJECT_(VD_PREVIEWS_OPAQUE, &gfx->previews_render_buffer.opaque, transform, 0);
-            v3 vol = V3(type->volume);
-            draw_cube_ps(V3_ZERO - V3(vol.x, vol.y, 0) * .5f, vol, type->color, gfx);
-        } else {
-            draw_mesh(mesh, transform, &gfx->previews_render_buffer.opaque, gfx, 0, item_types[item.type].color);
-        }
-
         gpu_clear_depth_buffer();
         gpu_set_viewport((i % preview_cells_per_side) * preview_cell_size, (i / preview_cells_per_side) * preview_cell_size, preview_cell_size, preview_cell_size);
 
