@@ -42,6 +42,8 @@ using namespace Server_Market;
 //--
 
 #include "user_shared.cpp"
+
+#include "plant.cpp"
 #include "world_shared.cpp"
 #include "pathfinding_shared.cpp"
 

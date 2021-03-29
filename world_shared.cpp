@@ -306,21 +306,19 @@ void simulate_liquid_properties(Liquid_Container *lc, double dt)
     } 
 }
 
-void update_entity_item(S__Entity *e, double world_t)
+void update_entity_item(Entity *e, double world_t)
 {
     Assert(e->type == ENTITY_ITEM);
 
     auto *item = &e->item_e.item;
-    switch(item->type) {
-        case ITEM_APPLE_TREE:
-        case ITEM_WHEAT: {
-            auto *plant = &item->plant;
-            auto *state = &e->item_e.plant;
 
-            float grow_speed = 1.0f / 60.0f;
-            plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * grow_speed;
-            plant->grow_progress = clamp(plant->grow_progress);
-        } break;
+    if(is_plant(e)) {
+        auto *plant = &item->plant;
+        auto *state = &e->item_e.plant;
+
+        float grow_speed = 1.0f / 60.0f;
+        plant->grow_progress = state->grow_progress_on_plant + (world_t - state->t_on_plant) * grow_speed;
+        plant->grow_progress = clamp(plant->grow_progress);
     }
 
     auto *type = &item_types[item->type];
@@ -405,13 +403,14 @@ Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
     e.item_e.p = p;
     e.item_e.q = q;
 
+    if(is_plant(&e))
+    {
+        auto *plant_e = &e.item_e.plant;
+        plant_e->t_on_plant = world_t;
+        plant_e->grow_progress_on_plant = item->plant.grow_progress;
+    }
+    
     switch(item->type) {
-        case ITEM_APPLE_TREE:
-        case ITEM_WHEAT: {
-            auto *plant_e = &e.item_e.plant;
-            plant_e->t_on_plant = world_t;
-            plant_e->grow_progress_on_plant = item->plant.grow_progress;
-        } break;
 
         case ITEM_CHESS_BOARD: {
             auto *board = &e.item_e.chess_board;
@@ -1505,9 +1504,9 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
             if(e->type != ENTITY_ITEM) return false;
 
+            if(!is_plant(e)) return false;
+            
             auto *item = &e->item_e.item;
-            if(item->type != ITEM_APPLE_TREE &&
-               item->type != ITEM_WHEAT) return false;
             
             if(item->plant.grow_progress < 0.75f) return false;
 
@@ -1879,12 +1878,7 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_HARVEST: {
-                        Item_Type_ID crop_type = ITEM_NONE_OR_NUM;
-                        switch(e->item_e.item.type) {
-                            case ITEM_APPLE_TREE: crop_type = ITEM_FRUIT;       break;
-                            case ITEM_WHEAT:      crop_type = ITEM_NONE_OR_NUM; break;
-                            default: Assert(false); break;
-                        }
+                        Item_Type_ID crop_type = crop_type_for_plant(e);
 
                         if(crop_type == ITEM_NONE_OR_NUM) {
                             Item self_clone = {0};

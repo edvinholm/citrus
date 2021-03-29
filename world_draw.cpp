@@ -243,7 +243,7 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
     
     if(e->type == ENTITY_ITEM)
     {
-        update_entity_item(s_e, world_t);
+        update_entity_item(e, world_t);
         
         auto *item = &e->item_e.item;
         Item_Type *item_type = item_types + item->type;

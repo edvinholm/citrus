@@ -97,6 +97,8 @@ using namespace Client_User;
 using namespace Client_Market;
 
 #include "user_shared.cpp"
+
+#include "plant.cpp"
 #include "world_shared.cpp"
 
 

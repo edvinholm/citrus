@@ -1028,14 +1028,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
 
                     update_entity_item(target, room->t);
 
-                    // nocheckin: Make this a function we call from here and predict_..
-                    Item_Type_ID crop_type = ITEM_NONE_OR_NUM;
-                    switch(target->item_e.item.type) {
-                        case ITEM_APPLE_TREE: crop_type = ITEM_FRUIT;       break;
-                        case ITEM_WHEAT:      crop_type = ITEM_NONE_OR_NUM; break;
-                        default: Assert(false); break;
-                    }
-
+                    Item_Type_ID crop_type = crop_type_for_plant(target);
                     
                     Entity crop_entity = {0};
 
