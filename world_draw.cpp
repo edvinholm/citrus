@@ -171,21 +171,23 @@ void draw_aabb(AABB bbox, v4 color, Graphics *gfx)
 
     float line_w = .1f;
 
-    draw_line(a, b, -V3_X, line_w, color, gfx);
-    draw_line(a, c, -V3_X, line_w, color, gfx);
-    draw_line(b, d, -V3_X, line_w, color, gfx);
-    draw_line(c, d, -V3_X, line_w, color, gfx);
+    v3 normal = -gfx->camera_dir;
+
+    draw_line(a, b, normal, line_w, color, gfx);
+    draw_line(a, c, normal, line_w, color, gfx);
+    draw_line(b, d, normal, line_w, color, gfx);
+    draw_line(c, d, normal, line_w, color, gfx);
         
-    draw_line(e, f,  V3_X, line_w, color, gfx);
-    draw_line(e, g,  V3_X, line_w, color, gfx);
-    draw_line(f, h,  V3_X, line_w, color, gfx);
-    draw_line(g, h,  V3_X, line_w, color, gfx);
+    draw_line(e, f, normal, line_w, color, gfx);
+    draw_line(e, g, normal, line_w, color, gfx);
+    draw_line(f, h, normal, line_w, color, gfx);
+    draw_line(g, h, normal, line_w, color, gfx);
         
-    draw_line(a, e, -V3_Y, line_w, color, gfx);
-    draw_line(c, g, -V3_Y, line_w, color, gfx);
+    draw_line(a, e, normal, line_w, color, gfx);
+    draw_line(c, g, normal, line_w, color, gfx);
         
-    draw_line(b, f,  V3_Y, line_w, color, gfx);
-    draw_line(d, h,  V3_Y, line_w, color, gfx);
+    draw_line(b, f, normal, line_w, color, gfx);
+    draw_line(d, h, normal, line_w, color, gfx);
 }
 
 void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics *gfx, bool hovered = false, bool cannot_be_placed = false)
@@ -201,6 +203,30 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
     Quat q;
     get_entity_transform(s_e, world_t, room, &center, &q);
 
+    Entity_Hitbox hitbox = entity_hitbox(e, center, q);
+
+    // @Norelease @Speed!!!
+    // Keep track of where lightboxes are instead, and look for them here.
+    bool use_oven_lightbox = (e->type == ENTITY_ITEM && e->item_e.item.type == ITEM_STOVE);
+    v3   oven_p = center; // only valid if use_oven_lightbox
+    Quat oven_q = q;
+    if(!use_oven_lightbox) {
+        for(int i = 0; i < room->entities.n; i++) {
+            auto *other = &room->entities[i];
+            if(other->type == ENTITY_ITEM && other->item_e.item.type == ITEM_STOVE) {
+                v3 other_p;
+                Quat other_q;
+                get_entity_transform(other, world_t, room, &other_p, &other_q);
+                Entity_Hitbox stove_hitbox = entity_hitbox(other, world_t, room);
+                if(aabb_intersects_aabb(stove_hitbox.base, hitbox.base)) {
+                    use_oven_lightbox = true;
+                    oven_p = other_p;
+                    oven_q = other_q;
+                }
+            }
+        }
+    }
+    
     
     float scale = 1.0f;
     
@@ -306,8 +332,22 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
     mesh = mesh_for_entity(e);
 
-    if(mesh != MESH_NONE_OR_NUM) {
-        draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx, 0.0f, base_color);
+
+    if(mesh != MESH_NONE_OR_NUM &&
+       !tweak_bool(TWEAK_HIDE_ENTITY_MESHES))
+    {
+        Render_Object *mesh_obj = draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &gfx->world_render_buffer.opaque, gfx, 0.0f, base_color);
+        if(use_oven_lightbox) { // NOTE: We don't do this on vertex objects, but we don't worry about that right now because everything will probably be meshes in the end anyway.
+
+            v3 forward = rotate_vector(V3_X, oven_q);
+            v3 left    = rotate_vector(V3_Y, oven_q);
+            
+            mesh_obj->lightbox_center   = oven_p + V3_Z * 1;
+            mesh_obj->lightbox_radiuses = compabs((forward * .95) + (left * .95) + V3_Z * .9);
+
+            float alpha = 1.0f + (float)sin(world_t + random_float() * 0.05f) * .2f + (-0.05f + random_float() * 0.1f);
+            mesh_obj->lightbox_color    = { 1.00f, 0.81f, 0.16f, alpha };
+        }
     }
 
     
@@ -318,12 +358,19 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
 
         draw_aabb(hitbox.base,      C_GREEN, gfx);
         for(int i = 0; i < hitbox.num_exclusions; i++)
-            draw_aabb(hitbox.exclusions[i], C_RED,   gfx);
+            draw_aabb(hitbox.exclusions[i], C_RED, gfx);
     }
     // ////////// //
 
+    // DEBUG ENTITY POSITION //
+    if(tweak_bool(TWEAK_SHOW_ENTITY_POSITIONS)) {
+        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        float s = .2;
+        draw_cube_ps(center - V3_XY * s*.5, {s, s, 10}, C_SKY, gfx);
+    }
+    // // //
 
-
+    // DEBUG ACTION POSITIONS //
     if(tweak_bool(TWEAK_SHOW_ENTITY_ACTION_POSITIONS)) {
         if(e->id == room->selected_entity && e->type == ENTITY_ITEM) {
 
@@ -333,17 +380,24 @@ void draw_entity(Entity *e, double world_t, Room *room, Client *client, Graphics
             dummy_action.type = ENTITY_ACT_PICK_UP;
             auto action_positions = entity_action_positions(e, &dummy_action, player_entity_hands_zoffs, world_t, room);
             for(int i = 0; i < action_positions.n; i++) {
-                auto p = V3(action_positions[i]) + V3_Z * 0.05f;
-                draw_quad(p - V3_XY * 0.15f, V3_X * 0.3f, V3_Y * 0.3f, C_MAGENTA, gfx);
+                auto p = V3(action_positions[i]) + V3_Z * 0.001f;
+
+                float point_size = .2;
+                
+                draw_quad(p - V3_XY * point_size * .5, V3_X * point_size, V3_Y * point_size, C_MAGENTA, gfx);
+
+                draw_line(p - V3_X * .2, p + V3_X * .4, V3_Z, point_size * .5, C_MAGENTA, gfx);
+                draw_line(p - V3_Y * .2, p + V3_Y * .4, V3_Z, point_size * .5, C_MAGENTA, gfx);
             }
         }
     }
+    // // //
             
     
     
     _OPAQUE_WORLD_VERTEX_OBJECT_(rotation_matrix(q) * translation_matrix(center));
 
-    // Forward vector
+    // DEBUG FORWARD VECTOR //
     if(tweak_bool(TWEAK_SHOW_ENTITY_FORWARD_VECTORS))
         draw_line(V3_ZERO + V3_Z * 1.0f, V3_ZERO + V3_Z * 1.0f + V3_X * 3.0f, V3_Z, 0.5f, C_CYAN, gfx);
     
@@ -421,8 +475,6 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
                 Entity_ID hovered_entity = NO_ENTITY, Ray mouse_ray = {0})
 {
     maybe_update_static_room_vaos(room, gfx);
-    
-#if 1
 
     v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
     v4 grass = {0.25, 0.6,  0.1, 1.0f};
@@ -475,14 +527,33 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
         
     }
 
-    
-#endif
 
-#if 0
-    // @Temporary
+    if(tweak_bool(TWEAK_SHOW_WORLD_GRID))
     {
-        _TRANSLUCENT_WORLD_VERTEX_OBJECT_(rotation_around_point_matrix(axis_rotation(V3_X, PI + cos(world_t) * (PI/16.0) / 2.0), { room_size_x / 2.0f, room_size_y / 2.0f, 2.5 }), -1);
-        draw_string(STRING("Abc"), V2_ZERO, FS_10, FONT_TITLE, {1, 1, 1, 1}, gfx);
+        _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+        v4 color = { 0, 0, 0, 1 };
+        float w  = .025;
+
+        float z = .01;
+
+        v3 p0 = { 0, 1, z };
+        v3 p1 = { room_size_x, 1, z };
+        float y1 = (float)room_size_y;
+        while(p0.y < y1) {
+            draw_line(p0, p1, V3_Z, w, color, gfx);
+            p0.y += 1;
+            p1.y += 1;
+        }
+
+        p0 = { 1, 0, z };
+        p1 = { 1, room_size_y, z };
+        float x1 = (float)room_size_x;
+        while(p0.x < x1) {
+            draw_line(p0, p1, V3_Z, w, color, gfx);
+            p0.x += 1;
+            p1.x += 1;
+        }
     }
-#endif
+
+    
 }

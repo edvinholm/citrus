@@ -395,9 +395,9 @@ Player_Action make_player_entity_action(Entity_Action *action, Entity_ID target)
     return player_action;
 }
 
-S__Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
+Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
 {
-    S__Entity e = {0};
+    Entity e = {0};
     e.type = ENTITY_ITEM;
     e.item_e.item = *item;
     
@@ -588,7 +588,7 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
                             const float offs = 1.0f;
                             
-                            v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * 0.5f; // Rounding (flooring) errors seem to happen sometimes if we don't add half a tile.
+                            v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * .01; // Rounding (flooring) errors seem to happen sometimes if we don't add a small number here (@HackMini).
                             
                             if     (y == 0)        array_add(positions, tile_from_p(pp - left * offs));
                             else if(y == volume.y) array_add(positions, tile_from_p(pp + left * offs));
@@ -691,6 +691,15 @@ Entity_Hitbox entity_hitbox(ENTITY *e, v3 p, Quat q)
                 case ITEM_BLENDER: {
                     hb.exclusions[0].p = p0 + up * .2;
                     hb.exclusions[0].s = (forward * vol.x) + (left * vol.y) + (up * 1);
+                    hb.num_exclusions = 1;
+                } break;
+                    
+                case ITEM_STOVE: {
+                    float inset = .2;
+                    hb.exclusions[0].p = p0 + (forward * inset) + (left * inset) + (up * inset);
+                    hb.exclusions[0].s = (forward * (vol.x - inset * 2) +
+                                          left    * (vol.y - inset * 2) +
+                                          up      * 1.5);
                     hb.num_exclusions = 1;
                 } break;
 
@@ -865,8 +874,28 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
                 surf.owner_specifics.filter_press_surface_id = FILTER_PRESS_SURF_LIQUID_OUTPUT;
                 array_add(surfaces, surf);
             }
+                       
+        } break;
+
+        case ITEM_STOVE: {
+            v3s vol = item_types[item->type].volume;
+
+            v3 p0 = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f);
             
+            const float inset = .2;
+
+            // @NoreleaseIdea: Would actually be cool if you could put multiple things in the oven,
+            //                 and that an oven could have multiple recipes going at the same time.
             
+            Surface surf = {0};
+            surf.type = SURF_TYPE_MACHINE_INPUT;
+            surf.flags |= SURF_EXCLUSIVE;
+            surf.flags |= SURF_CENTERING;
+            surf.p = p0 + (forward * inset) + (left * inset) + (up * .2);
+            surf.s = forward.xy * (vol.x - inset * 2) + left.xy * (vol.y - inset * 2);
+            surf.max_height = 1.5;
+            
+            array_add(surfaces, surf);
         } break;
     }
 
@@ -967,6 +996,7 @@ struct Support
 // NOTE: This does not work like find_supported_entities().
 //       The difference is: elements are added to supports (if they are not already there),
 //                          without setting supports->n to 0 at the beginning.
+//       IMPORTANT that we keep it this way because some code depend on it (or change the usage code)
 template<Allocator_ID A>
 void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, S__Entity *entity_to_ignore = NULL)
 {
@@ -987,6 +1017,8 @@ void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *su
                 auto *e = Entities(room) + i;
                 if (!Entity_Exists(e)) continue;
 
+                if(e->type != ENTITY_ITEM) continue;
+                
                 if (e == surface_owner || e == entity_to_ignore) continue;
 
                 auto hitbox = entity_hitbox(e, world_t, room);
@@ -1197,7 +1229,9 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
 }
 
 
-bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
+bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room,
+                           Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters         = NULL,
+                           Static_Array<Surface,  MAX_SUPPORT_POINTS> *_supporter_surfaces = NULL)
 {
     Function_Profile();
     
@@ -1207,10 +1241,8 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
     defer(if(_supporters) *_supporters = supporters;);
 
     Static_Array<Surface, MAX_SUPPORT_POINTS> supporter_surfaces = { 0 };
-    
-    if(_supporters) {
-        Zero(*_supporters);
-    }
+    defer(if(_supporter_surfaces) *_supporter_surfaces = supporter_surfaces;);
+
     
     S__Entity copy = *my_entity;
     copy.item_e.p = p;
@@ -1345,7 +1377,7 @@ AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room
             if(state.held_item.type != ITEM_NONE_OR_NUM)
             {
                 Quat q = x->q;
-                v3 p = item_entity_p_from_tp(x->tp, &state.held_item, q);
+                v3   p = x->p;
                 S__Entity fake_entity = create_item_entity(&state.held_item, p, q, world_t);
 
                 auto hitbox = entity_hitbox(&fake_entity, world_t, room);
@@ -1539,10 +1571,12 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             if(sit->unsit  && player_state->sitting_on != e->id) return false; // Can't unsit when we don't sit.
             if(!sit->unsit && player_state->sitting_on == e->id) return false; // Can't sit when we already sit.
 
+            if(!sit->unsit) {
+                if(e->item_e.locked_by != NO_ENTITY) return false;
+            }
+            
             *_sitting_allowed = sit->unsit; // We can't already be sitting when we do the sit action.
             
-            // @Norelease: Check if someone else sits here. @Continue
-
             return true;
             
         } break;
@@ -1625,11 +1659,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             auto *put_down = &action->put_down;
 
             if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
-
-            Quat put_down_q = put_down->q;
-            v3 put_down_p = item_entity_p_from_tp(put_down->tp, &player_state->held_item, put_down_q);
             
-            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down_p, put_down_q, world_t);
+            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down->p, put_down->q, world_t);
             
             // @Norelease: Check that the put down entity won't collide with anything.
 
@@ -1640,7 +1671,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             //             So it is possible to put down two entities in the same spot right now.
 
             // This is @Temporary (See comments above).
-            if(!item_entity_can_be_at(&held_entity_replica, put_down_p, put_down_q, world_t, room, &_info->put_down.supporters))
+            if(!item_entity_can_be_at(&held_entity_replica, put_down->p, put_down->q, world_t, room, &_info->put_down.supporters))
                 return false;
 
             // @Cleanup @Hack !!!

@@ -20,8 +20,9 @@ enum GPU_Primitive_Type
 };
 
 //FROM: https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
-enum GPU_Texture_Pixel_Components
+enum GPU_Texture_Pixel_Components // @BadName! This is called "internal format" for GL.
 {
+    GPU_PIX_COMP_DEPTH_24 = GL_DEPTH_COMPONENT24,
     //GPU_PIX_COMP_DEPTH_STENCIL   = GL_DEPTH_STENCIL,
     //GPU_PIX_COMP_RG   = GL_RG,
     GPU_PIX_COMP_RGB  = GL_RGB,
@@ -32,6 +33,7 @@ enum GPU_Texture_Pixel_Components
 //FROM: https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
 enum GPU_Texture_Pixel_Format
 {
+    GPU_PIX_FORMAT_DEPTH = GL_DEPTH_COMPONENT,
     //GPU_PIX_FORMAT_DEPTH_STENCIL   = GL_DEPTH_STENCIL,
     //GPU_PIX_FORMAT_RG   = GL_RG,
     GPU_PIX_FORMAT_RGB  = GL_RGB,
@@ -42,7 +44,9 @@ enum GPU_Texture_Pixel_Format
 //FROM: https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
 enum GPU_Texture_Pixel_Data_Type
 {
-    GPU_PIX_DATA_UNSIGNED_BYTE = GL_UNSIGNED_BYTE
+    GPU_PIX_DATA_UNSIGNED_SHORT = GL_UNSIGNED_SHORT,
+    GPU_PIX_DATA_UNSIGNED_INT   = GL_UNSIGNED_INT,
+    GPU_PIX_DATA_UNSIGNED_BYTE  = GL_UNSIGNED_BYTE
 };
 
 

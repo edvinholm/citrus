@@ -25,17 +25,24 @@ profiler_yscale 250
 
 # color_tiles_by_position true
 
+# show_entity_positions true
 
- show_entity_action_positions true
+# show_entity_action_positions true
 
 # show_player_entity_parts true
 # show_entity_forward_vectors true
 
 # show_entity_bounding_boxes true
+# hide_entity_meshes true
 
 
 
-# camera_rotation_offset      -22  0 45
-# camera_translation_offset   .25  .3
-# camera_scale_multiplier     2
+# camera_rotation_offset      -30  0 20
+# camera_translation_offset   .2  .25
+# camera_scale_multiplier     4
 
+# show_world_grid true
+
+
+# show_texture_viewer true
+texture_viewer_scale .2

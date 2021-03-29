@@ -1,18 +1,35 @@
 
 
-inline
-GPU_Texture_ID create_texture_on_gpu(u32 w, u32 h, GPU_Texture_Parameters *_params = NULL, GPU_Error_Code *_error_code = NULL)
+// NOTE: data can be set to NULL if num_samples == 1, and MUST be NULL if num_samples > 1.
+GPU_Texture_ID create_texture_on_gpu(u32 w, u32 h, void *data, int num_samples = 1, bool is_depth_buffer = false, GPU_Texture_Parameters *_params = NULL, GPU_Error_Code *_error_code = NULL)
 {
     #if GFX_GL
-        GPU_Texture_Parameters params = gpu_texture_parameters(GPU_PIX_COMP_RGBA, GPU_PIX_FORMAT_RGBA, GPU_PIX_DATA_UNSIGNED_BYTE);
+    GPU_Texture_Parameters params;
+
+    if(is_depth_buffer)
+        params = gpu_texture_parameters(GPU_PIX_COMP_DEPTH_24, GPU_PIX_FORMAT_DEPTH, GPU_PIX_DATA_UNSIGNED_INT);
+    else
+        params = gpu_texture_parameters(GPU_PIX_COMP_RGBA, GPU_PIX_FORMAT_RGBA, GPU_PIX_DATA_UNSIGNED_BYTE);
+    
     #elif GFX_METAL
-        GPU_Texture_Parameters params = gpu_texture_parameters(GPU_PIX_FORMAT_RGBA8_UNORM);
+    #error(Unsupported Graphics API, no support for is_depth_buffer yet.)
+//        GPU_Texture_Parameters params = gpu_texture_parameters(GPU_PIX_FORMAT_RGBA8_UNORM);
     #else
     #error(Unsupported Graphics API)
     #endif
+
+    Assert(num_samples > 0);
+
+    bool success = false;
     
     GPU_Texture_ID id;
-    gpu_create_texture(w, h, params, &id, _error_code);
+    if(num_samples > 1) {
+        success = gpu_create_multisample_texture(w, h, num_samples, params, &id, _error_code);
+    } else {
+        success = gpu_create_texture(w, h, params, &id, _error_code, data);
+    }
+
+    Assert(success);
 
     if(_params) *_params = params;
     
@@ -38,15 +55,13 @@ GPU_Texture_ID create_texture(Pixel *pixels, u32 w, u32 h, GPU_Texture_Parameter
 
     GPU_Error_Code error_code;
     
-    GPU_Texture_ID gpu_id = create_texture_on_gpu(w, h, _params, &error_code);
+    GPU_Texture_ID gpu_id = create_texture_on_gpu(w, h, pixels, 1, false, _params, &error_code);
     if(_error_code) *_error_code = error_code;
     
     if(error_code != 0) {
         Assert(false);
         return gpu_id; // Failure
     }
-
-    gpu_set_texture_data(gpu_id, pixels, w, h, *_params);
 
     return gpu_id;
 }

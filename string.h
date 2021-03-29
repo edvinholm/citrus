@@ -1,6 +1,6 @@
 
-//@JAI: This should be done at compile time.
-#define STRING(cstring) string(cstring, strlen(cstring))
+// @Jai: Make this a "typed" struct initializer instead of calling string().
+#define STRING(cstring) string(cstring, sizeof(cstring)-1)
 
 // This is for printf("...%.*s...", HERE)
 #define strprint(string) string.length, string.data

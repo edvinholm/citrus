@@ -28,6 +28,8 @@ startup_room 0    # 0 means no room.
 show_window_sizes false
 
 
+show_entity_positions false
+
 # This shows the positions for a PICK_UP action always.
 # We might make it possible to choose which action later.  -EH, 2021-02-25
 show_entity_action_positions false
@@ -38,13 +40,20 @@ show_player_entity_parts false
 show_entity_forward_vectors false
 
 show_entity_bounding_boxes false
+hide_entity_meshes         false
 
 
 run_profiler    false
 show_profiler   false
 profiler_yscale 100.0
 
+show_texture_viewer false
+texture_viewer_scale .25
+
 
 # camera_rotation_offset    0 0 0
 # camera_translation_offset 0 0 
 # camera_scale_multiplier     1   # If this is <= 0, it will be ignored.
+
+
+show_world_grid false

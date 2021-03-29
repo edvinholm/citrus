@@ -252,6 +252,7 @@ bool read_obj(String contents, OBJ_Reader<Reader_Allocator> *reader, Allocator *
         }
         else {
             Debug_Print("Unknown beginning of line: '%.*s'.\n", (int)token.length, token.data);
+            skip_line(&at, end);
         }
     }
 

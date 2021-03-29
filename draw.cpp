@@ -48,6 +48,9 @@ void push_vertex_destination(Vertex_Destination dest, Graphics *gfx)
         case VD_UI_OPAQUE:      buffer = &gfx->ui_render_buffer.opaque.vertices; break;
         case VD_UI_TRANSLUCENT: buffer = &gfx->ui_render_buffer.translucent.vertices; break;
             
+        case VD_PREVIEWS_OPAQUE:      buffer = &gfx->previews_render_buffer.opaque.vertices; break;
+        case VD_PREVIEWS_TRANSLUCENT: buffer = &gfx->previews_render_buffer.translucent.vertices; break;
+            
         default: Assert(false); break;
     }
 
@@ -65,7 +68,9 @@ void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, fl
     Assert(!buffer->current_vertex_object_began);
 
     auto &obj = buffer->current_vertex_object;
-    obj.type      = VERTEX_OBJECT;
+    Zero(obj);
+    
+    obj.type  = VERTEX_OBJECT;
     
     obj.screen_z  = screen_z;
     
@@ -134,6 +139,12 @@ void set_gpu_uniforms_for_render_object(Render_Object *obj, Graphics *gfx)
     auto *vs = &gfx->vertex_shader;
     gpu_set_uniform_m4x4(vs->transform_uniform,        obj->transform);
     gpu_set_uniform_v4  (vs->color_multiplier_uniform, obj->color);
+
+    auto *fs = &gfx->fragment_shader;
+    gpu_set_uniform_v3(fs->lightbox_center_uniform,   obj->lightbox_center);
+    gpu_set_uniform_v3(fs->lightbox_radiuses_uniform, obj->lightbox_radiuses);
+    gpu_set_uniform_v4(fs->lightbox_color_uniform,    obj->lightbox_color);
+    gpu_set_uniform_int(fs->do_edge_detection_uniform, obj->do_edge_detection);
 }
 
 template<Allocator_ID A>
@@ -177,6 +188,21 @@ void reset_render_object_buffer(Render_Object_Buffer *buffer)
 {
     reset(&buffer->vertices);
     buffer->objects.n = 0;
+}
+
+bool render_object_uniforms_equal(Render_Object *a, Render_Object *b)
+{
+    // @Speed.....
+    if(a->transform       != b->transform) return false;
+    if(a->color           != b->color)     return false;
+    
+    if(a->lightbox_center   != b->lightbox_center)   return false;
+    if(a->lightbox_radiuses != b->lightbox_radiuses) return false;
+    if(a->lightbox_color    != b->lightbox_color)    return false;
+
+    if(a->do_edge_detection != b->do_edge_detection) return false;
+
+    return true;
 }
 
 // IMPORTANT: We cannot use temporary memory in this proc since we call it when the mutex is unlocked.
@@ -268,7 +294,9 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
                     auto *obj = &buffer->objects[object_indices[obj_ix]];
 
                     if(obj->type != VERTEX_OBJECT) break;                
-                    if(obj_ix > first_ix && obj->transform != temporary_object.transform) break;
+                    if(obj_ix > first_ix) {
+                        if(!render_object_uniforms_equal(obj, &temporary_object)) break;
+                    }
                
                     auto v0 = obj->vertex0;
                     auto num_vertices = obj->vertex1 - v0;
@@ -306,8 +334,10 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
                     auto *obj = &buffer->objects[obj_ix];
                     
                     if(obj->type != VERTEX_OBJECT) break;
-                    if(obj_ix > first_ix && (obj->transform != temporary_object.transform ||
-                                             obj->vertex0 != temporary_object.vertex1)) break;
+                    if(obj_ix > first_ix) {
+                        if(obj->vertex0 != temporary_object.vertex1) break;
+                        if(!render_object_uniforms_equal(obj, &temporary_object)) break;
+                    }
 
                     temporary_object.vertex1 = obj->vertex1;
                 
@@ -324,7 +354,7 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
     }
 }
 
-void draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE)
+Render_Object *draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE)
 {
     Assert(!object_buffer->current_vertex_object_began);
     
@@ -337,10 +367,10 @@ void draw_mesh(VAO *mesh_vao, m4x4 transform, Render_Object_Buffer *object_buffe
     obj.mesh_vao  = mesh_vao;
     obj.screen_z  = screen_z;
 
-    array_add(object_buffer->objects, obj);
+    return array_add(object_buffer->objects, obj);
 }
 
-void draw_mesh(Mesh_ID mesh, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE) {
+Render_Object *draw_mesh(Mesh_ID mesh, m4x4 transform, Render_Object_Buffer *object_buffer, Graphics *gfx, float screen_z = 0, v4 color = C_WHITE) {
     Assert(mesh >= 0 && mesh < ARRLEN(gfx->assets->mesh_vaos));
-    draw_mesh(&gfx->assets->mesh_vaos[mesh], transform , object_buffer, gfx, screen_z, color);
+    return draw_mesh(&gfx->assets->mesh_vaos[mesh], transform , object_buffer, gfx, screen_z, color);
 }

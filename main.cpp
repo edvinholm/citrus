@@ -11,9 +11,12 @@
   TO DO:
   ------
 
+  * Pick up fruit from blender container surface (centered, so i think action positions collide with blender.)
+
+  * Stove
   
-  * Look at whiteboard!
-  
+  --
+    
   * Make amount of yeast in water matter when Filter Pressing.
 
 
@@ -35,7 +38,7 @@
 THEN, WE WANT TO CONNECT THE OBJECTS PLACED ON TOP OF TABLES TO THE TABLES, SO THAT THEY
 MOVE WHEN THE TABLE MOVES!
 
-THEEEEEEEEEEEEEEN! WE SHOULD MAKE CONTAINERS, THAT HOLDS OTHER ENTITIES!!!!!!!!!!!!!
+THEEEEEEEEEEEEEEN! WE SHOULD MAKE CONTAINERS, THAT HOLD OTHER ENTITIES!!!!!!!!!!!!!
  
 /////////////////////
 
@@ -141,9 +144,9 @@ App_Version APP_version = {{
 #include "platform_win32.h"
 
 #include <GL\gl.h>
+#include "gl.h"
 #include "gpu_gl.h"
 #include "gpu.h"
-#include "gl.h"
 #include "gl.cpp"
 #include "shaders.h"
 #include "gpu_gl.cpp"

@@ -68,6 +68,12 @@ struct Render_Object
     m4x4  transform;
     v4    color;
 
+    v3 lightbox_center;
+    v3 lightbox_radiuses;
+    v4 lightbox_color;
+
+    bool do_edge_detection;
+
     union {
         struct { // VERTEX_OBJECT
             u64 vertex0;
@@ -125,7 +131,10 @@ enum Vertex_Destination
     VD_WORLD_TRANSLUCENT,
 
     VD_UI_OPAQUE,
-    VD_UI_TRANSLUCENT
+    VD_UI_TRANSLUCENT,
+    
+    VD_PREVIEWS_OPAQUE,
+    VD_PREVIEWS_TRANSLUCENT
 };
 
 
@@ -164,9 +173,11 @@ struct Graphics
     Vertex_Buffer<ALLOC_MALLOC> universal_vertex_buffer;
     World_Render_Buffer world_render_buffer;
     UI_Render_Buffer    ui_render_buffer;
+    World_Render_Buffer previews_render_buffer;
 
     // Draw context
     v2 frame_s;
+    v3 camera_dir;
 
     // State
     u8 buffer_set_index;
@@ -182,20 +193,23 @@ struct Graphics
 
     // GPU resources
     GPU_Texture_ID     multisample_texture;
-    GPU_Texture_ID     depth_buffer_texture;
+    GPU_Texture_ID     depth_buffer;
     GPU_Framebuffer_ID framebuffer;
+
+    GPU_Texture_ID     previews_depth_buffer;
+    GPU_Framebuffer_ID previews_framebuffer; // Color attachment for this is TEX_PREVIEWS.
     
     Vertex_Shader   vertex_shader;
     Fragment_Shader fragment_shader;
 
     // "Assets"
-    Texture_Catalog textures;
+    Texture_Catalog textures; // @Cleanup: Should probably be moved to Asset_Catalog.
     Texture_ID bound_textures[4]; // In fragment shader
     u8 num_bound_textures;
     
     Sprite_Map glyph_maps[NUM_FONTS];
 
-    Font_Table    *fonts;  // IMPORTANT: Graphics does not own this memory.
+    Font_Table    *fonts;  // IMPORTANT: Graphics does not own this memory. // @Cleanup: Should probably be moved to Asset_Catalog.
     Asset_Catalog *assets; // IMPORTANT: Graphics does not own this memory.
 
     // World

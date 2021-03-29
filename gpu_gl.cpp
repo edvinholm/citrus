@@ -2,6 +2,36 @@
 #define GPU_GL_Check_Errors()  { auto err = glGetError();  Assert(err == 0); }
 
 
+void APIENTRY gl_debug_output_callback(GLenum source,
+                                       GLenum type,
+                                       GLuint id,
+                                       GLenum severity,
+                                       GLsizei length,
+                                       const GLchar *message,
+                                       const void *userParam)
+{
+
+    switch(type) {
+
+#if 0
+        case GL_DEBUG_TYPE_OTHER:
+#endif
+        
+        case GL_DEBUG_TYPE_ERROR:
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        case GL_DEBUG_TYPE_PORTABILITY:
+        case GL_DEBUG_TYPE_PERFORMANCE: {
+            fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
+                    (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : "" ),
+                    type, severity, message);
+            Break();
+        } break;
+    }
+
+}
+
+
 struct GPU_Context
 {
     GLint shader_program;
@@ -25,6 +55,11 @@ bool gpu_init(float clear_color_r, float clear_color_g, float clear_color_b, flo
     glEnable(GL_MULTISAMPLE);
 
     glClearColor(clear_color_r, clear_color_g, clear_color_b, clear_color_a);
+
+#if DEBUG // @Jai: Module parameter
+    glEnable              (GL_DEBUG_OUTPUT);
+    glDebugMessageCallback(gl_debug_output_callback, 0);
+#endif
 
     auto error = glGetError();
     return (error == 0);
@@ -91,6 +126,7 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     
     vertex_shader->projection_uniform       = glGetUniformLocation(program, "projection");       GPU_GL_Check_Errors();
     vertex_shader->transform_uniform        = glGetUniformLocation(program, "transform");        GPU_GL_Check_Errors();
+
     vertex_shader->mode_2d_uniform          = glGetUniformLocation(program, "mode_2d");          GPU_GL_Check_Errors();
     vertex_shader->color_multiplier_uniform = glGetUniformLocation(program, "color_multiplier"); GPU_GL_Check_Errors();
 
@@ -114,12 +150,38 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
     gpu_set_buffer_set(&vertex_shader->buffer_sets[0], vertex_shader); // Don't know if this is a good idea to set a buffer set from the beginning.
     // //////////////// //
         
-    fragment_shader->texture_1_uniform = glGetUniformLocation(program, "texture_1");
-    fragment_shader->texture_2_uniform = glGetUniformLocation(program, "texture_2");
-    fragment_shader->texture_3_uniform = glGetUniformLocation(program, "texture_3");
-    fragment_shader->texture_4_uniform = glGetUniformLocation(program, "texture_4");
+    fragment_shader->texture_1_uniform = glGetUniformLocation(program, "textures[0]");
+    fragment_shader->texture_2_uniform = glGetUniformLocation(program, "textures[1]");
+    fragment_shader->texture_3_uniform = glGetUniformLocation(program, "textures[2]");
+    fragment_shader->texture_4_uniform = glGetUniformLocation(program, "textures[3]");
+    
+    fragment_shader->lightbox_center_uniform   = glGetUniformLocation(program, "lightbox_center");   GPU_GL_Check_Errors();
+    fragment_shader->lightbox_radiuses_uniform = glGetUniformLocation(program, "lightbox_radiuses"); GPU_GL_Check_Errors();
+    fragment_shader->lightbox_color_uniform    = glGetUniformLocation(program, "lightbox_color");    GPU_GL_Check_Errors();
+    
+    fragment_shader->do_edge_detection_uniform = glGetUniformLocation(program, "do_edge_detection");    GPU_GL_Check_Errors();
+
 
     return (glGetError()) ? false : true;
+}
+
+
+void gpu_set_clear_color(float r, float g, float b, float a)
+{
+    glClearColor(r, g, b, a);
+}
+
+inline
+void gpu_clear_color_and_depth_buffer()
+{
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+
+inline
+void gpu_clear_color_buffer()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 inline
@@ -133,6 +195,12 @@ inline
 void gpu_set_uniform_m4x4(GPU_Uniform_ID uniform, m4x4 m)
 {
     glUniformMatrix4fv(uniform, 1, GL_FALSE, m.elements);
+}
+
+inline
+void gpu_set_uniform_v3(GPU_Uniform_ID uniform, v3 u)
+{
+    glUniform3f(uniform, u.x, u.y, u.z);
 }
 
 inline
@@ -221,13 +289,14 @@ void gpu_set_viewport(float x, float y, float w, float h)
 
 //TODO @Robustness: Pass min/mag filters
 inline
-bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture_ID *_id, GPU_Error_Code *_error_code = NULL)
+bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture_ID *_id, GPU_Error_Code *_error_code = NULL, void *data = NULL)
 {
-    //TODO @Incomplete: Use params
-    
     glGenTextures(1, _id);
     
     glBindTexture(GL_TEXTURE_2D, *_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
+                 params.pixel_format, params.pixel_data_type, data);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -244,20 +313,33 @@ void gpu_create_framebuffers(int n, GPU_Framebuffer_ID *_ids)
 }
 
 inline
-void gpu_update_framebuffer(GPU_Framebuffer_ID id, GPU_Texture_ID color_attachment0 = 0, bool color_attachment0_is_multisample = false, GPU_Texture_ID depth_attachment = 0)
+void gpu_set_target_framebuffer(GPU_Framebuffer_ID id)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, id);
+}
+
+inline
+void gpu_update_framebuffer(GPU_Framebuffer_ID id,
+                            bool attachments_are_multisampled  = false,
+                            GPU_Texture_ID color_attachment0 = 0,
+                            GPU_Texture_ID depth_attachment  = 0)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, id);
 
+
+    auto texture_slot = (attachments_are_multisampled) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+    
     if(color_attachment0 != 0) {
-        auto texture_slot = (color_attachment0_is_multisample) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_slot, color_attachment0, 0);
     }
 
     if(depth_attachment != 0) {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, depth_attachment, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture_slot, depth_attachment, 0);
     }
     
+    auto error = glGetError();
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    error = glGetError();
 
     // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
     // @Norelease TODO @Robustness: This assert fails when we minimize the game window.....!!!!
@@ -293,6 +375,26 @@ int gpu_max_num_multisample_samples()
     return max_samples;
 }
 
+bool gpu_create_multisample_texture(u32 width, u32 height, int num_samples, GPU_Texture_Parameters params,
+                                    GPU_Texture_ID *_id, GPU_Error_Code *_error_code = NULL)
+{
+    // TODO @Incomplete: Use params.
+
+    glGenTextures(1, _id);
+
+    // @Boilerplate: gpu_update_or_create_multisample_texture
+    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, *_id);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, num_samples, GL_RGBA8,
+                            width, height, GL_FALSE);
+    
+    auto err = glGetError();
+    Assert(err == 0);
+    
+    if(_error_code) *_error_code = err;
+    return (err == 0);
+}
+
+
 //IMPORTANT: id=0 means the texture does not exist, so we create one. This works for OpenGL, since 0 is not a valid texture ID.
 //           But we need to make sure this is true in other GPU APIs as well! @Robustness
 inline
@@ -301,15 +403,33 @@ bool gpu_update_or_create_multisample_texture(GPU_Texture_ID *id, u32 width, u32
     if(*id == 0) {
         glGenTextures(1, id);
     }            
-    
+
+    // @Boilerplate: gpu_create_multisample_texture
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, *id);
     glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, num_samples, GL_RGBA8,
                             width, height, GL_FALSE);
     auto err = glGetError();
     Assert(err == 0);
 
-    *_error_code = glGetError();
+    *_error_code = err;
     return (*_error_code == 0);    
+}
+
+
+bool gpu_create_multisample_depth_buffer_texture(u32 width, u32 height, int num_samples, GPU_Texture_ID *_id, GPU_Error_Code *_error_code = NULL)
+{
+    glGenTextures(1, _id);
+        
+    // @Boilerplate: gpu_update_or_create_multisample_depth_buffer_texture()
+    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, *_id);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, num_samples, GL_DEPTH_COMPONENT,
+                            width, height, GL_FALSE);
+    
+    auto err = glGetError();
+    Assert(err == 0);
+
+    if(_error_code) *_error_code = err;
+    return (err == 0);
 }
 
 
@@ -321,7 +441,8 @@ bool gpu_update_or_create_multisample_depth_buffer_texture(GPU_Texture_ID *id, u
     if(*id == 0) {
         glGenTextures(1, id);
     }
-    
+
+    // @Boilerplate: gpu_create_multisample_depth_buffer_texture()    
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, *id);
     glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, num_samples, GL_DEPTH_COMPONENT,
                             width, height, GL_FALSE);
@@ -329,8 +450,8 @@ bool gpu_update_or_create_multisample_depth_buffer_texture(GPU_Texture_ID *id, u
     auto err = glGetError();
     Assert(err == 0);
 
-    *_error_code = glGetError();
-    return (*_error_code == 0);    
+    *_error_code = err;
+    return (err == 0);    
 }
 
 inline
@@ -355,10 +476,11 @@ void gpu_set_texture_data(GPU_Texture_ID texture, void *data, u32 w, u32 h,
 
     GLint old_bound;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &old_bound);
+    auto gl_error = glGetError();
+    Assert(gl_error == 0);
     {
         glBindTexture(GL_TEXTURE_2D, texture);
         auto gl_error = glGetError();
-        Assert(gl_error == 0);
         
         glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
                      params.pixel_format, params.pixel_data_type, data);

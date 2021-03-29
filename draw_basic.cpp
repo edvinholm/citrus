@@ -368,6 +368,22 @@ void draw_line(v2 a, v2 b, float w, v4 color, Graphics *gfx, float z_3d = 0, v2 
     draw_line({ a.x, a.y, z }, { b.x, b.y, z }, V3_Z, w, color, gfx, uvs, tex);
 }
 
+void draw_quad_outline_abs(v3 a, v3 b, v3 c, v3 d, v3 normal, float w, v4 color, Graphics *gfx)
+{
+    draw_line(a, b, normal, w, color, gfx);
+    draw_line(a, c, normal, w, color, gfx);
+    draw_line(b, d, normal, w, color, gfx);
+    draw_line(c, d, normal, w, color, gfx);
+}
+
+void draw_quad_outline(v3 p0, v3 d1, v3 d2, v3 normal, float w, v4 color, Graphics *gfx)
+{
+    v3 b = p0 + d1;
+    v3 c = p0 + d2;
+    v3 d = b + d2;
+    draw_quad_outline_abs(p0, b, c, d, normal, w, color, gfx);    
+}
+
 #if 0
 // @Incomplete!! Can't pass null as tex to triangles()
 void draw_triangle(v3 p0, v3 p1, v3 p2, Graphics *gfx, v2 *uvs = NULL)

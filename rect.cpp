@@ -198,6 +198,13 @@ Rect center_of(Rect a, v2 size, v2 offset)
     return a;
 }
 
+inline
+Rect center_square_of(Rect a)
+{
+    float s = min(a.w, a.h);
+    return center_of(a, s, s);
+}
+
 
 inline
 Rect scaled(Rect a, float f)
@@ -333,6 +340,8 @@ Rect bottom_square_of(Rect a)
 {
     return bottom_of(a, a.w);
 }
+
+
 
 inline
 Rect top_of(Rect a, float h)

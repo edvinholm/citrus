@@ -149,16 +149,16 @@ void user_window(UI_Context ctx, Client *client)
 {
     U(ctx);
     
-    char *usernames[] = {
-        "Tachophobia",
-        "Sailor88",
+    String usernames[] = {
+        STRING("Tachophobia"),
+        STRING("Sailor88"),
         //"WhoLetTheDogsOut",
-        "MrCool",
-        "kadlfgAJb!",
-        "LongLongWay.9000",
-        "_u_s_e_r_n_a_m_e_",
-        "generalW4ste",
-        "Snordolf101"
+        STRING("MrCool"),
+        STRING("kadlfgAJb!"),
+        STRING("LongLongWay.9000"),
+        STRING("_u_s_e_r_n_a_m_e_"),
+        STRING("generalW4ste"),
+        STRING("Snordolf101")
     };
 
     User_ID user_ids[] = {
@@ -225,7 +225,7 @@ void user_window(UI_Context ctx, Client *client)
     {
         _CELL_();
         
-        String  username = STRING(usernames[i]);
+        String  username = usernames[i];
         User_ID id       = user_ids[i];
         bool is_current  = (id == current_user);
         
@@ -804,6 +804,8 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     Assert(item != NULL);
     Assert(item->type != ITEM_NONE_OR_NUM);
 
+    Room *room = &client->room;
+
     auto *type = &item_types[item->type];
 
     
@@ -816,7 +818,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
         auto *player_local = &player->player_local;
 
         Array<Entity_Action, ALLOC_TMP> actions = {0};
-        auto state = player_state_after_completed_action_queue(player, world_t, &client->room);
+        auto state = player_state_after_completed_action_queue(player, world_t, room);
         get_available_actions_for_entity(e, &state, &actions);
 
         for(int i = 0; i < actions.n; i++) {
@@ -916,7 +918,116 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
                 ui_text(P(ctx), grow_str);
             }
         } break;
-    }    
+    }
+
+    cut_top(window_default_padding, ctx.layout);
+
+
+    // MACHINE //
+    Machine *machine = NULL;
+    if(e && is_machine(e, &machine)) {
+        _TOP_CUT_(120);
+
+        auto surfaces = item_entity_surfaces(e, world_t, room);
+        int num_input_surfaces = 0;
+        int num_output_surfaces = 0;
+        for(int i = 0; i < surfaces.n; i++) {
+            if(surfaces[i].type == SURF_TYPE_MACHINE_INPUT)  num_input_surfaces++;
+            if(surfaces[i].type == SURF_TYPE_MACHINE_OUTPUT) num_output_surfaces++;
+        }
+
+        { _TOP_CUT_(28);
+            if(machine->t_on_recipe_begin + machine->recipe_duration > world_t) {
+                if(machine->recipe_duration > 0)
+                    progress_bar(P(ctx), (world_t - machine->t_on_recipe_begin)/machine->recipe_duration);
+            }
+        }
+        
+        cut_top(window_default_padding, ctx.layout);
+
+        Array<Support, ALLOC_TMP> supports = {0}; // Used multiple times in the loops below.
+
+        
+        // Inputs
+        int k1 = 2;
+        for(int k = 0; k < k1; k++)
+        {
+            int num;
+            Surface_Type wanted_surface_type;
+            switch(k) {
+                case 0: {
+                    num = num_input_surfaces;
+                    wanted_surface_type = SURF_TYPE_MACHINE_INPUT;
+                } break;
+
+                case 1: {
+                    num = num_output_surfaces;
+                    wanted_surface_type = SURF_TYPE_MACHINE_OUTPUT;
+                } break;
+
+                default: Assert(false); break;
+            }
+            
+            { _TOP_CUT_(64);
+                _GRID_(num, 1, window_default_padding);
+            
+                for(int i = 0; i < surfaces.n; i++) {
+                    if(surfaces[i].type != wanted_surface_type) continue;
+                    _CELL_(); _CENTER_SQUARE_();
+
+                    String label = EMPTY_STRING;
+                    String contents_str = EMPTY_STRING;
+                
+                    supports.n = 0;
+                    find_given_supports_by_surface(&surfaces[i], i, e, world_t, room, &supports); // @Speed!
+                    // NOTE: We assume that all input and output surfaces are exclusive (or 1x1) for now,
+                    //       so one surface => one slot.  -EH, 2021-03-16
+                    Assert(supports.n <= 1);
+
+                    if(supports.n) {
+                        auto *supported = supports[0].supported;
+                        Assert(supported && supported->type == ENTITY_ITEM);
+                        update_entity_item(supported, world_t);
+
+                        auto *type = &item_types[supported->item_e.item.type];
+                        label = type->name;
+                        label.length = min(3, label.length);
+
+                        contents_str.length = 0;
+                        switch(type->container_form) {
+                            case FORM_LIQUID: {
+                                auto *lc = &supported->item_e.item.liquid_container;
+                                Liquid_Type lq = liquid_type_of_container(lc);
+                                Assert(lq >= 0 && lq <= LQ_NONE_OR_NUM);
+
+                                auto capacity = liquid_container_capacity(&supported->item_e.item);
+                                
+                                if(lq == LQ_NONE_OR_NUM) contents_str = STRING("EMPTY");
+                                else contents_str = concat_tmp(liquid_names[lq], " (", lc->amount, "/", capacity, ")");
+                            } break;
+                                
+                            case FORM_NUGGET: {
+                                auto *nc = &supported->item_e.item.nugget_container;
+                                Nugget_Type nugget = nugget_type_of_container(nc);
+                                Assert(nugget >= 0 && nugget <= LQ_NONE_OR_NUM);
+                                
+                                if(nugget == NUGGET_NONE_OR_NUM) contents_str = STRING("EMPTY");
+                                else {
+                                    contents_str = concat_tmp(nc->amount, "x ", nugget_names[nugget]);
+                                }
+                            } break;
+                        }
+                    }
+
+                    if(contents_str.length) {
+                        _BOTTOM_(20);
+                        ui_text(PC(ctx, k1 * i + k), contents_str);
+                    }
+                    button(PC(ctx, k1 * i + k), label);
+                }
+            }
+        }
+    }
 }
 
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
@@ -1252,7 +1363,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     // We need to do it here just because we want to have some elements over
     // the world view, and therefore need to build them before it.
     Rect world_view_a     = area(ctx.layout);
-    m4x4 world_projection = world_projection_matrix(world_view_a);
+    m4x4 world_projection = world_projection_matrix(world_view_a.s, room_size_x, room_size_y, room_size_z);
 
     // Over world view
     { _AREA_COPY_();
@@ -1375,17 +1486,20 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         // PLACEMENT //
         
         // position
-        room->placement_tp = tp_from_index(wv->hovered_tile_ix);
+        v3 tp = tp_from_index(wv->hovered_tile_ix);
 
         bool ignore_surfaces = alt_is_down;
+
+        bool use_tp_for_placement_p = true;
         
         Surface hovered_surface;
         if(!ignore_surfaces && get(wv->hovered_surface, &hovered_surface)) {
             if(hovered_surface.flags & SURF_CENTERING) {
-                room->placement_tp   = hovered_surface.p + V3(hovered_surface.s) * .5;
-            } else {
-                room->placement_tp   = tp_from_p(wv->hovered_surface_hit_p);
-                room->placement_tp.z = wv->hovered_surface_hit_p.z;
+                room->placement_p   = hovered_surface.p + V3(hovered_surface.s) * .5;
+                use_tp_for_placement_p = false;
+            } else { 
+                tp   = tp_from_p(wv->hovered_surface_hit_p);
+                tp.z = wv->hovered_surface_hit_p.z;
             }
         }
 
@@ -1407,6 +1521,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }
         else item_to_place = get_selected_inventory_item(user);
+
+        
+        if(use_tp_for_placement_p) {
+            if(item_to_place) room->placement_p = item_entity_p_from_tp(tp, item_to_place, room->placement_q);
+            else              room->placement_p = tp;
+        }
+
     
         if(item_to_place) {
 
@@ -1414,17 +1535,17 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
             if(wv->click_state & CLICKED_ENABLED)
             {
-                v3 tp = room->placement_tp;
+                v3   p = room->placement_p;
                 Quat q = room->placement_q;
 
                 // @Norelease: @Robustness For PUT_DOWN we should do entity_action_predicted_possible() instead of can_place_item_entity_at_tp().
-                if (can_place_item_entity_at_tp(item_to_place, tp, q, world_t, room))
+                if (can_place_item_entity(item_to_place, p, q, world_t, room))
                 {
                     if(room->placing_held_item) {
                         Player_Action action = {0};
                         action.type = PLAYER_ACT_PUT_DOWN;
-                        action.put_down.tp = tp;
-                        action.put_down.q  = q;
+                        action.put_down.p = p;
+                        action.put_down.q = q;
 
                         request(&action, client);
                         
@@ -1432,12 +1553,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         Player_Action action = {0};
                         action.type = PLAYER_ACT_PLACE_FROM_INVENTORY;
                         action.place_from_inventory.item = item_to_place->id;
-                        action.place_from_inventory.tp   = tp;
-                        action.place_from_inventory.q    = q;
+                        action.place_from_inventory.p = p;
+                        action.place_from_inventory.q = q;
                 
                         request(&action, client);
 
-                        Entity preview_entity = create_preview_item_entity(item_to_place, tp, q, world_t);
+                        Entity preview_entity = create_preview_item_entity(item_to_place, p, q, world_t);
 
                         // NOTE: We add a preview entity and remove the placed item locally, before
                         //       we know if the operation succeeds.

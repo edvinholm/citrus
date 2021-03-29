@@ -25,10 +25,14 @@ enum Tweak_ID {
     TWEAK_STARTUP_USER,
     TWEAK_STARTUP_ROOM,
     TWEAK_SHOW_WINDOW_SIZES,
+
+    TWEAK_SHOW_ENTITY_POSITIONS,
     TWEAK_SHOW_ENTITY_ACTION_POSITIONS,
     TWEAK_SHOW_PLAYER_ENTITY_PARTS,
     TWEAK_SHOW_ENTITY_FORWARD_VECTORS,
+    
     TWEAK_SHOW_ENTITY_BOUNDING_BOXES,
+    TWEAK_HIDE_ENTITY_MESHES,
 
     TWEAK_RUN_PROFILER,
     TWEAK_SHOW_PROFILER,
@@ -37,6 +41,11 @@ enum Tweak_ID {
     TWEAK_CAMERA_ROTATION_OFFSET,
     TWEAK_CAMERA_TRANSLATION_OFFSET,
     TWEAK_CAMERA_SCALE_MULTIPLIER,
+
+    TWEAK_SHOW_WORLD_GRID,
+
+    TWEAK_SHOW_TEXTURE_VIEWER,
+    TWEAK_TEXTURE_VIEWER_SCALE,
     //
 
     TWEAK_NONE_OR_NUM
@@ -80,10 +89,14 @@ struct Tweaks
         { "startup_user",            TWEAK_TYPE_UINT, 1 },
         { "startup_room",            TWEAK_TYPE_UINT, 1 },
         { "show_window_sizes",       TWEAK_TYPE_BOOL, 1 },
+
+        { "show_entity_positions",        TWEAK_TYPE_BOOL, 1 },
         { "show_entity_action_positions", TWEAK_TYPE_BOOL, 1 },
         { "show_player_entity_parts",     TWEAK_TYPE_BOOL, 1 },
         { "show_entity_forward_vectors",  TWEAK_TYPE_BOOL, 1 },
+        
         { "show_entity_bounding_boxes",  TWEAK_TYPE_BOOL, 1 },
+        { "hide_entity_meshes",          TWEAK_TYPE_BOOL, 1 },
         
         { "run_profiler",            TWEAK_TYPE_BOOL,  1 },
         { "show_profiler",           TWEAK_TYPE_BOOL,  1 },
@@ -91,7 +104,12 @@ struct Tweaks
 
         { "camera_rotation_offset",    TWEAK_TYPE_FLOAT, 3 },
         { "camera_translation_offset", TWEAK_TYPE_FLOAT, 2 },
-        { "camera_scale_multiplier",   TWEAK_TYPE_FLOAT, 1 }
+        { "camera_scale_multiplier",   TWEAK_TYPE_FLOAT, 1 },
+        
+        { "show_world_grid", TWEAK_TYPE_BOOL, 1 },
+        
+        { "show_texture_viewer",  TWEAK_TYPE_BOOL,  1 },
+        { "texture_viewer_scale", TWEAK_TYPE_FLOAT, 1 }
         //
     };
     static_assert(ARRLEN(infos) == TWEAK_NONE_OR_NUM);

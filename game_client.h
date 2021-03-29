@@ -42,7 +42,7 @@ namespace Client_Game
         // we would want to have multiple sets of these.       -EH, 2021-03-10
         Entity_ID selected_entity;
         
-        v3      placement_tp; // If we for example have a selected inventory item, this is where we would try to put it.
+        v3      placement_p; // If we for example have a selected inventory item, this is where we would try to put it.
         Quat    placement_q;
         bool    placing_held_item;
         //-------------

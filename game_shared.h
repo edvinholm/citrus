@@ -30,6 +30,7 @@ enum Item_Type_ID
     ITEM_FRUIT,
     ITEM_BOX,
     ITEM_FILTER_PRESS,
+    ITEM_STOVE,
 
     ITEM_NONE_OR_NUM
 };
@@ -113,7 +114,8 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), FORM_NONE_OR_NUM },
 
     { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), FORM_NUGGET },
-    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), FORM_NONE_OR_NUM }
+    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), FORM_NONE_OR_NUM },
+    { {2, 2, 2}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), FORM_NONE_OR_NUM }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -299,13 +301,13 @@ struct Player_Action
         } entity;
 
         struct {
-            v3 tp;
+            v3 p;
             Quat q;
         } put_down;
 
         struct {
             Item_ID item;
-            v3 tp;
+            v3 p;
             Quat q;
         } place_from_inventory;
     };

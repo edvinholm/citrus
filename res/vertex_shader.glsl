@@ -3,10 +3,9 @@
 
 #define DEBUG_NORMALS 0
 
-//TODO @Speed: Combine matrices on CPU?
 uniform mat4 projection;
 uniform mat4 transform;
-//--
+
 uniform vec4 color_multiplier;
 uniform bool mode_2d;
 
@@ -22,6 +21,7 @@ out vec3 fragment_position;
 out vec3 fragment_world_position;
 out vec4 fragment_color;
 out float fragment_texture;
+out float fragment_light_factor;
 
 
 const vec3 sun = vec3(-0.196, -0.588, 0.784);
@@ -38,7 +38,8 @@ void main() {
 
     fragment_color = color * color_multiplier;
     vec3 light_source = (mode_2d) ? light_2d : sun;
-    fragment_color.xyz *= (0.5f + min(0.5f, 0.65f * dot(world_normal.xyz, light_source)));
+    float light_factor = (0.5f + min(0.5f, 0.65f * dot(world_normal.xyz, light_source)));
+    fragment_color.xyz *= light_factor;
 
 #if DEBUG_NORMALS
     if(!mode_2d) {
@@ -56,5 +57,6 @@ void main() {
     fragment_world_position = world_position.xyz;
 
     fragment_texture = texture;
+    fragment_light_factor = light_factor;
 }
 

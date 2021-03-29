@@ -1,6 +1,7 @@
 
 // BASIC COLORS //
 const v4 C_WHITE   = { 1, 1, 1, 1 };
+const v4 C_GRAY    = { .5, .5, .5, 1 };
 const v4 C_BLACK   = { 0, 0, 0, 1 };
 
 const v4 C_RED     = { 1, 0, 0, 1 };

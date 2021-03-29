@@ -19,6 +19,7 @@ struct Vertex_Shader
 {
     GPU_Uniform_ID projection_uniform;
     GPU_Uniform_ID transform_uniform;
+    
     GPU_Uniform_ID mode_2d_uniform;
     GPU_Uniform_ID color_multiplier_uniform;
 
@@ -51,5 +52,10 @@ struct Fragment_Shader
     GPU_Uniform_ID texture_3_uniform;
     GPU_Uniform_ID texture_4_uniform;
 
+    GPU_Uniform_ID lightbox_center_uniform;
+    GPU_Uniform_ID lightbox_radiuses_uniform;
+    GPU_Uniform_ID lightbox_color_uniform;
+
+    GPU_Uniform_ID do_edge_detection_uniform;
 };
 

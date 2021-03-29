@@ -103,6 +103,8 @@ using namespace Client_Market;
 #include "pathfinding_shared.cpp"
 
 
+#include "machine_shared.cpp"
+
 
 #include "ui_dev_client.h"
 
@@ -139,4 +141,6 @@ using namespace Client_Market;
 #include "ui_dev_client.cpp"
 #endif
 
+#include "client_draw.h"
+#include "previews.cpp"
 #include "client_draw.cpp"

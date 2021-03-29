@@ -666,12 +666,14 @@ bool platform_sync_filesystem(bool load)
 
 String platform_get_resource_directory()
 {
-    return STRING("res/");
+    auto result = STRING("res/");
+    return result;
 }
 
 String platform_get_user_directory()
 {
-    return STRING("usr/");
+    auto result = STRING("usr/");
+    return result;
 }
 
 String platform_get_working_directory(Allocator_ID allocator)

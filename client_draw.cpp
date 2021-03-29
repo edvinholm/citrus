@@ -1,4 +1,6 @@
 
+
+
 // @Cleanup
 int fps = 0;
 int frames_this_second = 0;
@@ -32,7 +34,7 @@ bool update_gpu_resources(Graphics *gfx)
     //
    
     // UPDATE OR CREATE DEPTH BUFFER TEXTURE //
-    if(!gpu_update_or_create_multisample_depth_buffer_texture(&gfx->depth_buffer_texture, (u64)gfx->frame_s.w, (u64)gfx->frame_s.h, num_samples, &gpu_error)) {
+    if(!gpu_update_or_create_multisample_depth_buffer_texture(&gfx->depth_buffer, (u64)gfx->frame_s.w, (u64)gfx->frame_s.h, num_samples, &gpu_error)) {
         Debug_Print("Failed to create depth_buffer texture.\n");
         Assert(false);
         return false;
@@ -40,8 +42,8 @@ bool update_gpu_resources(Graphics *gfx)
     //
     
     // UPDATE MULTISAMPLE FRAMEBUFFER //
-    //NOTE: @Cleanup: We only need to attach the texture to the framebuffer once. Not every time we update the texture properties...
-    gpu_update_framebuffer(gfx->framebuffer, gfx->multisample_texture, true, gfx->depth_buffer_texture);
+    //NOTE: @Cleanup: @Speed: We only need to attach the texture to the framebuffer once. Not every time we update the texture properties...
+    gpu_update_framebuffer(gfx->framebuffer, true, gfx->multisample_texture, gfx->depth_buffer);
     //
 
     return true;
@@ -89,7 +91,10 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 
     gfx->z_for_2d = 1;
     eat_z_for_2d(gfx); // So we don't draw the first thing at 1, which is the clear value.
+
     
+    gpu_set_target_framebuffer(gfx->framebuffer);
+        
 
     #if DEBUG
     gfx->debug.num_draw_calls = 0;
@@ -150,7 +155,8 @@ bool init_graphics(Window *window, Graphics *gfx)
     if(!gpu_compile_shaders(vertex_shader_code, fragment_shader_code, &gfx->gpu_ctx))
     {   
         Debug_Print("Failed to compile shaders.\n");
-        Assert(false);
+        bool shader_compilation_success = false;
+        Assert(shader_compilation_success);
         return false;
     }
     else {
@@ -167,6 +173,25 @@ bool init_graphics(Window *window, Graphics *gfx)
     // Create multisample framebuffer
     gpu_create_framebuffers(1, &gfx->framebuffer);
 
+
+    // Create Previews Framebuffer (And its color and depth attachments)
+    {
+        GPU_Texture_Parameters params;
+        v2s s = { previews_texture_size, previews_texture_size };
+        gfx->textures.ids   [TEX_PREVIEWS] = create_texture_on_gpu(s.w, s.h, NULL, 1, false, &params);
+        gfx->textures.sizes [TEX_PREVIEWS] = s;
+        gfx->textures.exists[TEX_PREVIEWS] = true;
+        gfx->textures.params[TEX_PREVIEWS] = params;
+
+        gfx->previews_depth_buffer = create_texture_on_gpu(s.w, s.h, NULL, 1, true, &params);
+        
+        gpu_create_framebuffers(1, &gfx->previews_framebuffer);
+        gpu_update_framebuffer(gfx->previews_framebuffer, false, gfx->textures.ids[TEX_PREVIEWS], gfx->previews_depth_buffer);
+        
+    }
+    // --
+    
+    
     // Init World_Graphics
     gfx->world.static_opaque_vao = create_vao();
     //--
@@ -189,8 +214,11 @@ void config_gpu_for_ui(Graphics *gfx)
 
     gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+    
     gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    true);
     gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
+
+    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
 
     gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
 }
@@ -204,6 +232,9 @@ void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
     gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
     gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    false);
     gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
+    
+    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
+
 }
 
 
@@ -444,7 +475,6 @@ void draw_ui_nugget_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 }
 
 
-
 void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
     Assert(e->type == UI_INVENTORY_SLOT);
@@ -453,20 +483,7 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     _OPAQUE_UI_();
 
     v4 background = { 0.24, 0.30, 0.38, 1 };
-    
-    String label = EMPTY_STRING;    
-    if(slot.item_type != ITEM_NONE_OR_NUM) {
-        Item_Type *type = &item_types[slot.item_type];
-        label = type->name;
-        Assert(label.length > 0);
-        label.length = min(3, label.length);
 
-        background = type->color;
-        adjust_saturation(&background, 0.8f);
-        adjust_brightness(&background, 0.8f);
-    }
-
-    
     _draw_button(slot.a, slot.click_state, gfx, background,
                  slot.enabled, slot.selected);
 
@@ -475,9 +492,11 @@ void draw_inventory_slot(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     if(slot.fill > 0) {
         draw_quad(fill_p0, -V3_Y * a.h * slot.fill, V3_X * a.w, { 0.03, 0.8, 0.6, 1 }, gfx);
     }
-    
-    _draw_button_label(label, slot.a, gfx);
 
+    if(slot.item_type != ITEM_NONE_OR_NUM) {
+        draw_item_preview(slot.item_type, slot.a, gfx);
+    }
+    
     if(slot.slot_flags & INV_SLOT_RESERVED) {
         draw_rect(bottom_right_of(shrunken(slot.a, 2), 10, 10), { 1, 1, 1, 1 }, gfx);
     }
@@ -840,10 +859,26 @@ void draw_graph(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     
 }
 
+void draw_progress_bar(UI_Element *e, Graphics *gfx)
+{
+    _OPAQUE_UI_();
+
+    Assert(e->type == PROGRESS_BAR);
+    auto *bar = &e->progress_bar;
+    auto a = bar->a;
+
+    draw_rect(a, C_BLACK, gfx);
+    a = shrunken(a, 2);
+    draw_rect(a, C_GRAY, gfx);
+    a = shrunken(a, 2);
+    draw_rect(left_of(a, a.w * clamp(bar->fill_factor)), C_BLACK, gfx);
+}
+
+
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
     if(tp.x >= 0 && tp.x <= room_size_x - 1 && 
        tp.y >= 0 && tp.y <= room_size_y - 1)
@@ -863,7 +898,7 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Quat placement_q, dou
                 can_be_placed = false;
             }
             
-            Entity preview_entity = create_preview_item_entity(item_to_place, tp, q, world_t);
+            Entity preview_entity = create_preview_item_entity(item_to_place, placement_p, q, world_t);
             draw_entity(&preview_entity, world_t, room, client, gfx, false, /*cannot_be_placed = */!can_be_placed);
 
             Assert(preview_entity.type == ENTITY_ITEM);
@@ -921,10 +956,14 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
     draw_rect(wv->a, { 0.17, 0.15, 0.14, 1 }, gfx);
 
     // PROJECTION MATRIX //
-    m4x4 projection = world_projection_matrix(wv->a, -0.1 + gfx->z_for_2d);
+    Rect viewport = wv->a;
+    m4x4 projection         = world_projection_matrix(viewport.s, room_size_x, room_size_y, room_size_z, -0.1 + gfx->z_for_2d);
+    m4x4 projection_inverse = inverse_of(projection);
 
     { Scoped_Push(gfx->draw_mode, DRAW_3D);
-
+        
+        gfx->camera_dir = screen_point_to_ray(center_of(viewport), viewport, projection_inverse).dir; // For our orthographic perspective, this point doesn't matter.
+        
         Item *item_to_place = NULL;
         
         if(in_array(input->keys, VKEY_CONTROL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
@@ -961,10 +1000,10 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
         if(wv->hovered_entity == NO_ENTITY || item_to_place != NULL)
         {
             v3 hovered_tp;
-            if(item_to_place) hovered_tp = room->placement_tp;
+            if(item_to_place) hovered_tp = tp_from_p(room->placement_p);
             else              hovered_tp = tp_from_index(wv->hovered_tile_ix);
 
-            draw_tile_hover_indicator(hovered_tp, item_to_place, room->placement_q, world_t, room, input, client, gfx);
+            draw_tile_hover_indicator(hovered_tp, item_to_place, room->placement_p, room->placement_q, world_t, room, input, client, gfx);
         }
     }
 
@@ -1031,6 +1070,7 @@ DWORD render_loop(void *loop_)
         bool world_view_exists = false;
         UI_World_View world_view;
         m4x4 world_projection;
+
     
         lock_mutex(client->mutex);
         {
@@ -1080,7 +1120,8 @@ DWORD render_loop(void *loop_)
                         case SLIDER:   draw_slider(e, &gfx);      break;
                         case DROPDOWN: draw_dropdown(e, &gfx);    break;
 
-                        case GRAPH: draw_graph(e, ui, &gfx); break;
+                        case GRAPH:        draw_graph(e, ui, &gfx); break;
+                        case PROGRESS_BAR: draw_progress_bar(e, &gfx); break;
 
                         case UI_LIQUID_CONTAINER: draw_ui_liquid_container(e, ui, &gfx); break;
                         case UI_NUGGET_CONTAINER: draw_ui_nugget_container(e, ui, &gfx); break;
@@ -1126,6 +1167,33 @@ DWORD render_loop(void *loop_)
                 }
             }
 
+            auto &graphics = gfx; // @Hack @Stupid @Cleanup
+            {
+                auto *gfx = &graphics;
+   
+#if DEVELOPER
+                // TEXTURE VIEWER //
+                if(tweak_bool(TWEAK_SHOW_TEXTURE_VIEWER))
+                { _TRANSLUCENT_UI_();
+
+                    // @Volatile: We assume _TRANSLUCENT_UI_() uses this buffer.
+                    auto *buffer = &gfx->ui_render_buffer.translucent;
+                    auto *obj    = &buffer->current_vertex_object;
+
+                    Texture_ID texture = TEX_PREVIEWS;
+                    auto s = gfx->textures.sizes[texture];
+
+                    auto scale = tweak_float(TWEAK_TEXTURE_VIEWER_SCALE);
+                    if(scale <= 0) scale = 1.0f;
+                    
+                    Rect aa = bottom_left_of({ V2_ZERO, gfx->frame_s }, s.w * scale, s.h * scale);
+                
+                    draw_rect(aa, C_GRAY, gfx);
+                    draw_rect(aa, C_WHITE, gfx, 0, NULL, texture);
+                }      
+#endif          
+            }
+
             if(second != last_second) {
                 fps = frames_this_second;
                 frames_this_second = 0;
@@ -1149,7 +1217,12 @@ DWORD render_loop(void *loop_)
             update_sprite_map_texture_if_needed(&gfx.glyph_maps[i], &gfx);
         }
 
+        // UPDATE PREVIEWS //
+        // @Norelease: @SpeedGpu: Do this on startup.
+        update_previews(&gfx);
+
         gpu_disable_scissor();
+        gpu_set_target_framebuffer(gfx.framebuffer);
         
         for(int i = 0; i < dirty_rects.n; i++)
         {
@@ -1202,8 +1275,6 @@ DWORD render_loop(void *loop_)
                 
             }
             gpu_disable_scissor();
-
-
         }
         
 

@@ -630,9 +630,23 @@ void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float
     ui_set(e, &graph->a, a);
     ui_set(e, &graph->data, data, ctx.manager);
     ui_set(e, &graph->y_min, y_min);
-    ui_set(e, &graph->y_max, y_max);
-    
+    ui_set(e, &graph->y_max, y_max);    
 }
+
+void progress_bar(UI_Context ctx, float fill_factor)
+{
+    U(ctx);
+    
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), PROGRESS_BAR, ctx.manager);
+
+    Rect a = area(ctx.layout);
+
+    auto *bar = &e->progress_bar;
+    ui_set(e, &bar->a, a);
+    ui_set(e, &bar->fill_factor, fill_factor);
+}
+
+
 
 void ui_liquid_container(UI_Context ctx, Liquid_Container *lc, Liquid_Amount capacity)
 {
@@ -1691,7 +1705,7 @@ UI_World_View *world_view(UI_Context ctx)
 
     e->needs_redraw = true;
 
-    view->camera.projection = world_projection_matrix(view->a);
+    view->camera.projection = world_projection_matrix(view->a.s, room_size_x, room_size_y, room_size_z);
     view->camera.projection_inverse = inverse_of(view->camera.projection);
 
     return view;
@@ -1933,14 +1947,15 @@ Rect ui_element_rect(UI_Element *e)
         case UI_TEXT:   return e->text.a;
 
         case UI_LIQUID_CONTAINER: return e->liquid_container.a;
-		case UI_NUGGET_CONTAINER: return e->nugget_container.a;
+        case UI_NUGGET_CONTAINER: return e->nugget_container.a;
         case UI_INVENTORY_SLOT: return e->inventory_slot.a;
 
         case WORLD_VIEW: return e->world_view.a;
 
         case UI_CHESS_BOARD: return e->chess_board.a;
 
-        case GRAPH: return e->graph.a;
+        case GRAPH:        return e->graph.a;
+        case PROGRESS_BAR: return e->progress_bar.a;
 
 #if DEBUG
         case UI_PROFILER: return e->profiler.a;

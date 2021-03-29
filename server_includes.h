@@ -38,6 +38,7 @@ using namespace Server_Market;
 
 //--
 #include "chess.cpp"
+
 //--
 
 #include "user_shared.cpp"
@@ -66,7 +67,8 @@ using namespace Server_Market;
 
 #include "net_server.cpp"
 
-#include "machines.cpp"
+#include "machine_shared.cpp"
+#include "machine.cpp"
 
 #include "market_server.cpp"
 #include "room_server.cpp"

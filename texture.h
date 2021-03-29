@@ -17,32 +17,27 @@ enum Texture_ID
     TEX_FONT_TITLE,
     TEX_FONT_BODY,
     TEX_FONT_INPUT,
+
+    TEX_PREVIEWS,
     
     TEX_NONE_OR_NUM
 };
 
-// @Jai
-String texture_name(Texture_ID texture_id)
-{
-    switch(texture_id)
-    {
-        case TEX_FONT_TITLE:  return STRING("FONT_TITLE"); break;
-        case TEX_FONT_BODY:   return STRING("FONT_BODY");  break;
-        case TEX_FONT_INPUT:  return STRING("FONT_INPUT"); break;
-            
-        case TEX_NONE_OR_NUM:
-            Assert(false);
-            return EMPTY_STRING;
-    }
-
-    //Assert(false);
-    return STRING("UNKNOWN TEXTURE");
-}
+String texture_names[] = {
+    STRING("FONT_TITLE"),
+    STRING("FONT_BODY"),
+    STRING("FONT_INPUT"),
+    
+    STRING("PREVIEWS"),
+};
+static_assert(ARRLEN(texture_names) == TEX_NONE_OR_NUM);
 
 const char *texture_filenames[] = {
     NULL, // Font
     NULL, // Font
-    NULL // Font
+    NULL, // Font
+
+    NULL // Previews
 };
 static_assert(ARRLEN(texture_filenames) == TEX_NONE_OR_NUM);
 

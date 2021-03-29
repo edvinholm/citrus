@@ -62,7 +62,6 @@ v3 V3(float x, float y, float z)
 }
 
 
-inline
 v3 V3(v2 v, float z = 0.0f)
 { 
     v3 Result;
@@ -72,14 +71,17 @@ v3 V3(v2 v, float z = 0.0f)
     return Result;
 }
 
-inline
 bool operator == (v3 u, v3 v)
 {
     return floats_equal(u.x, v.x) && floats_equal(u.y, v.y) && floats_equal(u.z, v.z);
 }
 
+bool operator != (v3 u, v3 v)
+{
+    return !(u == v);
+}
 
-inline
+
 v3 cross(v3 a, v3 b)
 {
     v3 result;
@@ -89,14 +91,12 @@ v3 cross(v3 a, v3 b)
     return result;
 }
 
-inline
 float dot(v3 a, v3 b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 
-inline
 v3 operator - (v3 u, v3 v)
 {
     return V3(u.x - v.x, u.y - v.y, u.z - v.z);

@@ -117,6 +117,7 @@ enum UI_Element_Type
     UI_TEXT,
 
     GRAPH,
+    PROGRESS_BAR,
     
     UI_INVENTORY_SLOT,
     UI_LIQUID_CONTAINER,
@@ -214,6 +215,12 @@ struct UI_Graph
 
     float y_min;
     float y_max;
+};
+
+struct UI_Progress_Bar
+{
+    Rect a;
+    float fill_factor;
 };
 
 
@@ -374,6 +381,7 @@ struct UI_Element
         UI_Dropdown  dropdown;
 
         UI_Graph graph;
+        UI_Progress_Bar progress_bar;
 
         UI_Liquid_Container liquid_container;
         UI_Nugget_Container nugget_container;

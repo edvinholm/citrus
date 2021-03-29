@@ -2,7 +2,8 @@
 enum Surface_Flag_
 {
     SURF_EXCLUSIVE = 0x01,
-    SURF_CENTERING = 0x02 // Items are centered on this surface.
+    SURF_CENTERING = 0x02, // Items are centered on this surface.
+    SURF_HAS_SPECIFIED_PICKUP_POSITION = 0x04, // (Also for PUT_DOWN). If this is set, Surface.pickup_position is valid, and that position should be used instead of the default action positions for a PICK_UP or PUT_DOWN of an object on this surface.
 };
 
 typedef u8 Surface_Flags;
@@ -37,6 +38,8 @@ struct Surface
     
     Surface_Flags flags;
     Surface_Type  type;
+
+    v3 pickup_position; // See comment for SURF_HAS_SPECIFIED_PICKUP_POSITION
 
     Surface_Owner_Specifics owner_specifics;
 };

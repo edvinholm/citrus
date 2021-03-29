@@ -247,6 +247,8 @@ Rect slide_right(float w, Layout_Manager *manager)
 #define _RIGHT_SQUARE_() \
     _AREA_(right_square_of(area(ctx.layout)));
 
+#define _CENTER_SQUARE_() \
+    _AREA_(center_square_of(area(ctx.layout)));
 
 
 inline

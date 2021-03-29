@@ -95,6 +95,7 @@ Mesh_ID mesh_for_entity(Entity *e)
         case ITEM_TABLE:        return MESH_TABLE;
         case ITEM_BARREL:       return MESH_BARREL;
         case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
+        case ITEM_STOVE:        return MESH_STOVE;
 
         default: return MESH_NONE_OR_NUM;
     }
@@ -201,17 +202,11 @@ bool raycast_against_floor(Ray ray, v3 *_hit)
     return true;
 }
 
-m4x4 world_projection_matrix(Rect viewport, float z_offset/* = 0*/)
+m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float room_sz, float z_offset/* = 0*/)
 {
     float x_mul, y_mul;
-    if(viewport.w < viewport.h) {
-        x_mul = 1;
-        y_mul = 1.0f/(viewport.h / max(0.0001f, viewport.w));
-    }
-    else {
-        y_mul = 1;
-        x_mul = 1.0f/(viewport.w / max(0.0001f, viewport.h));
-    }
+    x_mul = 1;
+    y_mul = 1.0f/(viewport_s.h / max(0.0001f, viewport_s.w));
 
     // TODO @Speed: @Cleanup: Combine matrices
 
@@ -227,33 +222,57 @@ m4x4 world_projection_matrix(Rect viewport, float z_offset/* = 0*/)
     float dx = -cam_trans_offs.x * x_mul;
     float dy = -cam_trans_offs.y * y_mul;
 
-    m4x4 world_projection = make_m4x4(
+    m4x4 m = make_m4x4(
         x_mul, 0, 0, dx,
         0, y_mul, 0, dy,
         0, 0, z_mul, z_offset,
         0, 0, 0, 1);
-    
+
     v3 cam_rot_offs = tweak_v3(TWEAK_CAMERA_ROTATION_OFFSET);
 
     m4x4 rotation = rotation_matrix(axis_rotation(V3_X, TAU * (-0.125 + cam_rot_offs.x / 360.0 )));
-    world_projection = matmul(rotation, world_projection);
+    m = matmul(rotation, m);
 
     rotation = rotation_matrix(axis_rotation(V3_Y, TAU * (0 + cam_rot_offs.y / 360.0)));
-    world_projection = matmul(rotation, world_projection);
+    m = matmul(rotation, m);
     
     rotation = rotation_matrix(axis_rotation(V3_Z, TAU * (0.125 + cam_rot_offs.z / 360.0)));
-    world_projection = matmul(rotation, world_projection);
-    
+    m = matmul(rotation, m);
 
-    float diagonal_length = sqrt(room_size_x * room_size_x + room_size_y * room_size_y);
+    float height;
+    float scale_f = 1.0f;
+    {
+        v3 p1 = V3_ZERO;
+        v3 p2 = { 0,       room_sy, 0 };
+        v3 p3 = { room_sx,       0, 0 };
+        v3 p4 = { room_sx, room_sy, 0 };
         
-    m4x4 scale = scale_matrix(V3_ONE * (2.0 / diagonal_length));
-    world_projection = matmul(scale, world_projection);
+        v3 p5 = p4;
+        p5.z += room_sz;
 
-    m4x4 translation = translation_matrix({-(float)room_size_x/2.0, -(float)room_size_y/2.0, 0});
-    world_projection = matmul(translation, world_projection);
+        p1 = vecmatmul(p1, m);
+        p2 = vecmatmul(p2, m);
+        p3 = vecmatmul(p3, m);
+        p4 = vecmatmul(p4, m);
+        p5 = vecmatmul(p5, m);
 
-    return world_projection;
+        float min_x = min(min(min(min(p1.x, p2.x), p3.x), p4.x), p5.x);
+        float max_x = max(max(max(max(p1.x, p2.x), p3.x), p4.x), p5.x);
+        
+        float min_y = min(min(min(min(p1.y, p2.y), p3.y), p4.y), p5.y);
+        float max_y = max(max(max(max(p1.y, p2.y), p3.y), p4.y), p5.y);
+
+        height = (max_y - min_y);
+        scale_f = min(2.0 / (max_x-min_x), 2.0 / height);
+    }
+    
+    m4x4 scale = scale_matrix(V3_ONE * scale_f);
+    m = matmul(scale, m);
+
+    m4x4 translation = translation_matrix({-room_sx/2.0f, -room_sy/2.0f, -room_sz/2.0f});
+    m = matmul(translation, m);
+    
+    return m;
 }
 
 
@@ -286,17 +305,20 @@ v2 world_to_screen_space(v3 p, Rect viewport, m4x4 projection)
     return result;
 }
 
-
-// NOTE: tp is tile position.
-Entity create_preview_item_entity(Item *item, v3 tp, Quat q, double world_t)
+Entity create_preview_item_entity(Item *item, v3 p, Quat q, double world_t)
 {
-    v3 p = item_entity_p_from_tp(tp, item, q);
-    
     Entity e = {0};
     *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, world_t);
 
     e.is_preview = true;
     return e;
+}
+
+// NOTE: tp is tile position.
+Entity create_preview_item_entity_at_tp(Item *item, v3 tp, Quat q, double world_t)
+{
+    v3 p = item_entity_p_from_tp(tp, item, q);
+    return create_preview_item_entity(item, p, q, world_t);
 }
 
 void remove_preview_entities(Room *room)

@@ -86,6 +86,9 @@ gl_uniform_matrix_4fv glUniformMatrix4fv;
 typedef void (*gl_uniform_4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 gl_uniform_4f glUniform4f;
 
+typedef void (*gl_uniform_3f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
+gl_uniform_3f glUniform3f;
+
 typedef void (*gl_use_program)(GLuint program);
 gl_use_program glUseProgram;
 
@@ -152,6 +155,9 @@ gl_tex_image_2d_multisample glTexImage2DMultisample;
 typedef void (*gl_framebuffer_texture_2d)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 gl_framebuffer_texture_2d glFramebufferTexture2D;
 
+typedef void (*gl_debug_message_callback)(DEBUGPROC callback, const void * userParam);
+gl_debug_message_callback glDebugMessageCallback;
+
 #if 0
 typedef void (*gl_blit_named_framebuffer)(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
 gl_blit_named_framebuffer glBlitNamedFramebuffer;
@@ -212,6 +218,7 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_get_attrib_location, glGetAttribLocation);
     TRY_LOAD_GL_EXT(gl_uniform_matrix_4fv, glUniformMatrix4fv);
     TRY_LOAD_GL_EXT(gl_uniform_4f, glUniform4f);
+    TRY_LOAD_GL_EXT(gl_uniform_3f, glUniform3f);
     TRY_LOAD_GL_EXT(gl_use_program, glUseProgram);
     TRY_LOAD_GL_EXT(gl_vertex_attrib_pointer, glVertexAttribPointer);
     TRY_LOAD_GL_EXT(gl_vertex_attrib_i_pointer, glVertexAttribIPointer);
@@ -231,6 +238,8 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_delete_renderbuffers, glDeleteRenderbuffers);
     TRY_LOAD_GL_EXT(gl_tex_image_2d_multisample, glTexImage2DMultisample);
     TRY_LOAD_GL_EXT(gl_framebuffer_texture_2d, glFramebufferTexture2D);
+    
+    TRY_LOAD_GL_EXT(gl_debug_message_callback, glDebugMessageCallback);
 
     #if 0
     TRY_LOAD_GL_EXT(gl_blit_named_framebuffer, glBlitNamedFramebuffer);

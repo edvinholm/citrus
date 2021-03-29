@@ -880,15 +880,19 @@ Entity *add_entity(Entity *entity, Room *room)
     return dest;
 }
 
-void do_create_item_entity_at_tp(Item *item, v3 tp, Quat q, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
+void do_create_item_entity(Item *item, v3 p, Quat q, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
 {
-    v3 p = item_entity_p_from_tp(tp, item, q);
-                            
     Entity e = {0};
     *static_cast<S__Entity *>(&e) = create_item_entity(item, p, q, room->t);
     Entity *e_added = add_entity(&e, room);
 
     post_item_entity_move(e_added, NULL, 0, supporters, num_supporters, room ,server);
+}
+
+void do_create_item_entity_at_tp(Item *item, v3 tp, Quat q, Entity **supporters, int num_supporters, Room *room, Room_Server *server)
+{
+    v3 p = item_entity_p_from_tp(tp, item, q);
+    do_create_item_entity(item, p, q, supporters, num_supporters, room, server);
 }
 
 bool place_item_entity_at_tp_if_possible(Item *item, v3 tp, Quat q, Room *room, Room_Server *server)
@@ -1109,9 +1113,11 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
 
                     if(sit->unsit) {
                         Assert(player->player_e.sitting_on == target->id);
+                        unlock_item_entity(target, player->id, room);
                         player->player_e.sitting_on = NO_ENTITY;
                     } else {
                         Assert(player->player_e.sitting_on != target->id);
+                        lock_item_entity(target, player->id);
                         player->player_e.sitting_on = target->id;
                     }
 
@@ -1143,7 +1149,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
             Assert(held->type == ENTITY_ITEM);
 
             Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
-            v3 p = item_entity_p_from_tp(x->tp, &held->item_e.item, q);            
+            v3   p = x->p; // @Norelease: @Security: Check that this is a valid position (snap to grid? Center on surface? etc)
             Assert(item_entity_can_be_at(held, p, q, room->t, room));
             
             //--
@@ -1540,11 +1546,11 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             // @Hack: We don't want to enqueue PLACE_FROM_INVENTORY. It's an instant action.
             if(player_action->type == PLAYER_ACT_PLACE_FROM_INVENTORY)
             {
-                auto *p = &player_action->place_from_inventory;
+                auto *x = &player_action->place_from_inventory;
 
-                Item_ID item_id = p->item;
-                v3   tp = p->tp;
-                Quat q  = p->q; // @Norelease: @Security: Snap to 90 degrees
+                Item_ID item_id = x->item;
+                v3   p = x->p;
+                Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
                 
                 // IMPORTANT: If we fail to do the transaction, we still want to send a ROOM_UPDATE.
                 //            This is so the game client can know when to for example remove preview entities.
@@ -1565,7 +1571,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     
                     // Check if we can commit //
                     if(can_commit) {
-                        can_commit = can_place_item_entity_at_tp(&item, tp, q, room->t, room, &supporters);
+                        can_commit = can_place_item_entity(&item, p, q, room->t, room, &supporters);
                     }
 
                     if(can_commit)
@@ -1577,7 +1583,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                             //             return on error, but instead retry until it succeeds (See comment for the proc.)
                         }
 
-                        do_create_item_entity_at_tp(&item, tp, q, supporters.e, supporters.n, room, server);
+                        do_create_item_entity(&item, p, q, supporters.e, supporters.n, room, server);
                         
                     }
                     else {
