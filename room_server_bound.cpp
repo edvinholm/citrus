@@ -34,7 +34,7 @@ struct RSB_Packet_Header
         Player_Action player_action;
 
         struct {
-            u32 action_ix;
+            Player_Action_ID action_id;
         } player_action_dequeue;
 
         struct {
@@ -98,7 +98,7 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
 
         case RSB_PLAYER_ACTION_DEQUEUE: {
             auto *p = &_header->player_action_dequeue;
-            Read_To_Ptr(u32, &p->action_ix, node);
+            Read_To_Ptr(Player_Action_ID, &p->action_id, node);
         } break;
     }
     
@@ -178,14 +178,14 @@ bool enqueue_RSB_CHAT_packet(Network_Node *node, String message_text)
     return true;
 }
 
-bool enqueue_RSB_PLAYER_ACTION_DEQUEUE_packet(Network_Node *node, u32 action_ix)
+bool enqueue_RSB_PLAYER_ACTION_DEQUEUE_packet(Network_Node *node, Player_Action_ID action_id)
 {
     begin_outbound_packet(node);
     {
         Write(RSB_Packet_Type, RSB_PLAYER_ACTION_DEQUEUE, node);
         //--
 
-        Write(u32, action_ix, node);
+        Write(Player_Action_ID, action_id, node);
     }
     end_outbound_packet(node);
     return true;

@@ -1470,7 +1470,9 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
     Assert(index < player_e->action_queue_length);
 
     for(int i = index; i < player_e->action_queue_length-1; i++)
-        player_e->action_queue[i] = player_e->action_queue[i+1];
+        player_e->action_queue[i] = player_e->action_queue[i+1];    
+    for(int i = index; i < player_e->action_queue_length-1; i++)
+        player_e->action_ids[i] = player_e->action_ids[i+1];
     player_e->action_queue_length--;
 
     if(index == 0 && player_e->action_queue_length > 0)
@@ -1487,7 +1489,7 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
     room->did_change = true;
 }
 
-// NOTE: Will apply the action to player_state.
+// NOTE: Will apply the action to player_state. ((Is this true??))
 bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server, int depth = 0)
 {
     Assert(e->type == ENTITY_PLAYER);
@@ -1507,7 +1509,9 @@ bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *play
 
     bool first_in_queue = (player_e->action_queue_length == 0);
 
-    player_e->action_queue[player_e->action_queue_length++] = *action;
+    auto ix = player_e->action_queue_length++;
+    player_e->action_queue[ix] = *action;
+    player_e->action_ids  [ix] = room->next_player_action_id++;
     room->did_change = true;
 
     if(first_in_queue) {
@@ -1869,15 +1873,23 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             
             auto *player_e = &player->player_e;
 
-            if(p->action_ix >= player_e->action_queue_length) {
+            int ix = -1;
+            for(int i = 0; i < player_e->action_queue_length; i++) {
+                if(player_e->action_ids[i] == p->action_id) {
+                    ix = i;
+                    break;
+                }
+            }
+            
+            if(ix == -1) {
                 // This is OK. The queue might have changed since when the user requested the dequeue.
                 return true;
             }
 
-            if(player_e->action_queue[p->action_ix].dequeue_requested)
+            if(player_e->action_queue[ix].dequeue_requested)
                 return true;
 
-            request_player_action_dequeue(p->action_ix, player, room, server);
+            request_player_action_dequeue(ix, player, room, server);
             
         } break;
             

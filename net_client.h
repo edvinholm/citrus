@@ -18,7 +18,7 @@ struct C_RS_Action
         Player_Action player_action;
 
         struct {
-            u32 action_ix;
+            Player_Action_ID action_id;
         } player_action_dequeue;
 
         struct {

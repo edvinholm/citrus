@@ -319,6 +319,7 @@ static_assert(player_walk_speed > 0);
 // ------------ //
 
 
+typedef u32 Player_Action_ID;
 
 enum Player_Action_Type
 {
@@ -453,7 +454,8 @@ struct S__Entity
             v3 *walk_path;
 
             u8 action_queue_length;
-            Player_Action action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
+            Player_Action    action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
+            Player_Action_ID action_ids[ARRLEN(action_queue)];
 
             Entity_ID is_on;
             bool laying_down_instead_of_sitting; // Only valid if is_on != NO_ENTITY

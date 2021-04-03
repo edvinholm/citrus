@@ -69,7 +69,7 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                 } break;
                     
                 case C_RS_ACT_PLAYER_ACTION_DEQUEUE: {
-                    Enqueue(RSB_PLAYER_ACTION_DEQUEUE, node, action.player_action_dequeue.action_ix);
+                    Enqueue(RSB_PLAYER_ACTION_DEQUEUE, node, action.player_action_dequeue.action_id);
                 } break;
 
                 case C_RS_ACT_CHAT: {                    

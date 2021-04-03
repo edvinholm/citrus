@@ -20,6 +20,8 @@ namespace Server_Game
         Entity_ID next_entity_id_minus_one;
         int num_entities;
         Entity entities[MAX_ENTITIES_PER_ROOM];
+
+        Player_Action_ID next_player_action_id;
         
         // @Temporary @NoRelease
         double randomize_cooldown;

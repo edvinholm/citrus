@@ -1418,7 +1418,8 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                 auto *player_e = &player_entity->player_e;
                 for(int i = 0; i < player_e->action_queue_length; i++)
                 {
-                    auto *action = &player_e->action_queue[i];
+                    auto *action   = &player_e->action_queue[i];
+                    auto action_id = player_e->action_ids[i];
 
                     String label = STRING("?");
                     Item_Type_ID image_item = ITEM_NONE_OR_NUM;
@@ -1466,13 +1467,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         color = C_RED;
                     if(action->end_retry_t > action->end_t && world_t > action->end_t)
                         color = lerp(color, C_YELLOW, .5f + .5f * sin(world_t - action->end_t + .75 * TAU));
-
+       
                     bool enabled = true;
-                    if(button(PC(ctx, i), label, enabled, false, opt(color)) & CLICKED_ENABLED) {
+                    if(button(PC(ctx, action_id), label, enabled, false, opt(color)) & CLICKED_ENABLED) {
                         // Request dequeue
                         C_RS_Action action = {0};
                         action.type = C_RS_ACT_PLAYER_ACTION_DEQUEUE;
-                        action.player_action_dequeue.action_ix = i;
+                        action.player_action_dequeue.action_id = action_id;
 
                         // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
                         array_add(client->connections.room_action_queue, &action);

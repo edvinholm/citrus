@@ -1095,7 +1095,20 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
     return true;
 }
 
+bool read_Player_Action_ID(Player_Action_ID *_id, Network_Node *node)
+{
+    static_assert(sizeof(*_id) == sizeof(u32));
+    Read_To_Ptr(u32, _id, node);
+    return true;
+}
 
+bool write_Player_Action_ID(Player_Action_ID id, Network_Node *node)
+{
+    static_assert(sizeof(id) == sizeof(u32));
+    Write(u32, id, node);
+    return true;
+}
+    
 // @Norelease TODO: Check that it is a valid type.
 bool read_Player_Action_Type(Player_Action_Type *_type, Network_Node *node)
 {
@@ -1151,6 +1164,7 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
 
     return true;
 }
+
 
 bool write_Player_Action(Player_Action action, Network_Node *node)
 {
@@ -1430,6 +1444,9 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             for(int i = 0; i < x->action_queue_length; i++) {
                 Read_To_Ptr(Player_Action, &x->action_queue[i], node);
             }
+            for(int i = 0; i < x->action_queue_length; i++) {
+                Read_To_Ptr(Player_Action_ID, &x->action_ids[i], node);
+            }
 
             Read_To_Ptr(Entity_ID, &x->is_on, node);
             Read_To_Ptr(bool,      &x->laying_down_instead_of_sitting, node);
@@ -1527,6 +1544,9 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             Write(u8, x->action_queue_length, node);
             for(int i = 0; i < x->action_queue_length; i++) {
                 Write(Player_Action, x->action_queue[i], node);
+            }
+            for(int i = 0; i < x->action_queue_length; i++) {
+                Write(Player_Action_ID, x->action_ids[i], node);
             }
             
             Write(Entity_ID, x->is_on, node);
