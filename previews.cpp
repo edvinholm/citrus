@@ -21,9 +21,9 @@ void update_previews(Graphics *gfx)
         
         Item_Type *type = &item_types[item.type];
         v3 offs = {type->volume.x * 0.5f, type->volume.y * 0.5f, 0};
-        Entity e = create_item_entity(&item, V3_ZERO + offs, axis_rotation(V3_Z, TAU * .25f), 0);
+        Entity e = create_item_entity(&item, V3_ZERO + offs, axis_rotation(V3_Z, -TAU * .25f), 0);
         
-        m4x4 projection = world_projection_matrix(V2_ONE, type->volume.x, type->volume.y, type->volume.z);
+        m4x4 projection = world_projection_matrix(V2_ONE, type->volume.x, type->volume.y, type->volume.z, 0, false);
         config_gpu_for_world(gfx, { 0, 0, 2048, 2048 }, projection);
 
         draw_entity(&e, 0, gfx, NULL, NULL, false, false, false, &gfx->previews_render_buffer);

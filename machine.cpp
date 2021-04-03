@@ -39,86 +39,72 @@ void begin_recipe(Recipe *recipe, Entity **inputs, int num_inputs, Entity **outp
         
         Item *output_container_item = &output_container->item_e.item;
 
-        switch(recipe->outputs[i].form)
-        {
-            case FORM_LIQUID: {
-                Assert(item_types[output_container_item->type].container_form == FORM_LIQUID);
-            
-                auto lc0 = output_container_item->liquid_container;
-                auto current_lq = liquid_type_of_container(&lc0);
-                auto lc1 = lc0;
+        //--
 
-                // NOTE: For now, we don't simulate the properties of the recipe output liquid
-                //       during the progress of the recipe.
-                //       The output's properties are what they are when the recipe starts.
-
-                simulate_liquid_properties(&lc1, t1 - t0);
-                lc1 = blend(&lc1, &recipe_output->liquid);
-
+        auto output_form = recipe->outputs[i].substance.form;
+        
+        Assert(output_form != SUBST_NONE);
+        Assert(item_types[output_container_item->type].container_forms & output_form);
             
-                auto *c = &output_container->item_e.container;
-                auto *l = &c->liquid;
+        auto c0 = output_container_item->container;
+        auto c1 = c0;
 
-                c->t0 = t0;
-                c->t1 = t1;
-                l->c0 = lc0;
-                l->c1 = lc1;
+        if(output_form == SUBST_LIQUID) {
+            // NOTE: For now, we don't simulate the properties of the recipe output liquid
+            //       during the progress of the recipe.
+            //       The output's properties are what they are when the recipe starts.
             
-            } break;
-            
-            case FORM_NUGGET: {
-                Assert(item_types[output_container_item->type].container_form == FORM_NUGGET);
-            
-                auto nc0 = output_container_item->nugget_container;
-                auto current_lq = nugget_type_of_container(&nc0);
-                auto nc1 = nc0;
-
-                nc1 = blend(&nc1, &recipe_output->nugget);
-            
-                auto *c = &output_container->item_e.container;
-                auto *n = &c->nugget;
-
-                c->t0 = t0;
-                c->t1 = t1;
-                n->c0 = nc0;
-                n->c1 = nc1;
-            
-            } break;
-
-            default: Assert(false); return;
+            simulate_liquid_properties(&c1, t1 - t0);
         }
-    
+        
+        c1 = blend(&c1, recipe_output);
+
+        auto *c = &output_container->item_e.container;
+
+        c->t0 = t0;
+        c->t1 = t1;
+        c->c0 = c0;
+        c->c1 = c1;
+
+        //--
+        
         lock_item_entity(output_container, e->id);
         machine->recipe_outputs[i] = output_container->id;
     }
     
-    machine->recipe_inputs.n = num_inputs;
+    machine->recipe_inputs.n                  = num_inputs;
+    machine->recipe_input_used_as_container.n = num_inputs;
     for(int i = 0; i < num_inputs; i++) {
         auto *input_entity = inputs[i];
         Assert(input_entity->type == ENTITY_ITEM);
  
         if(!entity_items_already_updated) // @Jai: @Speed: #bake a version where we do the updates, and one where we don't.
             update_entity_item(input_entity, room->t);
+
+        bool used_as_container = false;
         
         auto *item = &input_entity->item_e.item;
         if(recipe->inputs[i].is_liquid) {
-            Assert(item_types[item->type].container_form == FORM_LIQUID);
-
+            Assert(item_types[item->type].container_forms & SUBST_LIQUID);
+            
             auto *c = &input_entity->item_e.container;
-            auto *l = &c->liquid;
+            Assert(item->container.amount == 0 || item->container.substance.form == SUBST_LIQUID);
             
             c->t0 = t0;
             c->t1 = t1;
-            l->c0 = item->liquid_container;
+            c->c0 = item->container;
 
-            auto lc1 = item->liquid_container;
-            lc1.amount -= recipe->inputs[i].liquid.amount;// @Hack @Norelease: Recipe_Component should have a required amount thing.
-            Assert(lc1.amount >= 0);
-            l->c1 = lc1;
+            auto c1 = item->container;
+            c1.amount -= recipe->inputs[i].liquid.amount;// @Hack @Norelease: Recipe_Component should have a required amount thing.
+            Assert(c1.amount >= 0);
+            c->c1 = c1;
+
+            used_as_container = true;
         }
 
         lock_item_entity(input_entity, e->id);
         machine->recipe_inputs[i] = input_entity->id;
+        machine->recipe_input_used_as_container[i] = used_as_container;
     }
 
     
@@ -146,7 +132,7 @@ bool recipe_suitable_for_machine(Recipe *rec, Entity *machine_entity)
     switch(machine_entity->item_e.item.type) {
         case ITEM_BLENDER: {
             for(int i = 0; i < rec->num_outputs; i++)
-                if(rec->outputs[i].form != FORM_LIQUID) return false;
+                if(rec->outputs[i].substance.form != SUBST_LIQUID) return false;
         } break;
 
         case ITEM_FILTER_PRESS: {
@@ -159,8 +145,8 @@ bool recipe_suitable_for_machine(Recipe *rec, Entity *machine_entity)
             bool found_nugget = false;
             bool found_liquid = false;
             for(int i = 0; i < rec->num_outputs; i++) {
-                if(rec->outputs[i].form == FORM_NUGGET) found_nugget = true;
-                if(rec->outputs[i].form == FORM_LIQUID) found_liquid = true;
+                if(rec->outputs[i].substance.form == SUBST_NUGGET) found_nugget = true;
+                if(rec->outputs[i].substance.form == SUBST_LIQUID) found_liquid = true;
             }
 
             if(!found_nugget || !found_liquid) return false;
@@ -233,6 +219,8 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
         for(int i = 0; i < rec->num_outputs; i++) {
             auto &output = rec->outputs[i];
             if (found_outputs[i] != NULL) continue;
+           
+            auto output_form = output.substance.form;
                         
             for(int k = 0; k < supports.n; k++) {
                 auto &sup = supports[k];
@@ -245,26 +233,15 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
 
                 if(!can_be_used_as_recipe_output_container(supported, room->t)) continue;
 
-                switch(output.form) { // @Jai: #complete
-                    case FORM_LIQUID: {
-                        if(item_types[supported->item_e.item.type].container_form != FORM_LIQUID) continue;
+                // Form and capacity
+                if(!(item_types[supported->item_e.item.type].container_forms & output_form)) continue;
                         
-                        auto *lc = &supported->item_e.item.liquid_container;
-                        auto capacity = liquid_container_capacity(&supported->item_e.item);
-                        if(capacity - lc->amount < output.liquid.amount) continue;
-                    } break;
+                auto *c = &supported->item_e.item.container;
+                auto capacity = substance_container_capacity(&supported->item_e.item, output_form);
+                if(capacity - c->amount < output.amount) continue;
+                //--
 
-                    case FORM_NUGGET: {
-                        if(item_types[supported->item_e.item.type].container_form != FORM_NUGGET) continue;
-
-                        auto *nc = &supported->item_e.item.nugget_container;
-                        auto capacity = nugget_container_capacity(&supported->item_e.item);
-                        if(capacity - nc->amount < output.nugget.amount) continue;
-                    } break;
-
-                    default: Assert(false); break;
-                }
-
+                   
                 bool already_used = false;
                 for(int j = 0; j < rec->num_outputs; j++) {
                     if(found_outputs[j] == supported) {
@@ -306,10 +283,10 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
                 if(!can_be_used_as_recipe_input(supported, room->t)) continue;
 
                 if(input.is_liquid) {
-                    if(item_types[supported->item_e.item.type].container_form != FORM_LIQUID) continue;
-                    auto *lc = &supported->item_e.item.liquid_container;
-                    if(liquid_type_of_container(lc) != input.liquid.type) continue;
-                    if(lc->amount < input.liquid.amount) continue;
+                    if(!(item_types[supported->item_e.item.type].container_forms & SUBST_LIQUID)) continue;
+                    auto *c = &supported->item_e.item.container;
+                    if(liquid_type_of_container(c) != input.liquid.type) continue;
+                    if(c->amount < input.liquid.amount) continue;
                 } else {
                     if(supported->item_e.item.type != input.item.type) continue;
                 }
@@ -360,16 +337,16 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
                     if(!sup->is_first_support_of_supported) continue;
                     if(sup->supported == output_container) {
                         
-                        Item_Form wanted_form = FORM_NONE_OR_NUM;
+                        Substance_Form wanted_form = SUBST_NONE;
                         switch(sup->surface_owner_specifics.filter_press_surface_id) {
-                            case FILTER_PRESS_SURF_LIQUID_OUTPUT: wanted_form = FORM_LIQUID; break;
-                            case FILTER_PRESS_SURF_NUGGET_OUTPUT: wanted_form = FORM_NUGGET; break;
+                            case FILTER_PRESS_SURF_LIQUID_OUTPUT: wanted_form = SUBST_LIQUID; break;
+                            case FILTER_PRESS_SURF_NUGGET_OUTPUT: wanted_form = SUBST_NUGGET; break;
                             default: Assert(false); return;
                         }
-                        Assert(wanted_form != FORM_NONE_OR_NUM);
+                        Assert(wanted_form != SUBST_NONE);
 
-                        Item_Form given_form = item_types[output_container->item_e.item.type].container_form;
-                        if(given_form != wanted_form) return;
+                        Substance_Form given_forms = item_types[output_container->item_e.item.type].container_forms;
+                        if(!(given_forms & wanted_form)) return;
                     }
                 }
             }
@@ -382,49 +359,28 @@ void maybe_begin_machine_recipe(Entity *e, Room *room)
             
             Assert(found_outputs[i]->type == ENTITY_ITEM);
             auto *output_container_item = &found_outputs[i]->item_e.item;
+
             
-            switch(recipe_output->form) {
+            auto output_form = recipe_output->substance.form;
+
+            Assert(item_types[output_container_item->type].container_forms & output_form);
                 
-                case FORM_LIQUID: {
-                    Assert(item_types[output_container_item->type].container_form == FORM_LIQUID);
-                
-                    // TODO @Cleanup: We should have some standard way to add liquid / check if adding liquid to a Liquid_Container is possible.        
-                    auto *lc = &output_container_item->liquid_container;
-                    auto capacity = liquid_container_capacity(output_container_item);
+            // TODO @Cleanup: We should have some standard way to add liquid / check if adding liquid to a Liquid_Container is possible.        
+            auto *c = &output_container_item->container;
+            auto capacity = substance_container_capacity(output_container_item, output_form);
         
-                    // NOTE: This is not the same as (capacity - lc->amount >= found_recipe->output.amount).
-                    //       The Assert check below is about if this recipe is suitable at all for this machine.
-                    //       The condition above is "can we do the recipe right now given what we have in our container?"
-                    Assert(capacity >= recipe_output->liquid.amount); // Should have checked this earlier, when we looked through all available recipes. If we do it now, it's too late -- there might be a better recipe that meets this requirement.
+            // NOTE: This is not the same as (capacity - c->amount >= found_recipe->output.amount).
+            //       The Assert check below is about if this recipe is suitable at all for this machine.
+            //       The condition above is "can we do the recipe right now given what we have in our container?"
+            Assert(capacity >= recipe_output->amount); // Should have checked this earlier, when we looked through all available recipes. If we do it now, it's too late -- there might be a better recipe that meets this requirement.
 
-                    if(!can_blend(lc, &recipe_output->liquid)) {
-                        can = false;
-                        break;
-                    }
-                    
-                    Assert(capacity - lc->amount >= recipe_output->liquid.amount);
-                
-                } break;
-
-                case FORM_NUGGET: {
-                    Assert(item_types[output_container_item->type].container_form == FORM_NUGGET);
-
-                    auto *nc = &output_container_item->nugget_container;
-                    auto capacity = nugget_container_capacity(output_container_item);
-        
-                    Assert(capacity >= recipe_output->nugget.amount);
-
-                    if(!can_blend(nc, &recipe_output->nugget)) {
-                        can = false;
-                        break;
-                    }        
-                
-                } break;
-                
-            
-                default: Assert(false); break;
+            if(!can_blend(c, recipe_output)) {
+                can = false;
+                break;
             }
-
+                    
+            Assert(capacity - c->amount >= recipe_output->amount);
+            
             if(!can) break;
         }
 
@@ -450,12 +406,14 @@ void update_machine(Machine *machine, Room *room, Entity *e)
     auto time_since_start = room->t - machine->t_on_recipe_begin;
     if(doubles_equal(time_since_start, machine->recipe_duration)) {
 
+        Assert(machine->recipe_inputs.n == machine->recipe_input_used_as_container.n);
+        
         // DESTROY/UNLOCK INPUTS //
         for(int i = 0; i < machine->recipe_inputs.n; i++) {
             auto *input_entity = find_entity(machine->recipe_inputs[i], room);
             Assert(input_entity); // Because we should have locked it.
 
-            if(item_types[input_entity->item_e.item.type].container_form == FORM_LIQUID) {
+            if(machine->recipe_input_used_as_container[i]) {
                 unlock_item_entity(input_entity, e->id, room);
             } else {
                 schedule_for_destruction(input_entity, room, e->id);

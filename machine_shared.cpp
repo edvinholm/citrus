@@ -13,6 +13,11 @@ bool is_machine(Entity *e, Machine **_machine = NULL)
             if(_machine) *_machine = &e->item_e.filter_press.machine;
             return true;
         } break;
+            
+        case ITEM_GRINDER: {
+            if(_machine) *_machine = &e->item_e.grinder.machine;
+            return true;
+        } break;
     }
     
     return false;
@@ -20,7 +25,8 @@ bool is_machine(Entity *e, Machine **_machine = NULL)
 
 bool machine_is_doing_recipe(Machine *machine, double world_t)
 {
-    return (machine->t_on_recipe_begin + machine->recipe_duration >= world_t);
+    return (machine->t_on_recipe_begin > 0 &&
+            machine->t_on_recipe_begin + machine->recipe_duration >= world_t);
 }
 
 bool can_be_used_as_recipe_input(Entity *e, double world_t)

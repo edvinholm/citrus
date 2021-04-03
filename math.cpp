@@ -224,11 +224,22 @@ T clamp(T value, T min = 0, T max = 1)
     return value;
 }
 
-template<typename T, typename U, typename V>
-T lerp(T x, U y, V T)
+template<typename T, typename U>
+T lerp(T a, T b, U t)
 {
-    return x + (y-x)*T;
+    return a + (b-a)*t;
 }
+
+template<typename T, typename U>
+T lerp(T a, T b, U t0, U t1, U t)
+{
+    U t_norm;
+    U dur = t1 - t0;
+    if(is_zero(dur)) t_norm = 1;
+    else             t_norm = (t - t0)/(t1 - t0);
+    return lerp(a, b, t_norm);
+}
+
 
 
 inline

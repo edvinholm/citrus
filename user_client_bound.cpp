@@ -227,13 +227,13 @@ bool write_UCB_Transaction_Commit_Vote_Payload(UCB_Transaction_Commit_Vote_Paylo
 bool enqueue_UCB_HELLO_packet(Network_Node *node, User_Connect_Status connect_status)
 {
     begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
     {
         Write(UCB_Packet_Type, UCB_HELLO, node);
         //--
 
         Write(User_Connect_Status, connect_status, node);
     }
-    end_outbound_packet(node);
     return true;
 }
 
@@ -247,11 +247,11 @@ bool send_UCB_HELLO_packet_now(Network_Node *node, User_Connect_Status connect_s
 bool enqueue_UCB_GOODBYE_packet(Network_Node *node)
 {
     begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
     {
         Write(UCB_Packet_Type, UCB_GOODBYE, node);
         //--
     }
-    end_outbound_packet(node);
     return true;
 }
 
@@ -265,6 +265,7 @@ bool send_UCB_GOODBYE_packet_now(Network_Node *node)
 bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Money reserved_money, Inventory_Slot *inventory)
 {
     begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
     {
         Write(UCB_Packet_Type, UCB_USER_INIT, node);
         //--
@@ -280,13 +281,13 @@ bool enqueue_UCB_USER_INIT_packet(Network_Node *node, User_ID id, String usernam
             Write(Inventory_Slot, inventory + i, node);
         }
     }
-    end_outbound_packet(node);
     return true;
 }
 
 bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String username, v4 color, Money money, Money reserved_money, Inventory_Slot *inventory)
 {
     begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
     {
         Write(UCB_Packet_Type, UCB_USER_UPDATE, node);
         //--
@@ -302,7 +303,6 @@ bool enqueue_UCB_USER_UPDATE_packet(Network_Node *node, User_ID id, String usern
             Write(Inventory_Slot, inventory + i, node);
         }
     }
-    end_outbound_packet(node);
     return true;
 }
 
@@ -311,6 +311,7 @@ bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node,
                                             UCB_Transaction_Commit_Vote_Payload *commit_vote_payload = NULL)
 {
     begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
     {
         Write(UCB_Packet_Type, UCB_TRANSACTION_MESSAGE, node);
         //--
@@ -323,7 +324,6 @@ bool enqueue_UCB_TRANSACTION_MESSAGE_packet(Network_Node *node,
             Write(UCB_Transaction_Commit_Vote_Payload, commit_vote_payload, node);
         }
     }
-    end_outbound_packet(node);
     return true;
 }
 

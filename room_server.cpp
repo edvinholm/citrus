@@ -31,6 +31,12 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
     Log(__VA_ARGS__)
 
 
+// @Cleanup
+const float need_default_speed = -0.0025f;
+const float sleep_need_default_speed = need_default_speed;
+const float sleep_action_need_speed_change = 0.02f;
+
+
 // NOTE: There is one version of this for the user server, and one for the room server.
 Item_ID reserve_item_id(Room_Server *server)
 {
@@ -483,6 +489,10 @@ void add_new_room_clients(Room_Server *server)
                 auto *player_e = &e.player_e;
                 player_e->user_id     = client->user;
 
+                player_e->needs_t0 = room->t;
+                for(int i = 0; i < NEED_NONE_OR_NUM; i++) player_e->needs0.values[i]      = .75f;
+                for(int i = 0; i < NEED_NONE_OR_NUM; i++) player_e->need_change_speeds[i] = need_default_speed;
+
                 v3 path[] = { V3(p), V3(p) };
                 player_set_walk_path(path, 2, &e, room);
                 
@@ -664,6 +674,11 @@ void player_stop_walking(Entity *e, Room *room)
     player_set_walk_path(path, ARRLEN(path), e, room);
 }
 
+void player_teleport(v3 p, Entity *e, Room *room)
+{
+    v3 path[] = { p, p };
+    player_set_walk_path(path, ARRLEN(path), e, room);
+}
 
 
 bool player_walk_to(v3s p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 = NULL, bool allow_same_start_and_end_tile = true, bool *_was_same_start_and_end_tile = NULL)
@@ -703,6 +718,26 @@ bool player_walk_to(v3s p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 
     return true;
 }
 
+
+// NOTE: Walk duration not included!
+double player_action_duration(Player_Action *act, double start_t, Entity *player)
+{
+    if(act->type               == PLAYER_ACT_ENTITY &&
+       act->entity.action.type == ENTITY_ACT_SLEEP)
+    {
+        double change_speed = sleep_action_need_speed_change + sleep_need_default_speed;
+        Assert(change_speed > 0);
+
+        float sleep_at_start = need_at_time_for_player(NEED_SLEEP, start_t, player);
+        float delta          = 1.0f - sleep_at_start;
+
+        return delta / change_speed;
+    }
+    
+    return 0;
+}
+
+
 void update_walk_map_and_paths(Room *room, Room_Server *server)
 {
     // UPDATE WALK MAP //
@@ -727,8 +762,15 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
         {
             // @Norelease.    
             // @Hack: We don't know if the walk path has to do with the current action.
-            if (player_e->action_queue_length > 0)
-                player_e->action_queue[0].next_update_t = room->t + dur;
+            if (player_e->action_queue_length > 0) {
+                auto *first_action = &player_e->action_queue[0];
+                if(room->t < first_action->reach_t) {
+                    auto new_reach_t = room->t + dur;
+                    auto delta = new_reach_t - first_action->reach_t;
+                    first_action->reach_t += delta;
+                    first_action->end_t   = first_action->reach_t + player_action_duration(first_action, first_action->reach_t, e);
+                }
+            }
         }
         else
         {
@@ -741,8 +783,12 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
                 // @Norelease.
                 // @Hack: We don't know if the walk path has to do with the current action.
                 //        We also don't know if the action can be cancelled at this time.
-                if (player_e->action_queue_length > 0)
-                    dequeue_player_action(0, e, room, server);
+                if (player_e->action_queue_length > 0) {
+                    auto *first_action = &player_e->action_queue[0];
+                    if(room->t < first_action->reach_t) {
+                        dequeue_player_action(0, e, room, server);
+                    }
+                }
             }
         }
 
@@ -972,6 +1018,18 @@ void pick_up_item_entity(Entity *item_entity, Entity *player_entity, Room *room,
 }
 
 
+void impact_need(Need need, float speed_change, Entity *player, Room *room)
+{
+    Needs current_needs = current_needs_for_player(player, room->t);
+    player->player_e.needs_t0 = room->t;
+    player->player_e.needs0 = current_needs;
+    player->player_e.need_change_speeds[need] += speed_change;
+
+    room->did_change = true;
+}
+
+
+// @Cleanup @BadName: This is actually "start or perform action". For some actions we do stuff in "end action" as well.
 bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, Room *room, Room_Server *server)
 {
     Assert(as_user != NO_USER);
@@ -1074,11 +1132,13 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     Assert(water_container);
                     Assert(water_container->type == ENTITY_ITEM);
                     
-                    Assert(item_types[water_container->item_e.item.type].container_form == FORM_LIQUID);
-                    auto *lc = &water_container->item_e.item.liquid_container;
+                    Assert(item_types[water_container->item_e.item.type].container_forms & SUBST_LIQUID);
+                    auto *c = &water_container->item_e.item.container;
 
-                    auto *water_level = &lc->amount;
-                    if(lc->liquid.type == LQ_WATER && *water_level >= 2) // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+                    Assert(c->amount == 0 || c->substance.form == SUBST_LIQUID);
+
+                    auto *water_level = &c->amount;
+                    if(c->substance.liquid.type == LQ_WATER && *water_level >= 2) // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
                     {
                         plant_e->grow_progress_on_plant += 0.05f;
                         *water_level -= 2;
@@ -1126,20 +1186,39 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     auto *sit = &entity_action->sit_or_unsit;
                     
                     Assert(target->type == ENTITY_ITEM);
-
                     Assert(target->item_e.item.type == ITEM_CHAIR);
 
                     if(sit->unsit) {
-                        Assert(player->player_e.sitting_on == target->id);
+                        Assert(player->player_e.is_on == target->id &&
+                               !player->player_e.laying_down_instead_of_sitting);
                         unlock_item_entity(target, player->id, room);
-                        player->player_e.sitting_on = NO_ENTITY;
+                        player->player_e.is_on = NO_ENTITY;                        
                     } else {
-                        Assert(player->player_e.sitting_on != target->id);
+                        Assert(player->player_e.is_on != target->id);
                         lock_item_entity(target, player->id);
-                        player->player_e.sitting_on = target->id;
+                        
+                        player->player_e.is_on = target->id;
+                        player->player_e.laying_down_instead_of_sitting = false;
                     }
 
                     room->did_change = true;                    
+                    return true;
+
+                } break;
+
+                case ENTITY_ACT_SLEEP: {
+                    
+                    Assert(target->type == ENTITY_ITEM);
+                    Assert(target->item_e.item.type == ITEM_BED);
+
+                    Assert(player->player_e.is_on != target->id);
+                    lock_item_entity(target, player->id);
+
+                    player->player_e.is_on = target->id;
+                    player->player_e.laying_down_instead_of_sitting = true;
+
+                    impact_need(NEED_SLEEP, sleep_action_need_speed_change, player, room);
+
                     return true;
 
                 } break;
@@ -1168,7 +1247,7 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
 
             Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
             v3   p = x->p; // @Norelease: @Security: Check that this is a valid position (snap to grid? Center on surface? etc)
-            Assert(item_entity_can_be_at(held, p, q, room->t, room));
+            Assert(entity_can_be_at(held, p, q, room->t, room));
             
             //--
             
@@ -1190,29 +1269,152 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
     return false;
 }
 
+// IMPORTANT: This is called both when action->end_t (or action->end_retry_t) is reached,
+//            and when the player wants to cancel it.
+//            But(!!!) not before reach_t is reached.
+bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *room, bool is_retry)
+{
+    if(action->type != PLAYER_ACT_ENTITY) return true;
+
+    Assert(room->t >= action->reach_t);
+
+    // @Cleanup: Move PLACE_IN_INVENTORY entity destruction to end_player_action_if_possible().
+    auto *target = find_entity(action->entity.target, room);
+    Assert(target || (action->type == PLAYER_ACT_ENTITY && action->entity.action.type == ENTITY_ACT_PLACE_IN_INVENTORY));
+    
+    bool possible = false;
+    bool teleport_needed = false;
+    Array<v3s, ALLOC_TMP> possible_teleport_positions = {0};
+
+    switch(action->entity.action.type) {
+        case ENTITY_ACT_SLEEP: {
+            // NOTE: We assume that the walk path is what it was when we set is_on = the bed.
+            Assert(player->player_e.walk_path_length >= 2);
+            v3 p = player->player_e.walk_path[player->player_e.walk_path_length-1];
+
+            possible_teleport_positions = entity_action_positions(target, &action->entity.action, player_entity_hands_zoffs, room->t, room);
+            teleport_needed = true;
+            possible = true;
+        } break;
+
+        default: {
+            possible = (room->t >= action->end_t);
+        } break;
+    }
+
+    if(!possible) return false;
+
+    v3 teleport_destination = V3_ZERO;
+    
+    if(teleport_needed) {
+        possible = false;
+        
+        for(int i = 0; i < possible_teleport_positions.n; i++) {
+            auto p = V3(possible_teleport_positions[i]);
+            if(entity_can_be_at(player, p, Q_IDENTITY, room->t, room)) {
+                possible = true;
+                teleport_destination = p;
+                break;
+            }
+        }
+    }
+
+    if(!possible) return false;
+
+    switch(action->entity.action.type) {
+        case ENTITY_ACT_SLEEP: {
+            
+            Assert(player->player_e.is_on == target->id &&
+                   player->player_e.laying_down_instead_of_sitting);
+            unlock_item_entity(target, player->id, room);
+            player->player_e.is_on = NO_ENTITY;
+            
+            impact_need(NEED_SLEEP, -sleep_action_need_speed_change, player, room);
+
+            room->did_change = true;
+        } break;
+    }
+
+    if(teleport_needed) {
+        player_teleport(teleport_destination, player, room);
+    }
+    
+    return true;
+}
+
+
+void request_player_action_dequeue(int action_ix, Entity *player, Room *room, Room_Server *server)
+{
+    Assert(player->type == ENTITY_PLAYER);
+    auto *player_e = &player->player_e;
+    
+    Assert(action_ix >= 0 && action_ix < player_e->action_queue_length);
+
+    auto *act = &player_e->action_queue[action_ix];
+    act->dequeue_requested = true;
+    room->did_change = true;
+    
+    bool do_dequeue = true;
+    if(action_ix == 0) {
+        if(room->t < act->reach_t) {
+            player_stop_walking(player, room);
+            do_dequeue = true;
+        } else {
+            do_dequeue = end_player_action_if_possible(act, player, room, false);
+        }
+    }
+
+    if(do_dequeue) 
+        dequeue_player_action(action_ix, player, room, server);
+}
+
+
 // NOTE: Returns true if the action should be dequeued.
 bool update_player_action(Player_Action *action, Entity *player, Room *room, Room_Server *server)
 {
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
-    
-    if(doubles_equal(action->next_update_t, room->t))
+
+    Assert(action->reach_t <= action->end_t);
+        
+    if(doubles_equal(action->reach_t, room->t))
     {
-        if(!perform_player_action_if_possible(action, player_e->user_id, room, server)) { // NOTE: I put an 'if' here to remind us that perform_player_action_if_possible() returns a bool.
-            return true;
-        } else {
+        if(!perform_player_action_if_possible(action, player_e->user_id, room, server)) {
             return true;
         }
     }
 
-    if(action->next_update_t <= room->t) {
-        RS_Log("ERROR: action->next_update_t > room->t | next = %f, room = %f.\n", action->next_update_t, room->t);
+    bool time_for_first_end_try = doubles_equal(action->end_t, room->t);
+    bool time_for_end_retry     = !time_for_first_end_try && doubles_equal(action->end_retry_t, room->t);
+    
+    if(time_for_first_end_try || time_for_end_retry) {
+        if(!end_player_action_if_possible(action, player, room, time_for_end_retry)) {
+            // Postpone ending the action -- we can't do it right now.
+            if(time_for_first_end_try) {
+                action->end_retry_t = action->end_t;
+                room->did_change = true; // @Hack to only sync the first time we schedule a retry. We do this to tell the server that we are "in retry mode" so that it can show that visually to the user.
+            }
+            action->end_retry_t += .5;
+            return false;
+        }
+        return true;
+    }
+
+    double next_update_t;
+    if (room->t < action->reach_t)    next_update_t = action->reach_t;
+    else if (room->t < action->end_t) next_update_t = action->end_t;
+    else                              next_update_t = action->end_retry_t;
+    
+    if(next_update_t <= room->t) {
+        RS_Log("ERROR: next_update_t > room->t | next = %f, room = %f.\n", next_update_t, room->t);
         Assert(false);
         return true;
     }
-    
+
     return false;
 }
+
+
 
 // NOTE: Returns false if the action can't start.
 bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *server)
@@ -1233,22 +1435,24 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
 
     if (path.n == 0) player_stop_walking(e, room);
     else             player_set_walk_path(path.e, path.n, e, room);
-    action->next_update_t = room->t + path_duration; // NOTE: path_duration can be zero here.
 
-    if(action->next_update_t < room->t) {
+    action->reach_t = room->t + path_duration; // NOTE: path_duration can be zero here.
+    double action_duration = player_action_duration(action, action->reach_t, e);
+    action->end_t   = action->reach_t + action_duration;
+
+    if(action->reach_t < room->t) {
         Assert(false);
         return false;
     }
     
-    while(doubles_equal(action->next_update_t, room->t))
+    if(doubles_equal(action->reach_t, room->t))
     {
         if(update_player_action(action, e, room, server)) {
             Assert(player_e->action_queue_length > 0);
             dequeue_player_action(0, e, room, server);
-            break;
         }
     
-        if(action->next_update_t < room->t) {
+        if(action->reach_t < room->t) {
             Assert(false);
             return false;
         }
@@ -1420,13 +1624,19 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
             if(player_e->action_queue_length == 0) break;
             auto *action = &player_e->action_queue[0];
 
-            if(action->next_update_t <= room->t) {
+            if(action->end_t <= room->t && action->end_retry_t <= room->t) {
                 // The action should have been removed or it should have updated its next_update_t.
                 Assert(false);
                 break;
             }
 
-            result = min(action->next_update_t - room->t, result);
+
+            double next_update_t;
+            if (room->t < action->reach_t)    next_update_t = action->reach_t;
+            else if (room->t < action->end_t) next_update_t = action->end_t;
+            else                              next_update_t = action->end_retry_t;
+
+            result = min(next_update_t - room->t, result);
             
         } break;
 
@@ -1641,6 +1851,34 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             Fail_If_True(client->user == NO_USER);
             
             add_chat_message(client->user, p->message_text, room);
+        } break;
+
+        case RSB_PLAYER_ACTION_DEQUEUE: {
+            auto *p = &header.player_action_dequeue;
+            
+            Fail_If_True(client->user == NO_USER);
+
+            Entity *player = find_player_entity(client->user, room);
+            
+            if(!player) {
+                RS_Log("Player trying to perform an action, but that player's entity was not found.\n");
+                return false;
+            }
+
+            Assert(player);
+            
+            auto *player_e = &player->player_e;
+
+            if(p->action_ix >= player_e->action_queue_length) {
+                // This is OK. The queue might have changed since when the user requested the dequeue.
+                return true;
+            }
+
+            if(player_e->action_queue[p->action_ix].dequeue_requested)
+                return true;
+
+            request_player_action_dequeue(p->action_ix, player, room, server);
+            
         } break;
             
         default: {

@@ -39,7 +39,7 @@ profiler_yscale 250
 
 # camera_rotation_offset      -30  0 20
 # camera_translation_offset   .2  .25
-# camera_scale_multiplier     4
+camera_scale_multiplier     1
 
 # show_world_grid true
 

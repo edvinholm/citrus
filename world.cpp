@@ -90,12 +90,14 @@ Mesh_ID mesh_for_entity(Entity *e)
     if(e->type != ENTITY_ITEM) return MESH_NONE_OR_NUM;
 
     switch(e->item_e.item.type) {
+        case ITEM_BED:          return MESH_BED;
         case ITEM_CHAIR:        return MESH_CHAIR;
         case ITEM_BLENDER:      return MESH_BLENDER;
         case ITEM_TABLE:        return MESH_TABLE;
         case ITEM_BARREL:       return MESH_BARREL;
         case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
         case ITEM_STOVE:        return MESH_STOVE;
+        case ITEM_GRINDER:      return MESH_GRINDER;
 
         default: return MESH_NONE_OR_NUM;
     }
@@ -202,7 +204,7 @@ bool raycast_against_floor(Ray ray, v3 *_hit)
     return true;
 }
 
-m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float room_sz, float z_offset/* = 0*/)
+m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float room_sz, float z_offset/* = 0*/, bool apply_tweaks/* = true*/)
 {
     float x_mul, y_mul;
     x_mul = 1;
@@ -212,15 +214,13 @@ m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float 
 
     float z_mul = -0.01;
 
-    float cam_scale_mul = tweak_float(TWEAK_CAMERA_SCALE_MULTIPLIER);
-    if(cam_scale_mul > 0) {
-        x_mul *= cam_scale_mul;
-        y_mul *= cam_scale_mul;
+    float dx = 0;
+    float dy = 0;
+    if(apply_tweaks) {
+        v2 cam_trans_offs = tweak_v2(TWEAK_CAMERA_TRANSLATION_OFFSET);
+        dx = -cam_trans_offs.x * x_mul;
+        dy = -cam_trans_offs.y * y_mul;
     }
-    
-    v2 cam_trans_offs = tweak_v2(TWEAK_CAMERA_TRANSLATION_OFFSET);
-    float dx = -cam_trans_offs.x * x_mul;
-    float dy = -cam_trans_offs.y * y_mul;
 
     m4x4 m = make_m4x4(
         x_mul, 0, 0, dx,
@@ -228,7 +228,13 @@ m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float 
         0, 0, z_mul, z_offset,
         0, 0, 0, 1);
 
-    v3 cam_rot_offs = tweak_v3(TWEAK_CAMERA_ROTATION_OFFSET);
+    
+    v3 cam_rot_offs;
+    if(apply_tweaks) {
+        cam_rot_offs = tweak_v3(TWEAK_CAMERA_ROTATION_OFFSET);
+    } else {
+        cam_rot_offs = V3_ZERO;
+    }
 
     m4x4 rotation = rotation_matrix(axis_rotation(V3_X, TAU * (-0.125 + cam_rot_offs.x / 360.0 )));
     m = matmul(rotation, m);
@@ -264,6 +270,12 @@ m4x4 world_projection_matrix(v2 viewport_s, float room_sx, float room_sy, float 
 
         height = (max_y - min_y);
         scale_f = min(2.0 / (max_x-min_x), 2.0 / height);
+    }
+
+
+    if(apply_tweaks) {
+        float cam_scale_mul = tweak_float(TWEAK_CAMERA_SCALE_MULTIPLIER);
+        if(cam_scale_mul > 0) scale_f *= cam_scale_mul;
     }
     
     m4x4 scale = scale_matrix(V3_ONE * scale_f);
@@ -441,6 +453,13 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             Entity_Action act1 = {0};
             act1.type = ENTITY_ACT_SIT_OR_UNSIT;
             act1.sit_or_unsit.unsit = (player_state->sitting_on == e->id);
+            
+            array_add(*_actions, act1);
+        } break;
+
+        case ITEM_BED: {
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_SLEEP;
             
             array_add(*_actions, act1);
         } break;

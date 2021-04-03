@@ -578,35 +578,6 @@ bool write_Nugget_Type(Nugget_Type type, Network_Node *node)
 }
 
 
-bool read_Nugget_Amount(Nugget_Amount *_amt, Network_Node *node)
-{
-    static_assert(sizeof(*_amt) == sizeof(u32));
-    Read_To_Ptr(u32, _amt, node);
-    return true;
-}
-
-bool write_Nugget_Amount(Nugget_Amount amt, Network_Node *node)
-{
-    static_assert(sizeof(amt) == sizeof(u32));
-    Write(u32, amt, node);
-    return true;
-}
-
-
-bool read_Nugget_Container(Nugget_Container *_nc, Network_Node *node)
-{
-    Read_To_Ptr(Nugget_Type,   &_nc->type, node);
-    Read_To_Ptr(Nugget_Amount, &_nc->amount, node);
-    return true;
-}
-
-bool write_Nugget_Container(Nugget_Container nc, Network_Node *node)
-{
-    Write(Nugget_Type,   nc.type,   node);
-    Write(Nugget_Amount, nc.amount, node);
-    return true;
-}
-
 
 // @Norelease @Security: Check that it is a valid type.
 bool read_Liquid_Type(Liquid_Type *_type, Network_Node *node)
@@ -667,14 +638,78 @@ bool write_Liquid(Liquid lq, Network_Node *node)
 }
 
 
-bool read_Liquid_Amount(Liquid_Amount *_amt, Network_Node *node)
+// @Norelease @Security: Check that it is a valid value.
+// NOTE: Don't call this to read a bitfield of Substance_Forms.
+bool read_Substance_Form(Substance_Form *_f, Network_Node *node)
+{
+    static_assert(sizeof(*_f) == sizeof(u8));
+    Read(u8, f, node);
+    *_f = (Substance_Form)f;
+    return true;
+}
+
+bool write_Substance_Form(Substance_Form f, Network_Node *node)
+{
+    static_assert(sizeof(f) == sizeof(u8));
+    Write(u8, f, node);
+    return true;
+}
+
+bool read_Substance(Substance *_s, Network_Node *node)
+{
+    Read_To_Ptr(Substance_Form, &_s->form, node);
+    switch(_s->form) { // @Jai: #complete
+        case SUBST_LIQUID:
+            Read_To_Ptr(Liquid, &_s->liquid, node);
+            break;
+            
+        case SUBST_NUGGET:
+            Read_To_Ptr(Nugget_Type, &_s->nugget, node);
+            break;
+
+        case SUBST_NONE: break;
+            
+        default: {
+            Fail_If_True(true);
+            return false;
+        };
+    }
+    
+    return true;
+}
+
+bool write_Substance(Substance s, Network_Node *node)
+{
+    Write(Substance_Form, s.form, node);
+    switch(s.form) { // @Jai: #complete
+        case SUBST_LIQUID:
+            Write(Liquid, s.liquid, node);
+            break;
+            
+        case SUBST_NUGGET:
+            Write(Nugget_Type, s.nugget, node);
+            break;
+
+        case SUBST_NONE: break;
+
+        default: {
+            Fail_If_True(true);
+            return false;
+        };
+    }
+    
+    return true;
+}
+
+
+bool read_Substance_Amount(Liquid_Amount *_amt, Network_Node *node)
 {
     static_assert(sizeof(*_amt) == sizeof(u32));
     Read_To_Ptr(u32, _amt, node);
     return true;
 }
 
-bool write_Liquid_Amount(Liquid_Amount amt, Network_Node *node)
+bool write_Substance_Amount(Liquid_Amount amt, Network_Node *node)
 {
     static_assert(sizeof(amt) == sizeof(u32));
     Write(u32, amt, node);
@@ -682,17 +717,17 @@ bool write_Liquid_Amount(Liquid_Amount amt, Network_Node *node)
 }
 
 
-bool read_Liquid_Container(Liquid_Container *_lc, Network_Node *node)
+bool read_Substance_Container(Substance_Container *_c, Network_Node *node)
 {
-    Read_To_Ptr(Liquid,        &_lc->liquid, node);
-    Read_To_Ptr(Liquid_Amount, &_lc->amount, node);
+    Read_To_Ptr(Substance,        &_c->substance, node);
+    Read_To_Ptr(Substance_Amount, &_c->amount, node);
     return true;
 }
 
-bool write_Liquid_Container(Liquid_Container lc, Network_Node *node)
+bool write_Substance_Container(Substance_Container c, Network_Node *node)
 {
-    Write(Liquid,        lc.liquid, node);
-    Write(Liquid_Amount, lc.amount, node);
+    Write(Substance,        c.substance, node);
+    Write(Substance_Amount, c.amount, node);
     return true;
 }
 
@@ -710,19 +745,8 @@ bool read_Item(Item *_item, Network_Node *node)
         } break;
     }
 
-    // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    switch(item_types[_item->type].container_form) {
-        case FORM_LIQUID:
-            Read_To_Ptr(Liquid_Container, &_item->liquid_container, node);
-            break;
-            
-        case FORM_NUGGET:
-            Read_To_Ptr(Nugget_Container, &_item->nugget_container, node);
-            break;
-
-        case FORM_NONE_OR_NUM: break;
-
-        default: Fail_If_True(false); break;
+    if(item_types[_item->type].container_forms != SUBST_NONE) {
+        Read_To_Ptr(Substance_Container, &_item->container, node);
     }
     
     return true;
@@ -743,18 +767,8 @@ bool write_Item(Item item, Network_Node *node)
     }
 
     // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    switch(item_types[item.type].container_form) {
-        case FORM_LIQUID:
-            Write(Liquid_Container, item.liquid_container, node);
-            break;
-            
-        case FORM_NUGGET:
-            Write(Nugget_Container, item.nugget_container, node);
-            break;
-
-        case FORM_NONE_OR_NUM: break;
-
-        default: Fail_If_True(false); break;
+    if(item_types[item.type].container_forms != SUBST_NONE) {
+        Write(Substance_Container, item.container, node);
     }
     
     return true;
@@ -1100,6 +1114,12 @@ bool write_Player_Action_Type(Player_Action_Type type, Network_Node *node)
 bool read_Player_Action(Player_Action *_action, Network_Node *node)
 {
     Read_To_Ptr(Player_Action_Type, &_action->type, node);
+    
+    Read_To_Ptr(World_Time, &_action->reach_t,     node);
+    Read_To_Ptr(World_Time, &_action->end_t,       node);
+    Read_To_Ptr(World_Time, &_action->end_retry_t, node);
+
+    Read_To_Ptr(bool, &_action->dequeue_requested, node);
 
     switch(_action->type) { // @Jai: #complete
         case PLAYER_ACT_ENTITY: {
@@ -1135,6 +1155,12 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
 bool write_Player_Action(Player_Action action, Network_Node *node)
 {
     Write(Player_Action_Type, action.type, node);
+    
+    Write(World_Time, action.reach_t,     node);
+    Write(World_Time, action.end_t,       node);
+    Write(World_Time, action.end_retry_t, node);
+    
+    Write(bool, action.dequeue_requested, node);
 
     switch(action.type) { // @Jai: #complete
         case PLAYER_ACT_ENTITY: {
@@ -1275,6 +1301,13 @@ bool read_Machine(Machine *_machine, Network_Node *node)
     for(s64 i = 0; i < _machine->recipe_inputs.n; i++) {
         Read_To_Ptr(Entity_ID, &_machine->recipe_inputs.e[i], node);
     }
+    
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Read_To_Ptr(s64, &_machine->recipe_input_used_as_container.n, node);
+    Fail_If_True(_machine->recipe_input_used_as_container.n > ARRLEN(_machine->recipe_input_used_as_container.e));
+    for(s64 i = 0; i < _machine->recipe_input_used_as_container.n; i++) {
+        Read_To_Ptr(bool, &_machine->recipe_input_used_as_container.e[i], node);
+    }
 
     // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
     Read_To_Ptr(s64, &_machine->recipe_outputs.n, node);
@@ -1298,11 +1331,16 @@ bool write_Machine(Machine *machine, Network_Node *node)
     }
     
     // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
+    Write(s64, machine->recipe_input_used_as_container.n, node);
+    for(s64 i = 0; i < machine->recipe_input_used_as_container.n; i++) {
+        Write(bool, machine->recipe_input_used_as_container.e[i], node);
+    }
+    
+    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
     Write(s64, machine->recipe_outputs.n, node);
     for(s64 i = 0; i < machine->recipe_outputs.n; i++) {
         Write(Entity_ID, machine->recipe_outputs.e[i], node);
     }
-    
     
     return true;
 }
@@ -1359,26 +1397,13 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             }
 
             auto *type = &item_types[x->item.type];
-            if(type->container_form != FORM_NONE_OR_NUM) {
+            if(type->container_forms != SUBST_NONE) {
                 auto *container = &x->container;
                 Read_To_Ptr(World_Time, &container->t0, node);
                 Read_To_Ptr(World_Time, &container->t1, node);
-
-                switch(type->container_form) {
-                    case FORM_LIQUID: {
-                        auto *l = &container->liquid;
-                        Read_To_Ptr(Liquid_Container, &l->c0, node);
-                        Read_To_Ptr(Liquid_Container, &l->c1, node);
-                    } break;
-
-                    case FORM_NUGGET: {
-                        auto *n = &container->nugget;
-                        Read_To_Ptr(Nugget_Container, &n->c0, node);
-                        Read_To_Ptr(Nugget_Container, &n->c1, node);
-                    } break;
-
-                    default: Fail_If_True(false); break;
-                }
+                
+                Read_To_Ptr(Substance_Container, &container->c0, node);
+                Read_To_Ptr(Substance_Container, &container->c1, node);
             }
             
         } break;
@@ -1406,7 +1431,13 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
                 Read_To_Ptr(Player_Action, &x->action_queue[i], node);
             }
 
-            Read_To_Ptr(Entity_ID, &x->sitting_on, node);
+            Read_To_Ptr(Entity_ID, &x->is_on, node);
+            Read_To_Ptr(bool,      &x->laying_down_instead_of_sitting, node);
+
+            Read_To_Ptr(World_Time, &x->needs_t0, node);
+            for(int i = 0; i < ARRLEN(x->needs0.values); i++) Read_To_Ptr(float, &x->needs0.values[i], node);
+            for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Read_To_Ptr(float, &x->need_change_speeds[i], node);
+            
         } break;
 
         default: Assert(false); return false;
@@ -1466,27 +1497,14 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
 
             
             auto *type = &item_types[x->item.type];
-            
-            if(type->container_form != FORM_NONE_OR_NUM) {
+            if(type->container_forms != SUBST_NONE) {
                 auto *container = &x->container;
                 Write(World_Time, container->t0, node);
                 Write(World_Time, container->t1, node);
+                
+                Write(Substance_Container, container->c0, node);
+                Write(Substance_Container, container->c1, node);
 
-                switch(type->container_form) {
-                    case FORM_LIQUID: {
-                        auto *l = &container->liquid;
-                        Write(Liquid_Container, l->c0, node);
-                        Write(Liquid_Container, l->c1, node);
-                    } break;
-
-                    case FORM_NUGGET: {
-                        auto *n = &container->nugget;
-                        Write(Nugget_Container, n->c0, node);
-                        Write(Nugget_Container, n->c1, node);
-                    } break;
-
-                    default: Fail_If_True(false); break;
-                }
             }
             
         } break;
@@ -1511,7 +1529,13 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
                 Write(Player_Action, x->action_queue[i], node);
             }
             
-            Write(Entity_ID, x->sitting_on, node);
+            Write(Entity_ID, x->is_on, node);
+            Write(bool,      x->laying_down_instead_of_sitting, node);
+
+            Write(World_Time, x->needs_t0, node);
+            for(int i = 0; i < ARRLEN(x->needs0.values); i++) Write(float, x->needs0.values[i], node);
+            for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Write(float, x->need_change_speeds[i], node);
+            
         } break;
 
         default: Assert(false); return false;

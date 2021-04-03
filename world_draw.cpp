@@ -259,22 +259,31 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
 
         base_color = item_type->color;
 
-        if(item_type->container_form == FORM_LIQUID)
+        if(item_type->container_forms != SUBST_NONE)
         {
             auto *c = &e->item_e.container;
-            auto *l = &c->liquid;
-            
-            float capacity = liquid_container_capacity(item) / 10.0f;
 
-            float liquid_amount;
-            liquid_container_lerp(&l->c0, &l->c1, c->t0, c->t1, world_t, &liquid_amount);
+            // @Speed: We probably do this lerp in update_entity_item too.
+            float continuous_amount;
+            Substance_Container container = substance_container_lerp(&c->c0, &c->c1, c->t0, c->t1, world_t, &continuous_amount);
             
-            fill = (capacity > 0) ? liquid_amount / capacity : 0;
-            fill_color = liquid_color(item->liquid_container.liquid);
+            if(container.amount > 0 && container.substance.form == SUBST_LIQUID) {
+                auto *l = &container.substance.liquid;
+            
+                float capacity = substance_container_capacity(item, SUBST_LIQUID) / 10.0f;
+
+                fill = (capacity > 0) ? continuous_amount / capacity : 0;
+                fill_color = liquid_color(container.substance.liquid);
+            }
         }
 
         if(item->type == ITEM_CHESS_BOARD) {
             volume.z = 0.1f;
+        }
+
+        Machine *machine;
+        if(is_machine(e, &machine) && machine_is_doing_recipe(machine, world_t)) {
+            center += random_point_in_unit_sphere() * .1f;
         }
     }
     else if(e->type == ENTITY_PLAYER)
@@ -283,8 +292,13 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
         
         volume = { 1.2, 1.2, player_entity_height };
         
-        if(player_e->sitting_on != NO_ENTITY) {
-            base_color = { 0.93, 0.52, 0.72, 1.0 };
+        if(player_e->is_on != NO_ENTITY) {
+            if(player_e->laying_down_instead_of_sitting) {
+                base_color = { 0.72, 0.93, 0.52, 1.0 };
+
+            } else {
+                base_color = { 0.93, 0.52, 0.72, 1.0 };
+            }
         } else {
             base_color = { 0.93, 0.72, 0.52, 1.0 };
         }
@@ -343,14 +357,14 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
     if(mesh != MESH_NONE_OR_NUM &&
        (!do_debug_things || !tweak_bool(TWEAK_HIDE_ENTITY_MESHES)))
     {
-        Render_Object *mesh_obj = draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &wrb->opaque, gfx, 0.0f, base_color);
+        Render_Object *mesh_obj = draw_mesh(mesh, scale_matrix(V3_ONE * scale) * rotation_matrix(q) * translation_matrix(center), &wrb->opaque, gfx, 0.0f, C_WHITE);
         if(use_oven_lightbox) { // NOTE: We don't do this on vertex objects, but we don't worry about that right now because everything will probably be meshes in the end anyway.
 
             v3 forward = rotate_vector(V3_X, oven_q);
             v3 left    = rotate_vector(V3_Y, oven_q);
             
             mesh_obj->lightbox_center   = oven_p + V3_Z * 1;
-            mesh_obj->lightbox_radiuses = compabs((forward * .95) + (left * .95) + V3_Z * .9);
+            mesh_obj->lightbox_radiuses = compabs((forward * .9) + (left * .95) + V3_Z * .9);
 
             float alpha = 1.0f + (float)sin(world_t + random_float() * 0.05f) * .2f + (-0.05f + random_float() * 0.1f);
             mesh_obj->lightbox_color    = { 1.00f, 0.81f, 0.16f, alpha };

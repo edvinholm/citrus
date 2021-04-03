@@ -3,6 +3,7 @@ enum C_RS_Action_Type
 {
     C_RS_ACT_CLICK_TILE, // @Cleanup: Should be in player action. (?)
     C_RS_ACT_PLAYER_ACTION,
+    C_RS_ACT_PLAYER_ACTION_DEQUEUE,
     C_RS_ACT_CHAT
 };
 
@@ -15,6 +16,10 @@ struct C_RS_Action
         } click_tile;
 
         Player_Action player_action;
+
+        struct {
+            u32 action_ix;
+        } player_action_dequeue;
 
         struct {
             

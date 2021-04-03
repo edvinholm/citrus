@@ -45,12 +45,13 @@ enum Item_Type_Flag_: u8 {
 typedef u8 Item_Type_Flags;
 static_assert(sizeof(Item_Type_Flags) == sizeof(Item_Type_Flag_));
 
-enum Item_Form: u8
+// Bitfield.
+enum Substance_Form: u8
 {
-    FORM_LIQUID,
-    FORM_NUGGET,
+    SUBST_LIQUID = 0x1,
+    SUBST_NUGGET = 0x2,
 
-    FORM_NONE_OR_NUM
+    SUBST_NONE = 0
 };
 
 struct Item_Type
@@ -60,7 +61,7 @@ struct Item_Type
 
     String name;
 
-    Item_Form container_form;
+    Substance_Form container_forms;
     
     Item_Type_Flags flags;
 };
@@ -81,7 +82,10 @@ enum Entity_Action_Type
     ENTITY_ACT_CHESS = 6,
 
     // Chair
-    ENTITY_ACT_SIT_OR_UNSIT = 7
+    ENTITY_ACT_SIT_OR_UNSIT = 7,
+
+    // Bed
+    ENTITY_ACT_SLEEP = 8
 };
 
 struct Entity_Action
@@ -103,27 +107,27 @@ struct Entity_Action
 
 
 Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
-    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), FORM_NONE_OR_NUM },
-    { {3, 6, 1}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   FORM_NONE_OR_NUM },
-    { {2, 4, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), FORM_NONE_OR_NUM },
+    { {2, 2, 4}, { 0.6,  0.1,  0.6, 1.0}, STRING("Chair"), SUBST_NONE },
+    { {7, 4, 3}, { 0.1,  0.6,  0.6, 1.0}, STRING("Bed"),   SUBST_NONE },
+    { {4, 6, 2}, { 0.6,  0.6,  0.1, 1.0}, STRING("Table"), SUBST_NONE },
     
-    { {4, 4, 8}, { 0.3,   0.8,  0.1, 1.0}, STRING("Apple Tree"), FORM_NONE_OR_NUM },
-    { {1, 1, 3}, { 1.00, 0.71, 0.26, 1.0}, STRING("Wheat"),      FORM_NONE_OR_NUM },
+    { {4, 4, 8}, { 0.3,   0.8,  0.1, 1.0}, STRING("Apple Tree"), SUBST_NONE },
+    { {1, 1, 3}, { 1.00, 0.71, 0.26, 1.0}, STRING("Wheat"),      SUBST_NONE },
     
-    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      FORM_NONE_OR_NUM },
-    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), FORM_LIQUID },
-    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  FORM_NONE_OR_NUM },
-    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"),       FORM_LIQUID },
+    { {2, 2, 2}, { 0.3,  0.5,  0.5, 1.0}, STRING("Machine"),      SUBST_NONE },
+    { {1, 2, 1}, {0.73, 0.09, 0.00, 1.0}, STRING("Watering Can"), SUBST_LIQUID },
+    { {2, 2, 1}, { 0.1,  0.1,  0.1, 1.0}, STRING("Chess Board"),  SUBST_NONE },
+    { {2, 2, 3}, { 0.02, 0.2, 0.12, 1.0}, STRING("Barrel"),       SUBST_LIQUID },
     
-    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"),           FORM_NONE_OR_NUM },
-    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), FORM_LIQUID },
+    { {2, 2, 2}, {0.35, 0.81, 0.77, 1.0}, STRING("Blender"),           SUBST_NONE },
+    { {2, 2, 1}, {0.88, 0.24, 0.99, 1.0}, STRING("Blender Container"), SUBST_LIQUID },
     
-    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), FORM_NONE_OR_NUM },
+    { {1, 1, 1}, {0.74, 0.04, 0.04, 1.0}, STRING("Fruit"), SUBST_NONE },
 
-    { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), FORM_NUGGET },
-    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), FORM_NONE_OR_NUM },
-    { {2, 2, 2}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), FORM_NONE_OR_NUM },
-    { {2, 2, 3}, {0.15, 0.66, 0.24, 1.0}, STRING("Grinder"), FORM_NONE_OR_NUM }
+    { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), SUBST_NUGGET },
+    { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), SUBST_NONE },
+    { {3, 3, 3}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), SUBST_NONE },
+    { {2, 2, 3}, {0.15, 0.66, 0.24, 1.0}, STRING("Grinder"), SUBST_NONE }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -206,6 +210,9 @@ v4 liquid_color(Liquid lq) {
 }
 #endif
 
+
+
+
 struct Liquid_Container
 {
     Liquid liquid;
@@ -236,18 +243,39 @@ v4 nugget_colors[] = {
 static_assert(ARRLEN(nugget_colors) == NUGGET_NONE_OR_NUM);
 #endif
 
-typedef u32 Nugget_Amount;
 
-struct Nugget_Container
+typedef u32 Substance_Amount;
+
+struct Substance
 {
-    Nugget_Type   type;
-    Nugget_Amount amount;
+    Substance_Form form;
+    
+    union {
+        Liquid      liquid;
+        Nugget_Type nugget;
+    };
 };
 
-bool equal(Nugget_Container *a, Nugget_Container *b) {
-    if(a->type != b->type) return false;
+bool equal(Substance *a, Substance *b) {
+    if(a->form != b->form) return false;
+    switch(a->form) { // @Jai: #complete
+        case SUBST_LIQUID: return equal(&a->liquid, &b->liquid);
+        case SUBST_NUGGET: return (a->nugget == b->nugget);
+
+        default: Assert(false); return false;
+    }
+}
+
+struct Substance_Container
+{
+    Substance        substance;
+    Substance_Amount amount;
+};
+
+bool equal(Substance_Container *a, Substance_Container *b) {
     if(a->amount != b->amount) return false;
-    return true;
+    if(a->amount == 0) return true;
+    return equal(&a->substance, &b->substance);
 }
 
 
@@ -262,10 +290,7 @@ struct Item {
         } plant;
     };
 
-    union {
-        Liquid_Container liquid_container; // If item_types[.type].container_form == FORM_LIQUID
-        Nugget_Container nugget_container; // If item_types[.type].container_form == FORM_NUGGET
-    };
+    Substance_Container container;
 };
 
 bool equal(Item *a, Item *b)
@@ -306,7 +331,12 @@ enum Player_Action_Type
 struct Player_Action
 {
     Player_Action_Type type;
-    World_Time next_update_t;
+
+    World_Time reach_t;
+    World_Time end_t;
+    World_Time end_retry_t;
+
+    bool dequeue_requested;
 
     union {
         struct {
@@ -339,8 +369,32 @@ struct Machine
                     
     //NOTE: These are only valid if t_on_recipe_begin + recipe_duration > t
     Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_inputs;
+    Static_Array<bool,      MAX_RECIPE_INPUTS> recipe_input_used_as_container;
     Static_Array<Entity_ID, MAX_RECIPE_INPUTS> recipe_outputs;
     //--
+};
+
+enum Need
+{
+    NEED_ENERGY,
+    NEED_SLEEP,
+    NEED_BLADDER,
+    NEED_BOWEL,
+
+    NEED_NONE_OR_NUM
+};
+
+String need_names[] = {
+    STRING("ENERGY"),
+    STRING("SLEEP"),
+    STRING("BLADDER"),
+    STRING("BOWEL")
+};
+static_assert(ARRLEN(need_names) == NEED_NONE_OR_NUM);
+
+struct Needs
+{
+    float values[NEED_NONE_OR_NUM];
 };
 
 struct S__Entity
@@ -372,13 +426,9 @@ struct S__Entity
                     World_Time stop_t;
                 } machine;
 
-                struct {
-                    Machine machine;
-                } blender;
-
-                struct {
-                    Machine machine;
-                } filter_press;
+                struct { Machine machine; } blender;
+                struct { Machine machine; } filter_press;
+                struct { Machine machine; } grinder;
 
                 Chess_Board chess_board;
             };
@@ -388,17 +438,8 @@ struct S__Entity
                 World_Time t0;
                 World_Time t1;
 
-                union {
-                    struct {
-                        Liquid_Container c0;
-                        Liquid_Container c1;
-                    } liquid;
-
-                    struct {
-                        Nugget_Container c0;
-                        Nugget_Container c1;
-                    } nugget;
-                };
+                Substance_Container c0;
+                Substance_Container c1;
                 
             } container;
             
@@ -414,7 +455,12 @@ struct S__Entity
             u8 action_queue_length;
             Player_Action action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
 
-            Entity_ID sitting_on;
+            Entity_ID is_on;
+            bool laying_down_instead_of_sitting; // Only valid if is_on != NO_ENTITY
+
+            World_Time needs_t0;
+            Needs needs0;
+            float need_change_speeds[NEED_NONE_OR_NUM];
             
         } player_e;
     };
@@ -441,7 +487,9 @@ struct Player_State
     
     v3 p;
     Item held_item; // No item if .type == ITEM_NONE_OR_NUM.
+    
     Entity_ID sitting_on;
+    Entity_ID laying_on;
 };
 
 enum Tile_Type: s8 {

@@ -65,60 +65,49 @@ bool hitbox_intersects_hitbox(Entity_Hitbox a, Entity_Hitbox b)
 }
 
 
-Nugget_Type nugget_type_of_container(Nugget_Container *nc)
+Nugget_Type nugget_type_of_container(Substance_Container *c)
 {
-    return (nc->amount == 0) ? NUGGET_NONE_OR_NUM : nc->type;
+    Assert(c->amount == 0 || c->substance.form == SUBST_NUGGET);
+    return (c->amount == 0) ? NUGGET_NONE_OR_NUM : c->substance.nugget;
 }
 
-
-bool can_blend(Nugget_Container *a, Nugget_Container *b)
+Liquid_Type liquid_type_of_container(Substance_Container *c)
 {
-    auto a_type = nugget_type_of_container(a);
-    auto b_type = nugget_type_of_container(b);
+    Assert(c->amount == 0 || c->substance.form == SUBST_LIQUID);
+    return (c->amount == 0) ? LQ_NONE_OR_NUM : c->substance.liquid.type;
+}
 
-    if(a_type == NUGGET_NONE_OR_NUM || b_type == NUGGET_NONE_OR_NUM) return true;
-    if(a_type == b_type) return true;
+bool can_blend(Substance_Container *a, Substance_Container *b)
+{
+    if(a->amount == 0 || b->amount == 0) return true;
+    if(a->substance.form != b->substance.form) return false;
 
+    auto form = a->substance.form;
+    
+    // @Cleanup: Could probably combine cases.
+    switch(form) {
+        case SUBST_LIQUID: {            
+            auto a_type = liquid_type_of_container(a);
+            auto b_type = liquid_type_of_container(b);
+
+            Assert(a_type != LQ_NONE_OR_NUM);
+            Assert(b_type != LQ_NONE_OR_NUM);
+            return (a_type == b_type);
+        } break;
+
+        case SUBST_NUGGET: {
+            auto a_type = nugget_type_of_container(a);
+            auto b_type = nugget_type_of_container(b);
+
+            Assert(a_type != NUGGET_NONE_OR_NUM);
+            Assert(b_type != NUGGET_NONE_OR_NUM);
+            return (a_type == b_type);
+        } break;
+    }
+    
     return false;
 }
 
-Nugget_Container blend(Nugget_Container *a, Nugget_Container *b)
-{
-    Assert(can_blend(a, b));
-
-    auto a_type = nugget_type_of_container(a);
-    auto b_type = nugget_type_of_container(b);
-
-    if(a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
-
-    Nugget_Container result;
-    Zero(result);
-    
-    result.amount = a->amount + b->amount;
-
-    if(a_type == NUGGET_NONE_OR_NUM) result.type = b->type;
-    else                             result.type = a->type;
-    
-    return result;
-}
-
-
-
-Liquid_Type liquid_type_of_container(Liquid_Container *lc)
-{
-    return (lc->amount == 0) ? LQ_NONE_OR_NUM : lc->liquid.type;
-}
-
-bool can_blend(Liquid_Container *a, Liquid_Container *b)
-{
-    auto a_type = liquid_type_of_container(a);
-    auto b_type = liquid_type_of_container(b);
-
-    if(a_type == LQ_NONE_OR_NUM || b_type == LQ_NONE_OR_NUM) return true;
-    if(a_type == b_type) return true;
-
-    return false;
-}
 
 Liquid_Fraction liquid_fraction_lerp(Liquid_Fraction a, Liquid_Fraction b, float t)
 {
@@ -145,147 +134,149 @@ Liquid liquid_lerp(Liquid *a, Liquid *b, float t)
     return result;
 }
 
-Liquid_Container blend(Liquid_Container *a, Liquid_Container *b)
+
+Substance_Container blend(Substance_Container *a, Substance_Container *b)
 {
     Assert(can_blend(a, b));
 
-    auto a_type = liquid_type_of_container(a);
-    auto b_type = liquid_type_of_container(b);
+    if(a->amount == 0 && b->amount == 0) return *a;
+    auto form = (a->amount == 0) ? b->substance.form : a->substance.form;
 
-    if(a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) return *a;
-
-    Liquid_Container result;
+    Substance_Container result;
     Zero(result);
-    
-    result.amount = a->amount + b->amount;
+    result.substance.form = form;
 
-    if(a_type == LQ_NONE_OR_NUM)      result.liquid = b->liquid;
-    else if(b_type == LQ_NONE_OR_NUM) result.liquid = a->liquid;
-    else {
-        Assert(b->amount > 0); // Because b_type != LQ_NONE_OR_NUM.
-        float t = (result.amount > 0) ? (b->amount / (float)result.amount) : 0;
-        result.liquid = liquid_lerp(&a->liquid, &b->liquid, t);
+    // @Cleanup: blend could probably be combined with lerp.
+    // @Cleanup: Could probably combine cases.
+    switch(form) {
+        case SUBST_LIQUID: {            
+            auto a_type = liquid_type_of_container(a);
+            auto b_type = liquid_type_of_container(b);
+
+            if(a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) return *a;
+    
+            result.amount = a->amount + b->amount;
+
+            if(a_type == LQ_NONE_OR_NUM)      result.substance.liquid = b->substance.liquid;
+            else if(b_type == LQ_NONE_OR_NUM) result.substance.liquid = a->substance.liquid;
+            else {
+                Assert(b->amount > 0); // Because b_type != LQ_NONE_OR_NUM.
+                float t = (result.amount > 0) ? (b->amount / (float)result.amount) : 0;
+                result.substance.liquid = liquid_lerp(&a->substance.liquid, &b->substance.liquid, t);
+            }
+
+        } break;
+
+        case SUBST_NUGGET: {
+            auto a_type = nugget_type_of_container(a);
+            auto b_type = nugget_type_of_container(b);
+
+            if(a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
+
+            result.amount = a->amount + b->amount;
+
+            if(a_type == NUGGET_NONE_OR_NUM) result.substance.nugget = b->substance.nugget;
+            else                             result.substance.nugget = a->substance.nugget;
+        } break;
     }
     
     return result;
 }
 
-// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
-// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
-// @Cleanup: Can't we combine this with blend()? So that blend() == lerp(t = 1)
-Nugget_Container nugget_container_lerp(Nugget_Container *a, Nugget_Container *b, float t)
+
+Substance_Container substance_container_lerp(Substance_Container *a, Substance_Container *b, float t, float *_continuous_amount = NULL /* @Jai: #bake */)
 {
-    Assert(a->type == b->type ||
-           nugget_type_of_container(a) == NUGGET_NONE_OR_NUM ||
-           nugget_type_of_container(b) == NUGGET_NONE_OR_NUM);
+    Substance_Container result = *a;
 
-    auto a_type = nugget_type_of_container(a);
-    auto b_type = nugget_type_of_container(b);
+    if (a->amount == 0 && b->amount == 0) return result;
+    auto form = (a->amount == 0) ? b->substance.form : a->substance.form;
+    result.substance.form = form;
 
-    if (a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
+    if (a->amount != 0 && b->amount != 0) {
+        Assert(a->substance.form == b->substance.form);
+    }
+
+    float continous_amount = 0;
+    defer(if(_continuous_amount) *_continuous_amount = continous_amount;);
     
-    Nugget_Container result = *a;
+    switch(form) { // @Jai: #complete
+        case SUBST_LIQUID: {
+
+            auto *a_lq = &a->substance.liquid;
+            auto *b_lq = &b->substance.liquid;
+            
+            Assert(a_lq->type == b_lq->type ||
+                   liquid_type_of_container(a) == LQ_NONE_OR_NUM ||
+                   liquid_type_of_container(b) == LQ_NONE_OR_NUM);
+
+            auto a_type = liquid_type_of_container(a);
+            auto b_type = liquid_type_of_container(b);
+
+            if (a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) return *a;
     
-    result.type = a_type;
-    if(result.type == NUGGET_NONE_OR_NUM) result.type = b_type;
+            auto type = a_type;
+            if(type == LQ_NONE_OR_NUM) type = b_type;
     
-    float amt = lerp((float)result.amount, (float)b->amount, t);
-    result.amount = floorf(amt);
+            result.substance.liquid.type = type;
+            result.substance.liquid = liquid_lerp(&result.substance.liquid, &b->substance.liquid, t);
+        } break;
+
+        case SUBST_NUGGET: {
+            
+            Assert(a->substance.nugget == b->substance.nugget ||
+                   nugget_type_of_container(a) == NUGGET_NONE_OR_NUM ||
+                   nugget_type_of_container(b) == NUGGET_NONE_OR_NUM);
+
+            auto a_type = nugget_type_of_container(a);
+            auto b_type = nugget_type_of_container(b);
+
+            if (a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
     
+            result.substance.nugget = a_type;
+            if(result.substance.nugget == NUGGET_NONE_OR_NUM) result.substance.nugget = b_type;            
+        } break;
+
+        default: Assert(false); return *a;
+    }
+
+    continous_amount = lerp(0.1f * result.amount, 0.1f * b->amount, t);
+    result.amount = floorf(continous_amount * 10.0f);
+
     return result;
 }
 
-Nugget_Container nugget_container_lerp(Nugget_Container *nc0, Nugget_Container *nc1, double t0, double t1, double t)
+Substance_Container substance_container_lerp(Substance_Container *lc0, Substance_Container *lc1, double t0, double t1, double t, float *_continuous_amount = NULL)
 {
     double dur = t1 - t0;
     double t_norm = (dur <= 0) ? 1 : clamp((t - t0) / dur);
-    return nugget_container_lerp(nc0, nc1, t_norm);
+    return substance_container_lerp(lc0, lc1, t_norm, _continuous_amount);
 }
 
-Nugget_Amount nugget_container_capacity(Item *item)
+Substance_Amount substance_container_capacity(Item *item, Substance_Form form)
 {
     Item_Type *item_type = item_types + item->type;
-    
-#if DEBUG
-    Assert(item_type->container_form == FORM_NUGGET);
-#endif
+    Assert(item_type->container_forms & form);
 
     auto vol = item_type->volume;
 
-    switch(item->type) {
-        default: return vol.x * vol.y * vol.z * 10;
+    switch(form) {
+        case SUBST_NUGGET:
+        case SUBST_LIQUID:
+        default:
+            return vol.x * vol.y * vol.z * 10;
     }
-
-    Assert(false);
-    return 0;
 }
 
 
-
-// NOTE *_continuous_amount is 10 times smaller than Liquid_Container.amount.
-Liquid_Container liquid_container_lerp(Liquid_Container *a, Liquid_Container *b, float t, float *_continuous_amount = NULL /* @Jai: #bake */)
-{
-    Assert(a->liquid.type == b->liquid.type ||
-           liquid_type_of_container(a) == LQ_NONE_OR_NUM ||
-           liquid_type_of_container(b) == LQ_NONE_OR_NUM);
-
-    auto a_type = liquid_type_of_container(a);
-    auto b_type = liquid_type_of_container(b);
-
-    if (a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) {
-        if(_continuous_amount) *_continuous_amount = 0;
-        return *a;
-    }
-    
-    auto type = a_type;
-    if(type == LQ_NONE_OR_NUM) type = b_type;
-    
-    Liquid_Container result = *a;
-    result.liquid.type = type;
-    result.liquid = liquid_lerp(&result.liquid, &b->liquid, t);
-    
-    float amt = lerp(0.1f * result.amount, 0.1f * b->amount, t);
-    if(_continuous_amount) *_continuous_amount = amt;
-    
-    result.amount = floorf(amt * 10.0f);
-
-    return result;
-}
-
-Liquid_Container liquid_container_lerp(Liquid_Container *lc0, Liquid_Container *lc1, double t0, double t1, double t, float *_continuous_amount = NULL)
-{
-    double dur = t1 - t0;
-    double t_norm = (dur <= 0) ? 1 : clamp((t - t0) / dur);
-    return liquid_container_lerp(lc0, lc1, t_norm, _continuous_amount);
-}
-
-Liquid_Amount liquid_container_capacity(Item *item)
-{
-    Item_Type *item_type = item_types + item->type;
-    
-#if DEBUG
-    Assert(item_type->container_form == FORM_LIQUID);
-#endif
-
-    auto vol = item_type->volume;
-
-    switch(item->type) {
-
-        default: return vol.x * vol.y * vol.z * 10;
-    }
-
-    Assert(false);
-    return 0;
-}
-
-
-void simulate_liquid_properties(Liquid_Container *lc, double dt)
+void simulate_liquid_properties(Substance_Container *c, double dt)
 {
     Assert(dt >= 0);
+
+    Assert(c->amount == 0 || c->substance.form == SUBST_LIQUID);
     
-    auto lq_type = liquid_type_of_container(lc);
+    auto lq_type = liquid_type_of_container(c);
     if(lq_type == LQ_YEAST_WATER) {
-        auto &yw = lc->liquid.yeast_water;
+        auto &yw = c->substance.liquid.yeast_water;
 
         const Liquid_Fraction max_yeast = 800;
 
@@ -323,27 +314,19 @@ void update_entity_item(Entity *e, double world_t)
 
     auto *type = &item_types[item->type];
 
-    if(type->container_form != FORM_NONE_OR_NUM) {
+    if(type->container_forms != SUBST_NONE) {
         auto *c = &e->item_e.container;
-        switch(type->container_form) { // @Jai: #complete
-            case FORM_LIQUID: {
-                auto *l = &c->liquid;
-                item->liquid_container = liquid_container_lerp(&l->c0, &l->c1, c->t0, c->t1, world_t);
-                
+
+        item->container = substance_container_lerp(&c->c0, &c->c1, c->t0, c->t1, world_t);
+
+        switch(item->container.substance.form) {
+            case SUBST_LIQUID: {       
                 // Continue simulating properties after lerp t1
                 double extra_dt = world_t - c->t1;
                 if(extra_dt > 0) {
-                    simulate_liquid_properties(&item->liquid_container, extra_dt);
+                    simulate_liquid_properties(&item->container, extra_dt);
                 }
-                
             } break;
-
-            case FORM_NUGGET: {
-                auto *n = &c->nugget;
-                item->nugget_container = nugget_container_lerp(&n->c0, &n->c1, c->t0, c->t1, world_t); 
-            } break;
-
-            default: Assert(false); break;
         }
     }
 }
@@ -418,27 +401,14 @@ Entity create_item_entity(Item *item, v3 p, Quat q, double world_t)
         } break;
     }
 
-    auto container_form = item_types[item->type].container_form;
-    if(container_form != FORM_NONE_OR_NUM) {
+    auto container_forms = item_types[item->type].container_forms;
+    if(container_forms != SUBST_NONE) {
         auto *c = &e.item_e.container;
         c->t0 = world_t;
         c->t1 = world_t;
 
-        switch(container_form) { // @Jai: #complete
-            case FORM_LIQUID: {
-                auto *l = &c->liquid;
-                l->c0 = item->liquid_container;
-                l->c1 = item->liquid_container;
-            } break;
-                
-            case FORM_NUGGET: {
-                auto *n = &c->nugget;
-                n->c0 = item->nugget_container;
-                n->c1 = item->nugget_container;
-            } break;
-
-            default: Assert(false); break;
-        }
+        c->c0 = item->container;
+        c->c1 = item->container;
     }
     
     return e;
@@ -483,10 +453,19 @@ void get_entity_transform(ENTITY *e, double world_t, v3 *_p, Quat *_q, Room *roo
                 auto *player_e = &e->player_e;
 
                 if(room) {
-                    if(player_e->sitting_on != NO_ENTITY) {
-                        auto *sittee = find_entity(player_e->sitting_on, room);
-                        if(sittee) {
-                            get_entity_transform(sittee, world_t, _p, _q, room);
+                    if(player_e->is_on != NO_ENTITY) {
+                        auto *on = find_entity(player_e->is_on, room);
+                        if(on) {
+                            get_entity_transform(on, world_t, _p, _q, room);
+                            
+                            if(player_e->laying_down_instead_of_sitting) {
+                                v3 forward = rotate_vector(V3_X, *_q);
+                                v3 left    = rotate_vector(V3_Y, *_q);
+                                v3 up      = rotate_vector(V3_Z, *_q);
+                                (*_p) += forward * 3 + up * 2;
+                                (*_q) *= axis_rotation(left, -TAU * .25);
+                            }
+                            
                             return;
                         }
                     }
@@ -579,17 +558,27 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
         
         switch(action->type) {
 
-            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP. 
+            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP.
+            case ENTITY_ACT_SLEEP:
             case ENTITY_ACT_PICK_UP: {
                 
                 v3 tp0 = p;
                 tp0 -= forward * volume.x * 0.5f;
                 tp0 -= left    * volume.y * 0.5f;
-                
-                for(auto z = -player_entity_hands_zoffs - 2; z <= 0; z++) {
-                    for(int y = 0; y <= volume.y; y++) {
-                        for(int x = 0; x <= volume.x; x++) {
 
+                int x0 = 0;
+                int z0 = -player_entity_hands_zoffs - 2;
+                
+                if(action->type == ENTITY_ACT_SLEEP) {
+                    x0 = 1; // Can't enter bed from behind the headboard
+                    z0 = 0; // Must be on the same z as the bed.
+                }
+                
+                for(auto z = z0; z <= 0; z++) {
+                    for(int y = 0; y <= volume.y; y++) {
+
+                        for(int x = x0; x <= volume.x; x++) {
+                        
                             // @Speed: Continuing on most squares for big volumes.
                             if(x > 0 && x < volume.x && y > 0 && y < volume.y) continue;
 
@@ -841,6 +830,34 @@ Static_Array<Surface, 8> item_entity_surfaces(S__Entity *e, double world_t, Room
                     
         } break;
 
+            
+        case ITEM_GRINDER: {
+            v3s vol = item_types[item->type].volume;
+
+            // input
+            {
+                Surface surf = {0};
+                surf.type = SURF_TYPE_MACHINE_INPUT;
+                surf.s = (forward * 2 + left * 2).xy;
+                surf.p = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f) + (up * vol.z);
+                
+                array_add(surfaces, surf);
+            }
+
+            // output
+            {
+                Surface surf = {0};
+                surf.type   = SURF_TYPE_MACHINE_OUTPUT;
+                surf.flags |= SURF_EXCLUSIVE;
+                surf.flags |= SURF_CENTERING;
+                surf.p = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f) + up * 0.5f;
+                surf.s = (forward * vol.x + left * vol.y).xy;
+                surf.max_height = 1;
+                array_add(surfaces, surf);
+            }
+                    
+        } break;
+
         case ITEM_FILTER_PRESS: {
             v3s vol = item_types[item->type].volume;
 
@@ -1005,7 +1022,7 @@ struct Support
 //                          without setting supports->n to 0 at the beginning.
 //       IMPORTANT that we keep it this way because some code depend on it (or change the usage code)
 template<Allocator_ID A>
-void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, S__Entity *entity_to_ignore = NULL)
+void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *surface_owner, double world_t, Room *room, Array<Support, A> *supports, Entity_ID entity_to_ignore = NO_ENTITY)
 {
     float x0 = surf->p.x + 0.5f;
     v3 pp = { x0, surf->p.y + 0.5f, surf->p.z};
@@ -1026,7 +1043,7 @@ void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *su
 
                 if(e->type != ENTITY_ITEM) continue;
                 
-                if (e == surface_owner || e == entity_to_ignore) continue;
+                if (e == surface_owner || e->id == entity_to_ignore) continue;
 
                 auto hitbox = entity_hitbox(e, world_t, room);
                 if(!floats_equal(hitbox.base.p.z, pp.z)) continue;
@@ -1039,8 +1056,8 @@ void find_given_supports_by_surface(Surface *surf, int surface_index, Entity *su
 
 
             if(supported_entity &&
-               supported_entity != surface_owner &&
-               supported_entity != entity_to_ignore)
+               supported_entity     != surface_owner &&
+               supported_entity->id != entity_to_ignore)
             {
                 Support support = {0};
                 support.supported               = supported_entity;
@@ -1099,7 +1116,7 @@ void find_given_supports(Entity *e, double world_t, Room *room, Array<Support, A
 
 
 
-bool is_supported_by(S__Entity *supported_entity, v3 *support_points, int num_support_points, s32 supported_height,
+bool is_supported_by(Entity_ID supported_entity, v3 *support_points, int num_support_points, s32 supported_height,
                      Entity *potential_supporter, double world_t, Room *room,
                      bool *support_point_satisfied_array = NULL, bool *_actively_rejected = NULL)
 {
@@ -1225,7 +1242,7 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
         auto *potential_supporter = &Entities(room)[i];
         if(!Entity_Exists(potential_supporter)) continue;
         
-        if(is_supported_by(e, support_points.e, support_points.n, hitbox.base.s.z,
+        if(is_supported_by(e->id, support_points.e, support_points.n, hitbox.base.s.z,
                            potential_supporter, world_t, room))
         {
             array_add(supporters, potential_supporter);
@@ -1236,28 +1253,21 @@ Static_Array<Entity *, MAX_SUPPORT_POINTS> find_supporters(Entity *e, double wor
 }
 
 
-bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room,
-                           Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters         = NULL,
-                           Static_Array<Surface,  MAX_SUPPORT_POINTS> *_supporter_surfaces = NULL)
+bool entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, Room *room,
+                      Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters         = NULL,
+                      Static_Array<Surface,  MAX_SUPPORT_POINTS> *_supporter_surfaces = NULL)
 {
     Function_Profile();
-    
-    Assert(my_entity->type == ENTITY_ITEM);
 
     Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters = { 0 };
     defer(if(_supporters) *_supporters = supporters;);
 
     Static_Array<Surface, MAX_SUPPORT_POINTS> supporter_surfaces = { 0 };
     defer(if(_supporter_surfaces) *_supporter_surfaces = supporter_surfaces;);
-
     
-    S__Entity copy = *my_entity;
-    copy.item_e.p = p;
-    copy.held_by = NO_ENTITY;
+    auto my_hitbox = entity_hitbox(my_entity, p, q);
 
-    auto my_hitbox = entity_hitbox(&copy, world_t, room);
-
-    bool supported_by_floor = (p.z <= 0);
+    bool supported_by_floor = (p.z == 0);
     
     // FIND SUPPORT POINTS //
     Static_Array<v3, MAX_SUPPORT_POINTS> support_points = {0}; // @Speed: If we would want bigger items than this, we would probably need to do the check in some other way, anyway.
@@ -1282,7 +1292,7 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
         // Are we supported by this entity?
         bool actively_rejected;
         if(support_points.n > 0 && 
-           is_supported_by(&copy, support_points.e, support_points.n, my_hitbox.base.s.z, e, world_t, room,
+           is_supported_by(my_entity->id, support_points.e, support_points.n, my_hitbox.base.s.z, e, world_t, room,
                            support_point_satisfied, &actively_rejected))
         {
             array_add(supporters, e);
@@ -1305,13 +1315,13 @@ bool item_entity_can_be_at(S__Entity *my_entity, v3 p, Quat q, double world_t, R
 bool item_entity_can_be_at_tp(Entity *my_entity, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     Assert(my_entity->type == ENTITY_ITEM);
-    return item_entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item, q), q, world_t, room, _supporters);
+    return entity_can_be_at(my_entity, item_entity_p_from_tp(tp, &my_entity->item_e.item, q), q, world_t, room, _supporters);
 }
 
 bool can_place_item_entity(Item *item, v3 p, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
 {
     S__Entity e = create_item_entity(item, p, q, world_t);
-    return item_entity_can_be_at(&e, e.item_e.p, q, world_t, room, _supporters);
+    return entity_can_be_at(&e, e.item_e.p, q, world_t, room, _supporters);
 }
 
 bool can_place_item_entity_at_tp(Item *item, v3 tp, Quat q, double world_t, Room *room, Static_Array<Entity *, MAX_SUPPORT_POINTS> *_supporters = NULL)
@@ -1344,7 +1354,12 @@ Player_State player_state_of(S__Entity *player, double world_t, Room *room)
     }
     else state.held_item.type = ITEM_NONE_OR_NUM;
 
-    state.sitting_on = player_e->sitting_on;
+    state.sitting_on = NO_ENTITY;
+    state.laying_on  = NO_ENTITY;
+    if(player_e->is_on != NO_ENTITY) {
+        if(player_e->laying_down_instead_of_sitting) state.laying_on  = player_e->is_on;
+        else                                         state.sitting_on = player_e->is_on;
+    }
     
     return state;
 }
@@ -1462,17 +1477,15 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
     if(e->held_by != NO_ENTITY &&
        e->held_by != player_state->entity_id) return false;
 
+    if(e->type != ENTITY_ITEM) return false;
+    auto *item_e = &e->item_e;
+    auto *item   = &item_e->item;
     
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: {
             Scoped_Profile("ENTITY_ACT_PICK_UP");
-            
-            if(e->type != ENTITY_ITEM) return false;
 
             if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
-            
-            auto *item_e = &e->item_e;
-            auto *item   = &e->item_e.item;
             
             if(item->owner != player_state->user_id) return false;
 
@@ -1483,11 +1496,6 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         } break;
         
         case ENTITY_ACT_PLACE_IN_INVENTORY: {
-
-            if(e->type != ENTITY_ITEM) return false;
-            
-            auto *item_e = &e->item_e;
-            auto *item   = &e->item_e.item;
 
             if(item->owner != player_state->user_id) return false;
 
@@ -1502,11 +1510,7 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
         case ENTITY_ACT_HARVEST: {
 
-            if(e->type != ENTITY_ITEM) return false;
-
             if(!is_plant(e)) return false;
-            
-            auto *item = &e->item_e.item;
             
             if(item->plant.grow_progress < 0.75f) return false;
 
@@ -1518,10 +1522,7 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
-            
-            if(e->type != ENTITY_ITEM) return false;
 
-            auto *item = &e->item_e.item;
             if(item->type != ITEM_MACHINE) return false;            
 
             auto *machine_e = &e->item_e.machine;
@@ -1537,20 +1538,18 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
         case ENTITY_ACT_WATER: {
             auto *x = &action.set_power_mode;
-            
-            if(e->type != ENTITY_ITEM) return false;
 
-            auto *item = &e->item_e.item;
             if(item->type != ITEM_APPLE_TREE &&
                item->type != ITEM_WHEAT) return false;
 
             auto *plant_e = &e->item_e.plant;
 
-            if(item_types[player_state->held_item.type].container_form != FORM_LIQUID) return false;
-            auto *lc = &player_state->held_item.liquid_container;
+            if(!(item_types[player_state->held_item.type].container_forms & SUBST_LIQUID)) return false;
+            auto *c = &player_state->held_item.container;
 
-            if(lc->liquid.type != LQ_WATER) return false;
-            if(lc->amount < 2) return false; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+            if(c->substance.form        != SUBST_LIQUID) return false;
+            if(c->substance.liquid.type != LQ_WATER)     return false;
+            if(c->amount < 2) return false; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
 
             return true;
         } break;
@@ -1558,8 +1557,7 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_CHESS: {
             auto *chess_action = &action.chess;
 
-            if(e->type != ENTITY_ITEM) return false;
-            if(e->item_e.item.type != ITEM_CHESS_BOARD) return false;
+            if(item->type != ITEM_CHESS_BOARD) return false;
 
             if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
 
@@ -1572,10 +1570,9 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_SIT_OR_UNSIT: {
             auto *sit = &action.sit_or_unsit;
             
-            if(e->type != ENTITY_ITEM) return false;
-            
-            auto *item = &e->item_e.item;
             if(item->type != ITEM_CHAIR) return false;
+            
+            if(e->held_by == player_state->entity_id) return false;
 
             if(sit->unsit  && player_state->sitting_on != e->id) return false; // Can't unsit when we don't sit.
             if(!sit->unsit && player_state->sitting_on == e->id) return false; // Can't sit when we already sit.
@@ -1588,6 +1585,18 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             
             return true;
             
+        } break;
+
+        case ENTITY_ACT_SLEEP: {
+            
+            if(item->type != ITEM_BED) return false;
+            
+            if(e->item_e.locked_by != NO_ENTITY) return false;
+            
+            if(e->held_by == player_state->entity_id) return false;
+            if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
+
+            return true;
         } break;
 
         default: Assert(false); return false;
@@ -1680,7 +1689,7 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             //             So it is possible to put down two entities in the same spot right now.
 
             // This is @Temporary (See comments above).
-            if(!item_entity_can_be_at(&held_entity_replica, put_down->p, put_down->q, world_t, room, &_info->put_down.supporters))
+            if(!entity_can_be_at(&held_entity_replica, put_down->p, put_down->q, world_t, room, &_info->put_down.supporters))
                 return false;
 
             // @Cleanup @Hack !!!
@@ -1903,15 +1912,16 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_WATER: {
-                        Assert(item_types[state->held_item.type].container_form == FORM_LIQUID); // player_action_predicted_possible() should have checked this.
-                        auto *lc = &state->held_item.liquid_container;
+                        Assert(item_types[state->held_item.type].container_forms & SUBST_LIQUID); // player_action_predicted_possible() should have checked this.
+                        auto *c = &state->held_item.container;
 
-                        Assert(lc->liquid.type == LQ_WATER); // player_action_predicted_possible() should have checked this.
-                        Assert(lc->amount >= 2); // player_action_predicted_possible() should have checked this.
+                        // player_action_predicted_possible() should have checked this.
+                        Assert(c->substance.form == SUBST_LIQUID);
+                        Assert(c->substance.liquid.type == LQ_WATER);
+                        Assert(c->amount >= 2);
                         
                         // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
-                        lc->amount -= 2; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
-
+                        c->amount -= 2; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
 
                     } break;
 
@@ -1939,3 +1949,37 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
 
     return all_actions_predicted_possible;
 }
+
+
+float simulate_need(float need0, float change_speed, double t0, double t)
+{
+    return clamp(need0 + (t - t0) * change_speed);
+}
+
+float need_at_time(Need need, Needs *needs0, float *change_speeds, double t0, double t)
+{
+    return simulate_need(needs0->values[need], change_speeds[need], t0, t);
+}
+
+Needs simulate_needs(Needs needs0, float *change_speeds, double t0, double t)
+{
+    Needs result = {0};
+
+    for(int i = 0; i < NEED_NONE_OR_NUM; i++) {
+        result.values[i] = simulate_need(needs0.values[i], change_speeds[i], t0, t);
+    }
+
+    return result;
+}
+
+float need_at_time_for_player(Need need, double t, Entity *e)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    return need_at_time(need, &e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
+}
+
+Needs current_needs_for_player(Entity *e, double t) {
+    Assert(e->type == ENTITY_PLAYER);
+    return simulate_needs(e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
+}
+

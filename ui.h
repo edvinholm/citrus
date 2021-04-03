@@ -115,13 +115,13 @@ enum UI_Element_Type
     SLIDER,
     DROPDOWN,
     UI_TEXT,
+    UI_IMAGE,
 
     GRAPH,
     PROGRESS_BAR,
     
     UI_INVENTORY_SLOT,
-    UI_LIQUID_CONTAINER,
-    UI_NUGGET_CONTAINER,
+    UI_SUBSTANCE_CONTAINER,
     UI_CHAT,
     
     UI_CHESS_BOARD,
@@ -195,6 +195,21 @@ struct UI_Text
     V_Align v_align;
 };
 
+enum UI_Image_Type
+{
+    UI_IMG_ITEM
+};
+
+struct UI_Image
+{
+    Rect a;
+
+    UI_Image_Type type;
+    union {
+        Item_Type_ID item_type; // If UI_Image.type == UI_IMG_ITEM
+    };
+};
+
 struct UI_Button
 {
     Rect a;
@@ -221,29 +236,19 @@ struct UI_Progress_Bar
 {
     Rect a;
     float fill_factor;
+    v4 color;
 };
 
 
-struct UI_Liquid_Container
+struct UI_Substance_Container
 {
     Rect a;
 
-    Liquid_Container lc;
-    Liquid_Amount    capacity;
+    Substance_Container c;
+    Substance_Amount    capacity;
 
     v4 text_color; // NOTE: If we never use a custom text color, and always use the theme's color, we could just store the theme (pointer/id) here.
 };
-
-struct UI_Nugget_Container
-{
-    Rect a;
-
-    Nugget_Container nc;
-    Nugget_Amount    capacity;
-
-    v4 text_color; // NOTE: If we never use a custom text color, and always use the theme's color, we could just store the theme (pointer/id) here.
-};
-
 
 struct UI_Inventory_Slot
 {
@@ -371,10 +376,13 @@ struct UI_Element
     bool needs_redraw;
     Rect last_dirty_rect; // The dirty rect that was used when we last drew this element.
 
+    bool clickthrough;
+
     union {
         UI_Panel     panel;
         UI_Window    window;
         UI_Text      text;
+        UI_Image     image;
         UI_Button    button;
         UI_Textfield textfield;
         UI_Slider    slider;
@@ -383,8 +391,7 @@ struct UI_Element
         UI_Graph graph;
         UI_Progress_Bar progress_bar;
 
-        UI_Liquid_Container liquid_container;
-        UI_Nugget_Container nugget_container;
+        UI_Substance_Container substance_container;
         UI_Inventory_Slot inventory_slot;
         UI_Chat chat;
 

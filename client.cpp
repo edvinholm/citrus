@@ -145,6 +145,36 @@ bool request_if_predicted_possible(Entity_Action *action, Entity_ID target, doub
 }
 
 
+
+void needs_window(UI_Context ctx, double world_t, Client *client)
+{
+    U(ctx);
+    
+    _WINDOW_(P(ctx), STRING("NEEDS"), true, opt(C_NEEDS_BASE));
+
+    auto *player = find_current_player_entity(client);
+    if(!player) return;
+
+    Needs needs = current_needs_for_player(player, world_t);
+
+    int cols = 2;
+    int rows = NEED_NONE_OR_NUM / cols;
+    if(NEED_NONE_OR_NUM % cols > 0) rows++;
+    rows = max(3, rows);
+
+    { _GRID_(cols, rows, window_default_padding);
+
+        for(int i = 0; i < NEED_NONE_OR_NUM; i++) {
+            _CELL_(); _AREA_COPY_();
+            { _TOP_CUT_(14);
+                ui_text(PC(ctx, i), need_names[i]);
+            }
+
+            progress_bar(PC(ctx, i), needs.values[i]);
+        }
+    }
+}
+
 void user_window(UI_Context ctx, Client *client)
 {
     U(ctx);
@@ -363,7 +393,8 @@ void market_article_view(UI_Context ctx, Market_View *view, bool controls_enable
 
             // Item Preview
             { _LEFT_SQUARE_CUT_();
-                button(P(ctx)); // @Norelease: Item preview here.
+                ui_item_image(P(ctx), article_id);
+                button(P(ctx));
             }
             cut_left(window_default_padding * 1.5f, ctx.layout);
 
@@ -655,6 +686,8 @@ String entity_action_label(Entity_Action action)
             else         return STRING("SIT");
         } break;
 
+        case ENTITY_ACT_SLEEP: return STRING("SLEEP"); break;
+
         default: Assert(false); return STRING("???"); break;
     }
 
@@ -842,7 +875,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     { _TOP_CUT_(image_s);
         
         { _LEFT_CUT_(image_s);
-            button(P(ctx));
+            ui_item_image(P(ctx), item->type);
         }
 
         _SHRINK_(window_default_padding);
@@ -873,38 +906,12 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
     }
 
 
-    switch(item_types[item->type].container_form) {
-        case FORM_LIQUID: {
-            { _TOP_CUT_(40);
-                ui_liquid_container(P(ctx), &item->liquid_container, liquid_container_capacity(item));
-            }
-
-            // @Cleanup: move to ui_liquid_container.
-            if(liquid_type_of_container(&item->liquid_container) == LQ_YEAST_WATER)
-            {
-                auto *yw = &item->liquid_container.liquid.yeast_water;
-            
-                { _TOP_CUT_(20);
-                    int pre  = yw->yeast / 10; // @Cleanup
-                    int post = yw->yeast % 10;
-                    String id_str = concat_tmp("Yeast: ", pre, ".", post, "%");
-                    ui_text(P(ctx), id_str);
-                }
-                { _TOP_CUT_(20);
-                    int pre  = yw->nutrition / 10; // @Cleanup
-                    int post = yw->nutrition % 10;
-                    String id_str = concat_tmp("Nutrition: ", pre, ".", post, "%");
-                    ui_text(P(ctx), id_str);
-                }
-            }
-            
-        } break;
-
-        case FORM_NUGGET: {
-            { _TOP_CUT_(60);
-                ui_nugget_container(P(ctx), &item->nugget_container, nugget_container_capacity(item));
-            }
-        } break;
+    if(item_types[item->type].container_forms != SUBST_NONE &&
+       item->container.substance.form != SUBST_NONE)
+    {
+        { _TOP_CUT_(40);
+            ui_substance_container(P(ctx), &item->container, substance_container_capacity(item, item->container.substance.form));
+        }
     }
 
     
@@ -994,30 +1001,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
                         label = type->name;
                         label.length = min(3, label.length);
 
-                        contents_str.length = 0;
-                        switch(type->container_form) {
-                            case FORM_LIQUID: {
-                                auto *lc = &supported->item_e.item.liquid_container;
-                                Liquid_Type lq = liquid_type_of_container(lc);
-                                Assert(lq >= 0 && lq <= LQ_NONE_OR_NUM);
-
-                                auto capacity = liquid_container_capacity(&supported->item_e.item);
-                                
-                                if(lq == LQ_NONE_OR_NUM) contents_str = STRING("EMPTY");
-                                else contents_str = concat_tmp(liquid_names[lq], " (", lc->amount, "/", capacity, ")");
-                            } break;
-                                
-                            case FORM_NUGGET: {
-                                auto *nc = &supported->item_e.item.nugget_container;
-                                Nugget_Type nugget = nugget_type_of_container(nc);
-                                Assert(nugget >= 0 && nugget <= LQ_NONE_OR_NUM);
-                                
-                                if(nugget == NUGGET_NONE_OR_NUM) contents_str = STRING("EMPTY");
-                                else {
-                                    contents_str = concat_tmp(nc->amount, "x ", nugget_names[nugget]);
-                                }
-                            } break;
-                        }
+                        contents_str = STRING("@Norelease");
                     }
 
                     if(contents_str.length) {
@@ -1247,7 +1231,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
             
             slide_top(menu_bar_pad, ctx.layout);
-
+            
             // MARKET BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
                 if(button_colored(P(ctx), C_MARKET_BASE, STRING("MARK"), true, cui->market_window_open) & CLICKED_ENABLED) {
@@ -1259,6 +1243,16 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
             
             slide_top(menu_bar_pad, ctx.layout);
+            
+            // NEEDS BUTTON
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button_colored(P(ctx), C_NEEDS_BASE, STRING("NEEDS"), true, cui->needs_window_open) & CLICKED_ENABLED) {
+                    cui->needs_window_open = !cui->needs_window_open;
+                }
+            }
+            
+            slide_top(menu_bar_pad, ctx.layout);
+
 
 #if DEVELOPER
             // DEVELOPER BUTTON
@@ -1297,6 +1291,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     { _CENTER_(640, 480);
         market_window(P(ctx), t, input, &cui->market, client);
     }
+    
+    // NEEDS WINDOW //
+    if(cui->needs_window_open)
+    { _BOTTOM_(128); _RIGHT_(256);
+        needs_window(P(ctx), world_t, client);
+    }
+
 
     
     { _SHRINK_(16); _LEFT_(240); _BOTTOM_(400);
@@ -1420,6 +1421,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     auto *action = &player_e->action_queue[i];
 
                     String label = STRING("?");
+                    Item_Type_ID image_item = ITEM_NONE_OR_NUM;
                     
                     switch(action->type) {
                         case PLAYER_ACT_ENTITY: {
@@ -1428,13 +1430,10 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                             Assert(entity_action->target != NO_ENTITY);
                             Entity *target = find_entity(entity_action->target, room);
 
-                            if (target)
-                            {
-                                Assert(target->type == ENTITY_ITEM); // @Temporary @Norelease: We will have player -> player actions, right?
-
-                                label = item_types[target->item_e.item.type].name;
-                                Assert(label.length > 0);
-                                label.length = 1;
+                            if (target) {
+                                Assert(target->type == ENTITY_ITEM);
+                                image_item = target->item_e.item.type;
+                                label = EMPTY_STRING;
                             }
 
                         } break;
@@ -1452,8 +1451,32 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                     
                     _TOP_SQUARE_CUT_();
                     _SHRINK_(8);
-                    bool enabled = false;
-                    button(PC(ctx, i), label, enabled);
+                    if(image_item != ITEM_NONE_OR_NUM) {
+                        ui_item_image(PC(ctx, i), image_item);
+                    }
+                    
+                    if(i == 0 && world_t > action->reach_t) {
+                        _BOTTOM_(12);
+                        auto *pb = progress_bar(PC(ctx, i), lerp(0.0f, 1.0f, action->reach_t, action->end_t, world_t));
+                        pb->clickthrough = true;
+                    }
+
+                    v4 color = C_BUTTON_DEFAULT;
+                    if(action->dequeue_requested)
+                        color = C_RED;
+                    if(action->end_retry_t > action->end_t && world_t > action->end_t)
+                        color = lerp(color, C_YELLOW, .5f + .5f * sin(world_t - action->end_t + .75 * TAU));
+
+                    bool enabled = true;
+                    if(button(PC(ctx, i), label, enabled, false, opt(color)) & CLICKED_ENABLED) {
+                        // Request dequeue
+                        C_RS_Action action = {0};
+                        action.type = C_RS_ACT_PLAYER_ACTION_DEQUEUE;
+                        action.player_action_dequeue.action_ix = i;
+
+                        // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+                        array_add(client->connections.room_action_queue, &action);
+                    }
 
                     auto *state_after = &player_local->state_after_action_in_queue[i];
                     if(state_after->held_item.type != ITEM_NONE_OR_NUM) {

@@ -401,6 +401,12 @@ Rect bottom_left_of(Rect a, float w, float h)
     return a;
 }
 
+inline
+v2 bottom_left_of(Rect a)
+{
+    return { a.x, a.y };
+}
+
 
 
 inline
@@ -524,13 +530,14 @@ Rect added_bottom(Rect a, float bottom)
     return a;
 }
 
-float ScaleToFitInRect(v2 ToFit, v2 RectSize)
+float scale_to_fit_in_rect(v2 to_fit, v2 rect_size)
 {
-    float Scale = 1.0f;
-    if(ToFit.w > RectSize.w) Scale = RectSize.w/ToFit.w;
-    if(ToFit.h * Scale > RectSize.h) Scale = RectSize.h/ToFit.h;
-    return Scale;
+    float scale = 1.0f;
+    if(to_fit.w > rect_size.w)         scale = rect_size.w/to_fit.w;
+    if(to_fit.h * scale > rect_size.h) scale = rect_size.h/to_fit.h;
+    return scale;
 }
+
 
 Rect rect_around_point(v2 center, v2 size)
 {

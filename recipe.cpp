@@ -14,21 +14,12 @@ struct Recipe_Input
     };
 };
 
-struct Recipe_Output
-{
-    Item_Form form;
-    union {
-        Liquid_Container liquid;
-        Nugget_Container nugget;
-    };
-};
-
 struct Recipe
 {
     Recipe_Input inputs[MAX_RECIPE_INPUTS];
     u8 num_inputs;
 
-    Recipe_Output outputs[MAX_RECIPE_OUTPUTS];
+    Substance_Container outputs[MAX_RECIPE_OUTPUTS];
     u8 num_outputs;
 };
 static_assert(MAX_RECIPE_INPUTS  <= U8_MAX); // Because Recipe.num_inputs is a u8
@@ -84,9 +75,9 @@ void init_recipes()
         r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_WATER, 10);
         Assert(r.num_inputs < ARRLEN(r.inputs));
         
-        r.outputs[0].form = FORM_LIQUID;
-        r.outputs[0].liquid.liquid = water();
-        r.outputs[0].liquid.amount = 10;
+        r.outputs[0].substance.form = SUBST_LIQUID;
+        r.outputs[0].substance.liquid = water();
+        r.outputs[0].amount = 10;
         r.num_outputs = 1;
         Assert(r.num_outputs < ARRLEN(r.outputs));
     }
@@ -99,9 +90,9 @@ void init_recipes()
         // @Norelease: Add sugar.
         Assert(r.num_inputs < ARRLEN(r.inputs));
         
-        r.outputs[0].form = FORM_LIQUID;
-        r.outputs[0].liquid.liquid = yeast_water(10, 190);
-        r.outputs[0].liquid.amount = 10;
+        r.outputs[0].substance.form = SUBST_LIQUID;
+        r.outputs[0].substance.liquid = yeast_water(10, 190);
+        r.outputs[0].amount = 10;
         r.num_outputs = 1;
         Assert(r.num_outputs < ARRLEN(r.outputs));
     }
@@ -109,20 +100,20 @@ void init_recipes()
 
     
     Assert(ix < ARRLEN(recipes));
-    { // [YEAST_WATER] -> YEAST
+    { // [YEAST_WATER] -> YEAST, WATER
         auto &r = recipes[ix++];
         r.inputs[r.num_inputs++] = liquid_recipe_input(LQ_YEAST_WATER, 10);
         Assert(r.num_inputs < ARRLEN(r.inputs));
 
         static_assert(ARRLEN(r.inputs) >= 2);
         
-        r.outputs[0].form = FORM_NUGGET;
-        r.outputs[0].nugget.type   = NUGGET_YEAST;
-        r.outputs[0].nugget.amount = 10; // @Norelease: This should depend on the amount of yeast in the water.
+        r.outputs[0].substance.form   = SUBST_NUGGET;
+        r.outputs[0].substance.nugget = NUGGET_YEAST;
+        r.outputs[0].amount = 10; // @Norelease: This should depend on the amount of yeast in the water.
 
-        r.outputs[1].form = FORM_LIQUID;
-        r.outputs[1].liquid.liquid = water();
-        r.outputs[1].liquid.amount = 10; // @Norelease: This should ALSO(!) depend on the amount of yeast in the water.
+        r.outputs[1].substance.form = SUBST_LIQUID;
+        r.outputs[1].substance.liquid = water();
+        r.outputs[1].amount = 10; // @Norelease: This should ALSO(!) depend on the amount of yeast in the water.
         
         r.num_outputs = 2;
     }

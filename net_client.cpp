@@ -67,6 +67,10 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     auto &act = action.player_action;
                     Enqueue(RSB_PLAYER_ACTION, node, act);
                 } break;
+                    
+                case C_RS_ACT_PLAYER_ACTION_DEQUEUE: {
+                    Enqueue(RSB_PLAYER_ACTION_DEQUEUE, node, action.player_action_dequeue.action_ix);
+                } break;
 
                 case C_RS_ACT_CHAT: {                    
                     auto &chat  = action.chat;
@@ -81,6 +85,8 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Enqueue(RSB_CHAT, node, message_text);
                     draft->n = 0;
                 } break;
+
+                default: Assert(false); break;
             }
         }
     }

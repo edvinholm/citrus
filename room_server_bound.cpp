@@ -9,7 +9,9 @@ enum RSB_Packet_Type
 
     RSB_CLICK_TILE = 3,
     RSB_PLAYER_ACTION = 4,
-    RSB_CHAT = 5
+    RSB_CHAT = 5,
+
+    RSB_PLAYER_ACTION_DEQUEUE = 6
 };
 
 // Room Server Bound Packet Header
@@ -30,6 +32,10 @@ struct RSB_Packet_Header
         } click_tile;
 
         Player_Action player_action;
+
+        struct {
+            u32 action_ix;
+        } player_action_dequeue;
 
         struct {
             String message_text;
@@ -88,6 +94,11 @@ bool read_RSB_Packet_Header(RSB_Packet_Header *_header, Network_Node *node)
         case RSB_CHAT: {
             auto *p = &_header->chat;
             Read_To_Ptr(String, &p->message_text, node);
+        } break;
+
+        case RSB_PLAYER_ACTION_DEQUEUE: {
+            auto *p = &_header->player_action_dequeue;
+            Read_To_Ptr(u32, &p->action_ix, node);
         } break;
     }
     
@@ -162,6 +173,19 @@ bool enqueue_RSB_CHAT_packet(Network_Node *node, String message_text)
         //--
 
         Write(String, message_text, node);
+    }
+    end_outbound_packet(node);
+    return true;
+}
+
+bool enqueue_RSB_PLAYER_ACTION_DEQUEUE_packet(Network_Node *node, u32 action_ix)
+{
+    begin_outbound_packet(node);
+    {
+        Write(RSB_Packet_Type, RSB_PLAYER_ACTION_DEQUEUE, node);
+        //--
+
+        Write(u32, action_ix, node);
     }
     end_outbound_packet(node);
     return true;

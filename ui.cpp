@@ -105,24 +105,13 @@ void ui_set(UI_Element *e, Rect *dest, Rect new_value)
 
 
 inline
-void ui_set(UI_Element *e, Liquid_Container *dest, Liquid_Container *new_value)
+void ui_set(UI_Element *e, Substance_Container *dest, Substance_Container *new_value)
 {
     if(equal(dest, new_value)) return;
 
     *dest = *new_value;
     e->needs_redraw = true;
 }
-
-
-inline
-void ui_set(UI_Element *e, Nugget_Container *dest, Nugget_Container *new_value)
-{
-    if(equal(dest, new_value)) return;
-
-    *dest = *new_value;
-    e->needs_redraw = true;
-}
-
 
 
 inline
@@ -572,6 +561,7 @@ void ui_text(UI_Context ctx, String text,
     auto *theme = current_color_theme(ui);
     
     UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_TEXT, ctx.manager);
+    e->clickthrough = true;
 
     auto *txt = &e->text;
     ui_set(e, &txt->a,         area(ctx.layout));
@@ -586,6 +576,28 @@ void ui_text(UI_Context ctx, String text,
     ui_set(e, &txt->v_align,   v_align);
 }
 
+UI_Element *ui_image(UI_Context ctx, UI_Image_Type type)
+{
+    U(ctx);
+
+    auto *ui    = ctx.manager;
+    UI_Element *e = find_or_create_ui_element(ctx.get_id(), UI_IMAGE, ctx.manager);
+    e->clickthrough = true;
+
+    auto *img = &e->image;
+    ui_set(e, &img->a, area(ctx.layout));
+    
+    return e;
+}
+
+void ui_item_image(UI_Context ctx, Item_Type_ID item_type)
+{
+    U(ctx);
+    auto *e = ui_image(P(ctx), UI_IMG_ITEM);
+    Assert(e->type == UI_IMAGE);
+
+    ui_set(e, &e->image.item_type, item_type);
+}
 
 
 UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0})
@@ -633,7 +645,7 @@ void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float
     ui_set(e, &graph->y_max, y_max);    
 }
 
-void progress_bar(UI_Context ctx, float fill_factor)
+UI_Element *progress_bar(UI_Context ctx, float fill_factor, v4 color = C_BLACK)
 {
     U(ctx);
     
@@ -644,44 +656,29 @@ void progress_bar(UI_Context ctx, float fill_factor)
     auto *bar = &e->progress_bar;
     ui_set(e, &bar->a, a);
     ui_set(e, &bar->fill_factor, fill_factor);
+    ui_set(e, &bar->color,       color);
+
+    return e;
 }
 
 
 
-void ui_liquid_container(UI_Context ctx, Liquid_Container *lc, Liquid_Amount capacity)
+void ui_substance_container(UI_Context ctx, Substance_Container *c, Liquid_Amount capacity)
 {
     U(ctx);
 
     auto id = ctx.get_id();
-    UI_Element *e = find_or_create_ui_element(id, UI_LIQUID_CONTAINER, ctx.manager);
+    UI_Element *e = find_or_create_ui_element(id, UI_SUBSTANCE_CONTAINER, ctx.manager);
 
     Rect a = area(ctx.layout);
     auto *theme = current_color_theme(ctx.manager);
 
-    auto *ui_lc = &e->liquid_container;
-    ui_set(e, &ui_lc->a,  a);
-    ui_set(e, &ui_lc->lc, lc);
-    ui_set(e, &ui_lc->capacity, capacity);
+    auto *ui_c = &e->substance_container;
+    ui_set(e, &ui_c->a, a);
+    ui_set(e, &ui_c->c, c);
+    ui_set(e, &ui_c->capacity, capacity);
 
-    ui_set(e, &ui_lc->text_color, theme->text);
-}
-
-void ui_nugget_container(UI_Context ctx, Nugget_Container *nc, Nugget_Amount capacity)
-{
-    U(ctx);
-
-    auto id = ctx.get_id();
-    UI_Element *e = find_or_create_ui_element(id, UI_NUGGET_CONTAINER, ctx.manager);
-
-    Rect a = area(ctx.layout);
-    auto *theme = current_color_theme(ctx.manager);
-
-    auto *ui_nc = &e->nugget_container;
-    ui_set(e, &ui_nc->a,  a);
-    ui_set(e, &ui_nc->nc, nc);
-    ui_set(e, &ui_nc->capacity, capacity);
-
-    ui_set(e, &ui_nc->text_color, theme->text);
+    ui_set(e, &ui_c->text_color, theme->text);
 }
 
 UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enabled = true, bool selected = false)
@@ -1858,6 +1855,8 @@ void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
     UI_ID id = ctx.get_id();
     bool was_created;
     UI_Element *e = find_or_create_ui_element(id, UI_PROFILER, ctx.manager, &was_created);
+    e->clickthrough = true;
+    
     auto *prof = &e->profiler;
 
     ui_set(e, &prof->a, a);
@@ -1938,7 +1937,7 @@ void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
 
 Rect ui_element_rect(UI_Element *e)
 {
-    switch(e->type) {
+    switch(e->type) { // @Jai: #complete
         case PANEL:     return e->panel.a;
         case WINDOW:    return e->window.current_a;
         case BUTTON:    return e->button.a;
@@ -1946,9 +1945,9 @@ Rect ui_element_rect(UI_Element *e)
         case SLIDER:    return e->slider.a;
         case DROPDOWN:  return dropdown_rect(e->dropdown.box_a, e->dropdown.open);
         case UI_TEXT:   return e->text.a;
+        case UI_IMAGE:  return e->image.a;
 
-        case UI_LIQUID_CONTAINER: return e->liquid_container.a;
-        case UI_NUGGET_CONTAINER: return e->nugget_container.a;
+        case UI_SUBSTANCE_CONTAINER: return e->substance_container.a;
         case UI_INVENTORY_SLOT: return e->inventory_slot.a;
 
         case WORLD_VIEW: return e->world_view.a;
@@ -2111,7 +2110,7 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
         Assert(e);
 
         bool mouse_over = false;
-        if(e->type != UI_TEXT && e->type != UI_PROFILER) {
+        if(!e->clickthrough) {
             mouse_over = point_inside_rect(mouse.p, ui_element_rect(e));
         }
 

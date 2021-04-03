@@ -337,6 +337,23 @@ void draw_ui_text(UI_Element *e, UI_Manager *ui, Graphics *gfx)
                    txt.v_align);
 }
 
+void draw_ui_image(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+{
+    _TRANSLUCENT_UI_();
+    
+    Assert(e->type == UI_IMAGE);
+    auto &img = e->image;
+    auto a = img.a;
+
+    switch(img.type) { // @Jai: #complete
+        case UI_IMG_ITEM: {
+            draw_item_preview(img.item_type, center_square_of(a), gfx);
+        } break;
+
+        default: Assert(false); break;
+    }
+}
+
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
 void _draw_button_label(String label, Rect a, Graphics *gfx)
 {
@@ -391,86 +408,105 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
                 btn.enabled, btn.selected, get_ui_string(btn.label, ui));
 }
 
-void draw_ui_liquid_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
+void draw_ui_substance_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
 {
-    Assert(e->type == UI_LIQUID_CONTAINER);
-    auto &ui_lc = e->liquid_container;
+    Assert(e->type == UI_SUBSTANCE_CONTAINER);
+    auto &ui_c = e->substance_container;
 
     _OPAQUE_UI_();
 
-    auto *lc = &ui_lc.lc;
-    auto lq_type = liquid_type_of_container(lc);
+    auto *c = &ui_c.c;
 
-    Rect aa = ui_lc.a;
-    Rect bottom_a = cut_bottom_off(&aa, 10);
-    Rect meter_a  = cut_bottom_off(&aa, 14);
-    Rect info_a   = aa;
-
-    // INFO //
+    switch(c->substance.form) // @Jai: #complete
     {
-        String type_str = (lq_type != LQ_NONE_OR_NUM) ? liquid_names[lq_type] : STRING("EMPTY");
-        draw_string(type_str, center_left_of(info_a), FS_16, FONT_BODY, ui_lc.text_color, gfx, HA_LEFT, VA_CENTER);
-    }
-    
-    // METER //
-    {
-        draw_rect(meter_a, { 0.1, 0.1, 0.1, 1 }, gfx);
-        
-        Rect inner = shrunken(meter_a, 2);
-        draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
+        case SUBST_LIQUID: {
+            auto lq_type = liquid_type_of_container(c);
 
-        float fill_factor = (ui_lc.capacity <= 0) ? 0 : (lc->amount / (float)ui_lc.capacity);
-        draw_rect(left_of(inner, fill_factor * inner.w), liquid_color(lc->liquid), gfx);
-
-    }
-
-    // BOTTOM //
-    {
-        String str = concat_tmp(lc->amount, "/", ui_lc.capacity);
-        draw_string(str, center_right_of(bottom_a), FS_10, FONT_BODY, ui_lc.text_color, gfx, HA_RIGHT, VA_CENTER);
-    }
-}
-
-void draw_ui_nugget_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
-{
-    Assert(e->type == UI_NUGGET_CONTAINER);
-    auto &ui_nc = e->nugget_container;
-
-    _OPAQUE_UI_();
-
-    auto *nc = &ui_nc.nc;
-    auto nugget_type = nugget_type_of_container(nc);
-
-    Rect aa = ui_nc.a;
-    Rect bottom_a = cut_bottom_off(&aa, 10);
-    Rect icon_a   = cut_left_square_off(&aa);
-
-    Assert(nugget_type <= ARRLEN(nugget_colors));
-    v4 nugget_color = nugget_colors[nugget_type];
+            Rect aa = ui_c.a;
+            Rect bottom_a = cut_bottom_off(&aa, 10);
+            Rect meter_a  = cut_bottom_off(&aa, 14);
+            Rect info_a   = aa;
 
     
-    // ICON //
-    {
-        draw_rect(icon_a, { 0.1, 0.1, 0.1, 1 }, gfx);
+            // INFO //
+            {
+                String type_str = (lq_type != LQ_NONE_OR_NUM) ? liquid_names[lq_type] : STRING("EMPTY");
+                draw_string(type_str, center_left_of(info_a), FS_16, FONT_BODY, ui_c.text_color, gfx, HA_LEFT, VA_CENTER);
+            }
+    
+            // METER //
+            {
+                draw_rect(meter_a, { 0.1, 0.1, 0.1, 1 }, gfx);
         
-        Rect inner = shrunken(icon_a, 2);
-        draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
+                Rect inner = shrunken(meter_a, 2);
+                draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
 
-        Rect nugget_a = shrunken(inner, 8);
-        draw_rect(nugget_a, nugget_color, gfx);
+                float fill_factor = (ui_c.capacity <= 0) ? 0 : (c->amount / (float)ui_c.capacity);
+                draw_rect(left_of(inner, fill_factor * inner.w), liquid_color(c->substance.liquid), gfx);
 
-        if(nugget_type != NUGGET_NONE_OR_NUM) {
-            String str = concat_tmp(nc->amount, "/", ui_nc.capacity);
-            v2 pp = bottom_right_of(inner);
-            draw_string(str, pp + V2_Y * 2, FS_12, FONT_BODY, C_BLACK, gfx, HA_RIGHT, VA_BOTTOM);
-            draw_string(str, pp,            FS_12, FONT_BODY, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
-        }
-    }
+            }
 
-    // BOTTOM //
-    {
-        String type_str = (nugget_type != NUGGET_NONE_OR_NUM) ? nugget_names[nugget_type] : STRING("EMPTY");
-        draw_string(type_str, center_left_of(bottom_a), FS_16, FONT_BODY, ui_nc.text_color, gfx, HA_LEFT, VA_CENTER);
+            // BOTTOM //
+            {
+                String str = concat_tmp(c->amount, "/", ui_c.capacity);
+                draw_string(str, center_right_of(bottom_a), FS_10, FONT_BODY, ui_c.text_color, gfx, HA_RIGHT, VA_CENTER);
+            }
+
+            
+            if(liquid_type_of_container(c) == LQ_YEAST_WATER)
+            {
+                auto *yw = &c->substance.liquid.yeast_water;
+                String str = concat_tmp("Yeast: ",     (yw->yeast / 10),     ".", (yw->yeast % 10),     "%", "|",
+                                        "Nutrition: ", (yw->nutrition / 10), ".", (yw->nutrition / 10), "%");
+                draw_string(str, bottom_left_of(ui_c.a), FS_12, FONT_BODY, ui_c.text_color, gfx, HA_LEFT, VA_BOTTOM);
+            }
+            
+        } break;
+
+        case SUBST_NUGGET: {
+            auto nugget_type = nugget_type_of_container(c);
+
+            Rect aa = ui_c.a;
+            Rect bottom_a = cut_bottom_off(&aa, 10);
+            Rect icon_a   = cut_left_square_off(&aa);
+
+            Assert(nugget_type <= ARRLEN(nugget_colors));
+            v4 nugget_color = nugget_colors[nugget_type];
+    
+            // ICON //
+            {
+                draw_rect(icon_a, { 0.1, 0.1, 0.1, 1 }, gfx);
+        
+                Rect inner = shrunken(icon_a, 2);
+                draw_rect(inner, { 0.4, 0.4, 0.4, 1 }, gfx);
+
+                Rect nugget_a = shrunken(inner, 8);
+                draw_rect(nugget_a, nugget_color, gfx);
+
+                if(nugget_type != NUGGET_NONE_OR_NUM) {
+                    String str = concat_tmp(c->amount, "/", ui_c.capacity);
+                    v2 pp = bottom_right_of(inner);
+                    draw_string(str, pp + V2_Y * 2, FS_12, FONT_BODY, C_BLACK, gfx, HA_RIGHT, VA_BOTTOM);
+                    draw_string(str, pp,            FS_12, FONT_BODY, C_WHITE, gfx, HA_RIGHT, VA_BOTTOM);
+                }
+            }
+
+            // BOTTOM //
+            {
+                String type_str = (nugget_type != NUGGET_NONE_OR_NUM) ? nugget_names[nugget_type] : STRING("EMPTY");
+                draw_string(type_str, center_left_of(bottom_a), FS_16, FONT_BODY, ui_c.text_color, gfx, HA_LEFT, VA_CENTER);
+            }
+        } break;
+
+
+        case SUBST_NONE: {
+            // BOTTOM //
+            {
+                draw_string(STRING("EMPTY"), center_left_of(ui_c.a), FS_16, FONT_BODY, ui_c.text_color, gfx, HA_LEFT, VA_CENTER);
+            }
+        } break;
+
+        default: Assert(false); break;
     }
 }
 
@@ -867,11 +903,11 @@ void draw_progress_bar(UI_Element *e, Graphics *gfx)
     auto *bar = &e->progress_bar;
     auto a = bar->a;
 
-    draw_rect(a, C_BLACK, gfx);
+    draw_rect(a, bar->color, gfx);
     a = shrunken(a, 2);
     draw_rect(a, C_GRAY, gfx);
-    a = shrunken(a, 2);
-    draw_rect(left_of(a, a.w * clamp(bar->fill_factor)), C_BLACK, gfx);
+    a = shrunken(a, min(a.h * .1f, 2));
+    draw_rect(left_of(a, a.w * clamp(bar->fill_factor)), bar->color, gfx);
 }
 
 
@@ -1114,19 +1150,19 @@ DWORD render_loop(void *loop_)
                     Assert(e);
 
                     switch(e->type) {
-                        case PANEL:    draw_panel(e, ui, &gfx, t);   break;
-                        case WINDOW:   draw_window(e, ui, &gfx);  break;
-                        case UI_TEXT:  draw_ui_text(e, ui, &gfx); break;
-                        case BUTTON:   draw_button(e, ui, &gfx);  break;
+                        case PANEL:     draw_panel(e, ui, &gfx, t);      break;
+                        case WINDOW:    draw_window(e, ui, &gfx);        break;
+                        case UI_TEXT:   draw_ui_text(e, ui, &gfx);       break;
+                        case UI_IMAGE:  draw_ui_image(e, ui, &gfx);      break;
+                        case BUTTON:    draw_button(e, ui, &gfx);        break;
                         case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
-                        case SLIDER:   draw_slider(e, &gfx);      break;
-                        case DROPDOWN: draw_dropdown(e, &gfx);    break;
+                        case SLIDER:    draw_slider(e, &gfx);            break;
+                        case DROPDOWN:  draw_dropdown(e, &gfx);          break;
 
                         case GRAPH:        draw_graph(e, ui, &gfx); break;
                         case PROGRESS_BAR: draw_progress_bar(e, &gfx); break;
 
-                        case UI_LIQUID_CONTAINER: draw_ui_liquid_container(e, ui, &gfx); break;
-                        case UI_NUGGET_CONTAINER: draw_ui_nugget_container(e, ui, &gfx); break;
+                        case UI_SUBSTANCE_CONTAINER: draw_ui_substance_container(e, ui, &gfx); break;
                         case UI_INVENTORY_SLOT: draw_inventory_slot(e, ui, &gfx);  break;
                         case UI_CHAT:           draw_chat(e, ui, &gfx);  break;
                             

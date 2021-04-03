@@ -53,13 +53,14 @@ void ensure_mesh_capacity(u64 required_capacity, u64 *capacity, Mesh *mesh, Allo
     *capacity = new_capacity;
 }
 
-Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, int num_vertices, Allocator *allocator)
+Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, v4 *colors, int num_vertices, Allocator *allocator)
 {
     Mesh mesh = {0};
     
     static_assert(sizeof(*positions) == sizeof(*mesh.positions));
     static_assert(sizeof(*normals)   == sizeof(*mesh.normals));
     static_assert(sizeof(*uvs)       == sizeof(*mesh.uvs));
+    static_assert(sizeof(*colors)    == sizeof(*mesh.colors));
     
     u64 capacity = 0; // We don't need to store this unless we want to have 'dynamic' meshes that can grow.
     ensure_mesh_capacity(num_vertices, &capacity, &mesh, allocator);
@@ -68,10 +69,7 @@ Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, int num_vertices, Allocato
     memcpy(mesh.positions, positions, sizeof(*mesh.positions) * num_vertices);
     memcpy(mesh.normals,   normals,   sizeof(*mesh.normals)   * num_vertices);
     memcpy(mesh.uvs,       uvs,       sizeof(*mesh.uvs)       * num_vertices);
-
-    for(int i = 0; i < num_vertices; i++) {
-        mesh.colors[i] = { 1, 1, 1, 1 };
-    }
+    memcpy(mesh.colors,    colors,    sizeof(*mesh.colors)    * num_vertices);
 
     memset(mesh.tex, 0, sizeof(*mesh.tex) * num_vertices);
 
@@ -90,7 +88,7 @@ Mesh create_mesh(v3 *positions, v3 *normals, v2 *uvs, int num_vertices, Allocato
 
 Mesh copy_mesh(Mesh *mesh, Allocator *allocator)
 {
-    return create_mesh(mesh->positions, mesh->normals, mesh->uvs, mesh->n, allocator);
+    return create_mesh(mesh->positions, mesh->normals, mesh->uvs, mesh->colors, mesh->n, allocator);
 }
 
 

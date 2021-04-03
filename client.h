@@ -47,6 +47,7 @@ struct Client_UI
     bool room_window_open;
     bool user_window_open;
     bool market_window_open;
+    bool needs_window_open;
 
     Market_UI market;
     Item_UI   item;
@@ -63,6 +64,7 @@ void init_client_ui(Client_UI *cui)
     cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
     
     cui->user_window_open = true;
+    cui->needs_window_open = true;
 
     // @Norelease: @Temporary, I think. 
     cui->market.order_draft.price = 10;

@@ -36,6 +36,9 @@ const v4 C_ROOM_BRIGHT = { 0.40, 0.26, 0.94, 1 };
 // USER WINDOW //
 const v4 C_USER_BASE = { 0.5, 0.35, 0.1, 1};
 
+// NEEDS WINDOW //
+const v4 C_NEEDS_BASE = { 0.5, 0.1, 0.35, 1};
+
 // MARKET WINDOW //
 const v4 C_MARKET_BASE   = { 0.00, 0.33, 0.11, 1 };
 const v4 C_MARKET_DARK   = { 0.00, 0.21, 0.07, 1 };
