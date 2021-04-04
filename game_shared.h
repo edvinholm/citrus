@@ -399,13 +399,29 @@ String need_names[] = {
 };
 static_assert(ARRLEN(need_names) == NEED_NONE_OR_NUM);
 
+#if DEBUG
+const float need_speed_multiplier = 1.0f;
+#else
+const float need_speed_multiplier = 1.0f;
+#endif
+
 const float default_need_speeds[] = {
-    -0.0025f,
-    -0.0025f,
-    -0.0052f,
-    -0.0029f
+    -0.00083f * need_speed_multiplier,
+    -0.00037f * need_speed_multiplier,
+    -0.00074f * need_speed_multiplier,
+    -0.00043f * need_speed_multiplier
 };
 static_assert(ARRLEN(default_need_speeds) == NEED_NONE_OR_NUM);
+
+// @BadName: The needs must be less than or equal to these values before the player
+//           can actively satisfy them. Like using the toilet for example.
+float need_limits[] = {
+    1.0f,
+    0.25f,
+    0.5f,
+    0.25f
+};
+static_assert(ARRLEN(need_limits) == NEED_NONE_OR_NUM);
 
 struct Needs
 {
@@ -499,6 +515,10 @@ struct Player_State
 {
     User_ID   user_id; // Don't change this :)
     Entity_ID entity_id; // Don't change this :)
+    // --
+
+    // These are not predicted
+    Needs needs;
     // --
     
     v3 p;

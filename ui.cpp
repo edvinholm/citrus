@@ -645,7 +645,7 @@ void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float
     ui_set(e, &graph->y_max, y_max);    
 }
 
-UI_Element *progress_bar(UI_Context ctx, float fill_factor, v4 color = C_BLACK)
+UI_Element *progress_bar(UI_Context ctx, float fill_factor, v4 color = C_BLACK, float marker_value = -1)
 {
     U(ctx);
     
@@ -655,8 +655,9 @@ UI_Element *progress_bar(UI_Context ctx, float fill_factor, v4 color = C_BLACK)
 
     auto *bar = &e->progress_bar;
     ui_set(e, &bar->a, a);
-    ui_set(e, &bar->fill_factor, fill_factor);
-    ui_set(e, &bar->color,       color);
+    ui_set(e, &bar->fill_factor,  fill_factor);
+    ui_set(e, &bar->color,        color);
+    ui_set(e, &bar->marker_value, marker_value);
 
     return e;
 }

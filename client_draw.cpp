@@ -908,6 +908,13 @@ void draw_progress_bar(UI_Element *e, Graphics *gfx)
     draw_rect(a, C_GRAY, gfx);
     a = shrunken(a, min(a.h * .1f, 2));
     draw_rect(left_of(a, a.w * clamp(bar->fill_factor)), bar->color, gfx);
+
+    if(bar->marker_value >= 0 && bar->marker_value <= 1) {
+        Rect aa = left_of(bar->a, 1);
+        aa.x = a.x - aa.w/2.0f;
+        aa.x += bar->marker_value * a.w;
+        draw_rect(aa, { 1, 1, 1, .5}, gfx);
+    }
 }
 
 

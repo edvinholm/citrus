@@ -170,7 +170,7 @@ void needs_window(UI_Context ctx, double world_t, Client *client)
                 ui_text(PC(ctx, i), need_names[i]);
             }
 
-            progress_bar(PC(ctx, i), needs.values[i]);
+            progress_bar(PC(ctx, i), needs.values[i], C_BLACK, need_limits[i]);
         }
     }
 }

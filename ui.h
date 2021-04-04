@@ -237,6 +237,7 @@ struct UI_Progress_Bar
     Rect a;
     float fill_factor;
     v4 color;
+    float marker_value;
 };
 
 

@@ -1331,7 +1331,41 @@ bool can_place_item_entity_at_tp(Item *item, v3 tp, Quat q, double world_t, Room
 }
 
 
-Player_State player_state_of(S__Entity *player, double world_t, Room *room)
+
+float simulate_need(float need0, float change_speed, double t0, double t)
+{
+    return clamp(need0 + (t - t0) * change_speed);
+}
+
+float need_at_time(Need need, Needs *needs0, float *change_speeds, double t0, double t)
+{
+    return simulate_need(needs0->values[need], change_speeds[need], t0, t);
+}
+
+Needs simulate_needs(Needs needs0, float *change_speeds, double t0, double t)
+{
+    Needs result = {0};
+
+    for(int i = 0; i < NEED_NONE_OR_NUM; i++) {
+        result.values[i] = simulate_need(needs0.values[i], change_speeds[i], t0, t);
+    }
+
+    return result;
+}
+
+float need_at_time_for_player(Need need, double t, Entity *e)
+{
+    Assert(e->type == ENTITY_PLAYER);
+    return need_at_time(need, &e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
+}
+
+Needs current_needs_for_player(Entity *e, double t) {
+    Assert(e->type == ENTITY_PLAYER);
+    return simulate_needs(e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
+}
+
+
+Player_State player_state_of(Entity *player, double world_t, Room *room)
 {
     Player_State state = {0};
     
@@ -1340,6 +1374,8 @@ Player_State player_state_of(S__Entity *player, double world_t, Room *room)
 
     state.entity_id = player->id;
     state.user_id = player_e->user_id;
+
+    state.needs = current_needs_for_player(player, world_t);
 
     state.p = entity_position(player, world_t, room);
     
@@ -1370,7 +1406,7 @@ Player_State player_state_of(S__Entity *player, double world_t, Room *room)
 
 // NOTE: Pass NULL if calling this from for example the Room Server. See note for entity_action_predicted_possible(). -EH, 2021-02-11
 template<Allocator_ID A>
-AABB *find_player_put_down_volumes(S__Entity *player, double world_t, Room *room, int *_num, S__User *user)
+AABB *find_player_put_down_volumes(Entity *player, double world_t, Room *room, int *_num, S__User *user)
 {
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
@@ -1591,8 +1627,19 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_SLEEP:
         case ENTITY_ACT_USE_TOILET: {
 
-            if(action.type == ENTITY_ACT_SLEEP      && item->type != ITEM_BED)    return false;
-            if(action.type == ENTITY_ACT_USE_TOILET && item->type != ITEM_TOILET) return false;
+            switch(action.type) {
+                case ENTITY_ACT_SLEEP:
+                    if(item->type != ITEM_BED) return false;
+                    if(player_state->needs.values[NEED_SLEEP] > need_limits[NEED_SLEEP]) return false;
+                    break;
+
+                case ENTITY_ACT_USE_TOILET:
+                    if(item->type != ITEM_TOILET) return false;
+                    if(player_state->needs.values[NEED_BLADDER] > need_limits[NEED_BLADDER]) return false;
+                    break;
+
+                default: Assert(false); break;
+            }
             
             if(e->item_e.locked_by != NO_ENTITY) return false;
             
@@ -1953,36 +2000,4 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
     return all_actions_predicted_possible;
 }
 
-
-float simulate_need(float need0, float change_speed, double t0, double t)
-{
-    return clamp(need0 + (t - t0) * change_speed);
-}
-
-float need_at_time(Need need, Needs *needs0, float *change_speeds, double t0, double t)
-{
-    return simulate_need(needs0->values[need], change_speeds[need], t0, t);
-}
-
-Needs simulate_needs(Needs needs0, float *change_speeds, double t0, double t)
-{
-    Needs result = {0};
-
-    for(int i = 0; i < NEED_NONE_OR_NUM; i++) {
-        result.values[i] = simulate_need(needs0.values[i], change_speeds[i], t0, t);
-    }
-
-    return result;
-}
-
-float need_at_time_for_player(Need need, double t, Entity *e)
-{
-    Assert(e->type == ENTITY_PLAYER);
-    return need_at_time(need, &e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
-}
-
-Needs current_needs_for_player(Entity *e, double t) {
-    Assert(e->type == ENTITY_PLAYER);
-    return simulate_needs(e->player_e.needs0, e->player_e.need_change_speeds, e->player_e.needs_t0, t);
-}
 
