@@ -598,6 +598,7 @@ Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, 
 
             } break;
 
+            case ENTITY_ACT_USE_TOILET:
             case ENTITY_ACT_SIT_OR_UNSIT: {
                 array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
                 array_add(positions, tile_from_p(p + left    * (volume.y * 0.5f + 1)));
@@ -1587,9 +1588,11 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             
         } break;
 
-        case ENTITY_ACT_SLEEP: {
-            
-            if(item->type != ITEM_BED) return false;
+        case ENTITY_ACT_SLEEP:
+        case ENTITY_ACT_USE_TOILET: {
+
+            if(action.type == ENTITY_ACT_SLEEP      && item->type != ITEM_BED)    return false;
+            if(action.type == ENTITY_ACT_USE_TOILET && item->type != ITEM_TOILET) return false;
             
             if(e->item_e.locked_by != NO_ENTITY) return false;
             

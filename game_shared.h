@@ -36,6 +36,8 @@ enum Item_Type_ID
     ITEM_STOVE,
     ITEM_GRINDER,
 
+    ITEM_TOILET,
+
     ITEM_NONE_OR_NUM
 };
 
@@ -85,7 +87,10 @@ enum Entity_Action_Type
     ENTITY_ACT_SIT_OR_UNSIT = 7,
 
     // Bed
-    ENTITY_ACT_SLEEP = 8
+    ENTITY_ACT_SLEEP = 8,
+
+    // Toilet
+    ENTITY_ACT_USE_TOILET = 9
 };
 
 struct Entity_Action
@@ -127,7 +132,8 @@ Item_Type item_types[] = { // TODO @Cleanup: Put visual stuff in client only.
     { {2, 1, 1}, {0.85, 0.71, 0.55, 1.0}, STRING("Box"), SUBST_NUGGET },
     { {3, 7, 4}, {0.05, 0.15, 0.66, 1.0}, STRING("Filter Press"), SUBST_NONE },
     { {3, 3, 3}, {0.97, 0.96, 0.95, 1.0}, STRING("Stove"), SUBST_NONE },
-    { {2, 2, 3}, {0.15, 0.66, 0.24, 1.0}, STRING("Grinder"), SUBST_NONE }
+    { {2, 2, 3}, {0.15, 0.66, 0.24, 1.0}, STRING("Grinder"), SUBST_NONE },
+    { {3, 2, 4}, {1.0,   1.0,  1.0, 1.0}, STRING("Toilet"),  SUBST_NONE }
 };
 static_assert(ARRLEN(item_types) == ITEM_NONE_OR_NUM);
 
@@ -392,6 +398,14 @@ String need_names[] = {
     STRING("BOWEL")
 };
 static_assert(ARRLEN(need_names) == NEED_NONE_OR_NUM);
+
+const float default_need_speeds[] = {
+    -0.0025f,
+    -0.0025f,
+    -0.0052f,
+    -0.0029f
+};
+static_assert(ARRLEN(default_need_speeds) == NEED_NONE_OR_NUM);
 
 struct Needs
 {

@@ -9,6 +9,7 @@ enum Mesh_ID
     MESH_FILTER_PRESS,
     MESH_STOVE,
     MESH_GRINDER,
+    MESH_TOILET,
 
     MESH_NONE_OR_NUM
 };
@@ -37,7 +38,8 @@ char *mesh_filenames[] = {
     "res/meshes/barrel.obj",
     "res/meshes/filter_press.obj",
     "res/meshes/kitchenStove.obj",
-    "res/meshes/grinder.obj"
+    "res/meshes/grinder.obj",
+    "res/meshes/toiletSquare.obj"
 };
 static_assert(ARRLEN(mesh_filenames) == MESH_NONE_OR_NUM);
 static_assert(ARRLEN(mesh_filenames) == ARRLEN(Asset_Catalog::meshes));

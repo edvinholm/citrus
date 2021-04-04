@@ -98,6 +98,7 @@ Mesh_ID mesh_for_entity(Entity *e)
         case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
         case ITEM_STOVE:        return MESH_STOVE;
         case ITEM_GRINDER:      return MESH_GRINDER;
+        case ITEM_TOILET:       return MESH_TOILET;
 
         default: return MESH_NONE_OR_NUM;
     }
@@ -460,6 +461,13 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
         case ITEM_BED: {
             Entity_Action act1 = {0};
             act1.type = ENTITY_ACT_SLEEP;
+            
+            array_add(*_actions, act1);
+        } break;
+            
+        case ITEM_TOILET: {
+            Entity_Action act1 = {0};
+            act1.type = ENTITY_ACT_USE_TOILET;
             
             array_add(*_actions, act1);
         } break;

@@ -32,9 +32,8 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 
 
 // @Cleanup
-const float need_default_speed = -0.0025f;
-const float sleep_need_default_speed = need_default_speed;
-const float sleep_action_need_speed_change = 0.02f;
+const float sleep_action_sleep_need_speed_change = 0.02f;
+const float use_toilet_action_bladder_need_speed_change = 0.1f;
 
 
 // NOTE: There is one version of this for the user server, and one for the room server.
@@ -491,7 +490,7 @@ void add_new_room_clients(Room_Server *server)
 
                 player_e->needs_t0 = room->t;
                 for(int i = 0; i < NEED_NONE_OR_NUM; i++) player_e->needs0.values[i]      = .75f;
-                for(int i = 0; i < NEED_NONE_OR_NUM; i++) player_e->need_change_speeds[i] = need_default_speed;
+                for(int i = 0; i < NEED_NONE_OR_NUM; i++) player_e->need_change_speeds[i] = default_need_speeds[i];
 
                 v3 path[] = { V3(p), V3(p) };
                 player_set_walk_path(path, 2, &e, room);
@@ -722,16 +721,28 @@ bool player_walk_to(v3s p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 
 // NOTE: Walk duration not included!
 double player_action_duration(Player_Action *act, double start_t, Entity *player)
 {
-    if(act->type               == PLAYER_ACT_ENTITY &&
-       act->entity.action.type == ENTITY_ACT_SLEEP)
-    {
-        double change_speed = sleep_action_need_speed_change + sleep_need_default_speed;
-        Assert(change_speed > 0);
+    if(act->type != PLAYER_ACT_ENTITY) return 0;
 
-        float sleep_at_start = need_at_time_for_player(NEED_SLEEP, start_t, player);
-        float delta          = 1.0f - sleep_at_start;
+    switch(act->entity.action.type) {
+        case ENTITY_ACT_SLEEP: {
+            double change_speed = sleep_action_sleep_need_speed_change + default_need_speeds[NEED_SLEEP];
+            Assert(change_speed > 0);
 
-        return delta / change_speed;
+            float sleep_at_start = need_at_time_for_player(NEED_SLEEP, start_t, player);
+            float delta          = 1.0f - sleep_at_start;
+
+            return delta / change_speed;
+        } break;
+
+        case ENTITY_ACT_USE_TOILET: {
+            double change_speed = use_toilet_action_bladder_need_speed_change + default_need_speeds[NEED_BLADDER];
+            Assert(change_speed > 0);
+
+            float bladder_at_start = need_at_time_for_player(NEED_BLADDER, start_t, player);
+            float delta            = 1.0f - bladder_at_start;
+
+            return delta / change_speed;
+        } break;
     }
     
     return 0;
@@ -1217,12 +1228,29 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     player->player_e.is_on = target->id;
                     player->player_e.laying_down_instead_of_sitting = true;
 
-                    impact_need(NEED_SLEEP, sleep_action_need_speed_change, player, room);
+                    impact_need(NEED_SLEEP, sleep_action_sleep_need_speed_change, player, room);
 
                     return true;
 
                 } break;
+                    
+                case ENTITY_ACT_USE_TOILET: {
+                    
+                    Assert(target->type == ENTITY_ITEM);
+                    Assert(target->item_e.item.type == ITEM_TOILET);
 
+                    Assert(player->player_e.is_on != target->id);
+                    lock_item_entity(target, player->id);
+
+                    player->player_e.is_on = target->id;
+                    player->player_e.laying_down_instead_of_sitting = false;
+
+                    impact_need(NEED_BLADDER, use_toilet_action_bladder_need_speed_change, player, room);
+
+                    return true;
+
+                } break;
+    
                 default: Assert(false); return false;
             }
     
@@ -1284,15 +1312,10 @@ bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *
     
     bool possible = false;
     bool teleport_needed = false;
-    Array<v3s, ALLOC_TMP> possible_teleport_positions = {0};
 
     switch(action->entity.action.type) {
-        case ENTITY_ACT_SLEEP: {
-            // NOTE: We assume that the walk path is what it was when we set is_on = the bed.
-            Assert(player->player_e.walk_path_length >= 2);
-            v3 p = player->player_e.walk_path[player->player_e.walk_path_length-1];
-
-            possible_teleport_positions = entity_action_positions(target, &action->entity.action, player_entity_hands_zoffs, room->t, room);
+        case ENTITY_ACT_SLEEP:
+        case ENTITY_ACT_USE_TOILET: {
             teleport_needed = true;
             possible = true;
         } break;
@@ -1309,6 +1332,8 @@ bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *
     if(teleport_needed) {
         possible = false;
         
+        Array<v3s, ALLOC_TMP> possible_teleport_positions = entity_action_positions(target, &action->entity.action, player_entity_hands_zoffs, room->t, room);
+        
         for(int i = 0; i < possible_teleport_positions.n; i++) {
             auto p = V3(possible_teleport_positions[i]);
             if(entity_can_be_at(player, p, Q_IDENTITY, room->t, room)) {
@@ -1321,18 +1346,23 @@ bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *
 
     if(!possible) return false;
 
+    // NOW WE DO THE THING. WE HAVE DECIDED THAT IT IS POSSIBLE //
+    
     switch(action->entity.action.type) {
-        case ENTITY_ACT_SLEEP: {
+        case ENTITY_ACT_SLEEP:
+        case ENTITY_ACT_USE_TOILET: {
             
-            Assert(player->player_e.is_on == target->id &&
-                   player->player_e.laying_down_instead_of_sitting);
+            Assert(player->player_e.is_on == target->id);
             unlock_item_entity(target, player->id, room);
             player->player_e.is_on = NO_ENTITY;
-            
-            impact_need(NEED_SLEEP, -sleep_action_need_speed_change, player, room);
 
             room->did_change = true;
         } break;
+    }
+
+    switch(action->entity.action.type) {
+        case ENTITY_ACT_SLEEP:      impact_need(NEED_SLEEP,   -sleep_action_sleep_need_speed_change,        player, room); break;
+        case ENTITY_ACT_USE_TOILET: impact_need(NEED_BLADDER, -use_toilet_action_bladder_need_speed_change, player, room); break;
     }
 
     if(teleport_needed) {

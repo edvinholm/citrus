@@ -686,7 +686,8 @@ String entity_action_label(Entity_Action action)
             else         return STRING("SIT");
         } break;
 
-        case ENTITY_ACT_SLEEP: return STRING("SLEEP"); break;
+        case ENTITY_ACT_SLEEP:      return STRING("SLEEP"); break;
+        case ENTITY_ACT_USE_TOILET: return STRING("USE");   break;
 
         default: Assert(false); return STRING("???"); break;
     }
