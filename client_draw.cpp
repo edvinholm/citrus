@@ -957,8 +957,8 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat 
             
         }
         else {
-            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
-            draw_quad(tp + V3(-1, -1, 0.001f), V3_X * 2.0f, V3_Y * 2.0f, { 1, 0, 0, 1 }, gfx);
+//            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+//            draw_quad(tp + V3(-1, -1, 0.001f), V3_X * 2.0f, V3_Y * 2.0f, { 1, 0, 0, 1 }, gfx);
         }
     }
 }
