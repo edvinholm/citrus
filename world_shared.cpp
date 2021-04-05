@@ -68,7 +68,7 @@ bool hitbox_intersects_hitbox(Entity_Hitbox a, Entity_Hitbox b)
 Nugget_Type nugget_type_of_container(Substance_Container *c)
 {
     Assert(c->amount == 0 || c->substance.form == SUBST_NUGGET);
-    return (c->amount == 0) ? NUGGET_NONE_OR_NUM : c->substance.nugget;
+    return (c->amount == 0) ? NUGGET_NONE_OR_NUM : c->substance.nugget.type;
 }
 
 Liquid_Type liquid_type_of_container(Substance_Container *c)
@@ -223,7 +223,7 @@ Substance_Container substance_container_lerp(Substance_Container *a, Substance_C
 
         case SUBST_NUGGET: {
             
-            Assert(a->substance.nugget == b->substance.nugget ||
+            Assert(equal(&a->substance.nugget, &b->substance.nugget) ||
                    nugget_type_of_container(a) == NUGGET_NONE_OR_NUM ||
                    nugget_type_of_container(b) == NUGGET_NONE_OR_NUM);
 
@@ -232,8 +232,9 @@ Substance_Container substance_container_lerp(Substance_Container *a, Substance_C
 
             if (a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
     
-            result.substance.nugget = a_type;
-            if(result.substance.nugget == NUGGET_NONE_OR_NUM) result.substance.nugget = b_type;            
+            if(result.substance.nugget.type == NUGGET_NONE_OR_NUM)
+                result.substance.nugget = b->substance.nugget;
+            
         } break;
 
         default: Assert(false); return *a;
@@ -1635,7 +1636,8 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 
                 case ENTITY_ACT_USE_TOILET:
                     if(item->type != ITEM_TOILET) return false;
-                    if(player_state->needs.values[NEED_BLADDER] > need_limits[NEED_BLADDER]) return false;
+                    if(player_state->needs.values[NEED_BLADDER] > need_limits[NEED_BLADDER] &&
+                       player_state->needs.values[NEED_BOWEL]   > need_limits[NEED_BOWEL]) return false;
                     break;
 
                 default: Assert(false); break;

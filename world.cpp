@@ -378,6 +378,7 @@ void update_local_data_for_room(Room *room, double world_t, Client *client)
             local->is_me = (e->player_e.user_id == user_id);
 
             auto state = player_state_of(e, world_t, room);
+            local->state_before_action_in_queue[0] = state;
             for(int j = 0; j < e->player_e.action_queue_length; j++)
             {
                 auto *act = e->player_e.action_queue + j;
@@ -385,7 +386,7 @@ void update_local_data_for_room(Room *room, double world_t, Client *client)
                 // NOTE: Here we could also cache whether the action is predicted possible or not....
                 
                 apply_actions_to_player_state(&state, act, 1, world_t, room, user);
-                local->state_after_action_in_queue[j] = state;
+                local->state_before_action_in_queue[j+1] = state;
             }
             
         }
@@ -397,19 +398,16 @@ Player_State player_state_after_completed_action_queue(Entity *player, double wo
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
     
-    if(player_e->action_queue_length > 0) {
-        return player->player_local.state_after_action_in_queue[player_e->action_queue_length-1];
-    } else {
-        return player_state_of(player, world_t, room);
-    }
+    return player->player_local.state_before_action_in_queue[player_e->action_queue_length];
 }
 
 
 // IMPORTANT: The *_actions array should be in a valid state before calling this proc!
 template<Allocator_ID A>
-void get_available_actions_for_entity(Entity *e, Player_State *player_state, Array<Entity_Action, A> *_actions)
+void get_available_actions_for_entity(Entity *e, Player_State *player_state, Array<Entity_Action, A> *_actions, bool *_first_action_is_default = NULL)
 {
     _actions->n = 0;
+    bool first_is_default = false;
     
     if(e->type != ENTITY_ITEM) return;
 
@@ -428,6 +426,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             
             array_add(*_actions, act1);
             array_add(*_actions, act2);
+
+            first_is_default = true;
         } break;
 
         case ITEM_MACHINE: {
@@ -438,6 +438,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             act1.set_power_mode.set_to_on = (machine_e->stop_t >= machine_e->start_t);
                 
             array_add(*_actions, act1);
+            
+            first_is_default = true;
         } break;
 
         case ITEM_CHESS_BOARD: {
@@ -456,6 +458,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             act1.sit_or_unsit.unsit = (player_state->sitting_on == e->id);
             
             array_add(*_actions, act1);
+            
+            first_is_default = (!act1.sit_or_unsit.unsit);
         } break;
 
         case ITEM_BED: {
@@ -463,6 +467,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             act1.type = ENTITY_ACT_SLEEP;
             
             array_add(*_actions, act1);
+            
+            first_is_default = true;
         } break;
             
         case ITEM_TOILET: {
@@ -470,6 +476,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             act1.type = ENTITY_ACT_USE_TOILET;
             
             array_add(*_actions, act1);
+            
+            first_is_default = true;
         } break;
     }
 
@@ -481,6 +489,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
     
     array_add(*_actions, act_a);
     array_add(*_actions, act_b);
+
+    if(_first_action_is_default) *_first_action_is_default = first_is_default;
 }
 
 // ///////////////////// //

@@ -107,6 +107,11 @@ struct Entity_Action
         } sit_or_unsit;
 
         Chess_Action chess;
+
+        struct {
+            bool impacting_bladder; // Not synced, used by server only (2021-04-04)
+            bool impacting_bowel;   // Not synced, used by server only (2021-04-04)
+        } use_toilet;
     };
 };
 
@@ -233,21 +238,52 @@ bool equal(Liquid_Container *a, Liquid_Container *b) {
 enum Nugget_Type: u8
 {
     NUGGET_YEAST,
+    NUGGET_SEEDS,
 
     NUGGET_NONE_OR_NUM
 };
 
 String nugget_names[] = {
-    STRING("YEAST")
+    STRING("YEAST"),
+    STRING("SEEDS")
 };
 static_assert(ARRLEN(nugget_names) == NUGGET_NONE_OR_NUM);
 
 #if !(SERVER)
 v4 nugget_colors[] = {
-    { 1.00, 0.95, 0.62, 1.0f }
+    { 1.00, 0.95, 0.62, 1.0f },
+    {  0.6, 0.65, 0.42, 1.0f }
 };
 static_assert(ARRLEN(nugget_colors) == NUGGET_NONE_OR_NUM);
 #endif
+
+enum Seed_Type: u16 {
+    SEED_APPLE,
+    SEED_WHEAT,
+
+    SEED_NONE_OR_NUM
+};
+
+String seed_names[] = {
+    STRING("APPLE"),
+    STRING("WHEAT")
+};
+static_assert(ARRLEN(seed_names) == SEED_NONE_OR_NUM);
+
+struct Nugget {
+    Nugget_Type type;
+
+    union {
+        Seed_Type seed_type;
+    };
+};
+
+bool equal(Nugget *a, Nugget *b) {
+    // @Robustness: @Norelease Is this a good idea? Should be fine if we don't have any floats in Nugget(???????????? what about padding???????)
+    static_assert(sizeof(*a) == sizeof(*b));
+    return (memcmp(a, b, sizeof(*a)) == 0);
+}
+
 
 
 typedef u32 Substance_Amount;
@@ -257,8 +293,8 @@ struct Substance
     Substance_Form form;
     
     union {
-        Liquid      liquid;
-        Nugget_Type nugget;
+        Liquid liquid;
+        Nugget nugget;
     };
 };
 
@@ -266,7 +302,7 @@ bool equal(Substance *a, Substance *b) {
     if(a->form != b->form) return false;
     switch(a->form) { // @Jai: #complete
         case SUBST_LIQUID: return equal(&a->liquid, &b->liquid);
-        case SUBST_NUGGET: return (a->nugget == b->nugget);
+        case SUBST_NUGGET: return equal(&a->nugget, &b->nugget);
 
         default: Assert(false); return false;
     }

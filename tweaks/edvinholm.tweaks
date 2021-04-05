@@ -32,7 +32,7 @@ profiler_yscale 250
 # show_player_entity_parts true
 # show_entity_forward_vectors true
 
- show_entity_bounding_boxes true
+# show_entity_bounding_boxes true
 # hide_entity_meshes true
 
 

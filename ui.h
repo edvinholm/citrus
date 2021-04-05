@@ -135,17 +135,27 @@ enum UI_Element_Type
 
 enum UI_Click_State_
 {
-    IDLE                = 0b000000000000,
-    HOVERED             = 0b000000000001,
-    //HOVERED_NOW         = 0b000000000010,
-    //UNHOVERED_NOW       = 0b000000000100, // This element was unhovered this frame
-    PRESSED             = 0b000000001000, // State has been PRESSED_NOW and the mouse button is still down.
-    CLICKED_AT_ALL      = 0b000000010000, // Clicked this frame.
-    CLICKED_ENABLED     = 0b000000100000, // Clicked this frame AND the element was enabled.
-    CLICKED_DISABLED    = 0b000001000000, // Clicked this frame AND the element was enabled.
-    PRESSED_NOW         = 0b000010000000, // Pressed this frame.
-    //RELEASED_NOW        = 0b000100000000, // It was pressed before, and it was released this frame.
-    //MOUSE_UP_ON_NOW     = 0b001000000000, // The mouse was released this frame, and the cursor was over the element.
+    IDLE                = 0x0,
+    HOVERED             = 0x1,
+    
+    LEFT_PRESSED             = 0x2,  // State has been LEFT_PRESSED_NOW and the mouse button is still down.
+    LEFT_CLICKED_AT_ALL      = 0x4,  // Clicked this frame.
+    LEFT_CLICKED_ENABLED     = 0x8,  // Clicked this frame AND the element was enabled.
+    LEFT_CLICKED_DISABLED    = 0x10,  // Clicked this frame AND the element was enabled.
+    LEFT_PRESSED_NOW         = 0x20, // Pressed this frame.
+
+    PRESSED           = LEFT_PRESSED,
+    CLICKED_AT_ALL    = LEFT_CLICKED_AT_ALL,
+    CLICKED_ENABLED   = LEFT_CLICKED_ENABLED,
+    CLICKETD_DISABLED = LEFT_CLICKED_DISABLED,
+    PRESSED_NOW       = LEFT_PRESSED_NOW,
+               
+    RIGHT_PRESSED             = 0x40,  // State has been RIGHT_PRESSED_NOW and the mouse button is still down.
+    RIGHT_CLICKED_AT_ALL      = 0x80,  // Clicked this frame.
+    RIGHT_CLICKED_ENABLED     = 0x100,  // Clicked this frame AND the element was enabled.
+    RIGHT_CLICKED_DISABLED    = 0x200,  // Clicked this frame AND the element was enabled.
+    RIGHT_PRESSED_NOW         = 0x400, // Pressed this frame.
+    
 };
 typedef u16 UI_Click_State; //In @JAI, this can probably be just an enum.
 
@@ -334,8 +344,10 @@ struct UI_World_View
     Optional<Surface> hovered_surface;
     v3                hovered_surface_hit_p;
     
-    Entity_ID pressed_entity;
-    Entity_ID clicked_entity;
+    Entity_ID left_pressed_entity;
+    Entity_ID right_pressed_entity;
+    Entity_ID left_clicked_entity;
+    Entity_ID right_clicked_entity;
 };
 
 struct UI_Chess_Board

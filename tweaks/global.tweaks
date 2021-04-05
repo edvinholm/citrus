@@ -18,6 +18,7 @@ initial_os_window_rect  8 8 1440 1000
 
 
 scroll_to_caret_repeat_interval 0.1  # In seconds
+double_click_max_interval       0.2
 
 show_player_paths       false
 color_tiles_by_position false

@@ -17,7 +17,7 @@ namespace Client_Game
         union {
             struct {
                 bool is_me;
-                Player_State state_after_action_in_queue[ARRLEN(S__Entity::player_e.action_queue)];
+                Player_State state_before_action_in_queue[ARRLEN(S__Entity::player_e.action_queue)+1]; // Last one is AFTER last action.
             } player_local;
 
             struct {
@@ -41,6 +41,10 @@ namespace Client_Game
         // If we have multiple rooms, or multiple world views,
         // we would want to have multiple sets of these.       -EH, 2021-03-10
         Entity_ID selected_entity;
+        double action_menu_open_t;  // NOTE: Action menu is open if action_menu_open_t > action_menu_close_t.
+        double action_menu_close_t;
+        Entity_ID action_menu_entity; // NOTE: Needs to be valid during closing animation.
+        v2 action_menu_p;
         
         v3      placement_p; // If we for example have a selected inventory item, this is where we would try to put it.
         Quat    placement_q;

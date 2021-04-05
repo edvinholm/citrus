@@ -638,6 +638,45 @@ bool write_Liquid(Liquid lq, Network_Node *node)
 }
 
 
+bool read_Seed_Type(Seed_Type *_type, Network_Node *node)
+{
+    static_assert(sizeof(*_type) == sizeof(u16));
+    Read(u16, t, node);
+    *_type = (Seed_Type)t;
+    return true;
+}
+
+bool write_Seed_Type(Seed_Type type, Network_Node *node)
+{
+    static_assert(sizeof(type) == sizeof(u16));
+    Write(u16, type, node);
+    return true;
+}
+
+
+bool read_Nugget(Nugget *_nugget, Network_Node *node)
+{
+    Read_To_Ptr(Nugget_Type, &_nugget->type, node);
+
+    if(_nugget->type == NUGGET_SEEDS) {
+        Read_To_Ptr(Seed_Type, &_nugget->seed_type, node);
+    }
+    
+    return true;
+}
+
+bool write_Nugget(Nugget nugget, Network_Node *node)
+{
+    Write(Nugget_Type, nugget.type, node);
+
+    if(nugget.type == NUGGET_SEEDS) {
+        Write(Seed_Type, nugget.seed_type, node);
+    }
+    
+    return true;
+}
+
+
 // @Norelease @Security: Check that it is a valid value.
 // NOTE: Don't call this to read a bitfield of Substance_Forms.
 bool read_Substance_Form(Substance_Form *_f, Network_Node *node)
@@ -664,7 +703,7 @@ bool read_Substance(Substance *_s, Network_Node *node)
             break;
             
         case SUBST_NUGGET:
-            Read_To_Ptr(Nugget_Type, &_s->nugget, node);
+            Read_To_Ptr(Nugget, &_s->nugget, node);
             break;
 
         case SUBST_NONE: break;
@@ -687,7 +726,7 @@ bool write_Substance(Substance s, Network_Node *node)
             break;
             
         case SUBST_NUGGET:
-            Write(Nugget_Type, s.nugget, node);
+            Write(Nugget, s.nugget, node);
             break;
 
         case SUBST_NONE: break;

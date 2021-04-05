@@ -16,8 +16,9 @@ enum Tweak_ID {
     // //
     TWEAK_INITIAL_OS_WINDOW_RECT,
 
-    // //
+    // USER INTERFACE //
     TWEAK_SCROLL_TO_CARET_REPEAT_INTERVAL,
+    TWEAK_DOUBLE_CLICK_MAX_INTERVAL,
 
     // DEVELOPER //
     TWEAK_SHOW_PLAYER_PATHS,
@@ -80,8 +81,9 @@ struct Tweaks
         // //
         { "initial_os_window_rect", TWEAK_TYPE_INT, 4 },
 
-        // //
+        // USER INTERFACE //
         { "scroll_to_caret_repeat_interval", TWEAK_TYPE_FLOAT, 1 },
+        { "double_click_max_interval", TWEAK_TYPE_FLOAT, 1 },
 
         // DEBUG //
         { "show_player_paths",       TWEAK_TYPE_BOOL, 1 },

@@ -123,6 +123,8 @@ using namespace Client_Market;
 
 #include "color.cpp"
 
+#include "animation.cpp"
+
 #include "draw.cpp"
 
 #include "sprite_draw.cpp"

@@ -433,26 +433,47 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
 {
     auto &mouse = input->mouse;
     
-    state &= ~CLICKED_AT_ALL;
-    state &= ~CLICKED_DISABLED;
-    state &= ~CLICKED_ENABLED;
-    state &= ~PRESSED_NOW;
+    state &= ~LEFT_CLICKED_AT_ALL;
+    state &= ~LEFT_CLICKED_DISABLED;
+    state &= ~LEFT_CLICKED_ENABLED;
+    state &= ~LEFT_PRESSED_NOW;
+
+    state &= ~RIGHT_CLICKED_AT_ALL;
+    state &= ~RIGHT_CLICKED_DISABLED;
+    state &= ~RIGHT_CLICKED_ENABLED;
+    state &= ~RIGHT_PRESSED_NOW;
     
     if(hovered) {
         state |= HOVERED;
         
         if(mouse.buttons_down & MB_PRIMARY) {
-            if(!(state & PRESSED)) state |= PRESSED_NOW;
-            state |= PRESSED;
+            if(!(state & LEFT_PRESSED)) state |= LEFT_PRESSED_NOW;
+            state |= LEFT_PRESSED;
+        }
+        
+        if(mouse.buttons_down & MB_SECONDARY) {
+            if(!(state & RIGHT_PRESSED)) state |= RIGHT_PRESSED_NOW;
+            state |= RIGHT_PRESSED;
         }
 
-        if(state & PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
+        
+        if(state & LEFT_PRESSED && (mouse.buttons_up & MB_PRIMARY)) {
             if(enabled) {
-                state |= CLICKED_ENABLED;
-                state |= CLICKED_AT_ALL;
+                state |= LEFT_CLICKED_ENABLED;
+                state |= LEFT_CLICKED_AT_ALL;
             } else {
-                state |= CLICKED_DISABLED;
-                state |= CLICKED_AT_ALL;
+                state |= LEFT_CLICKED_DISABLED;
+                state |= LEFT_CLICKED_AT_ALL;
+            }
+        }
+
+        if(state & RIGHT_PRESSED && (mouse.buttons_up & MB_SECONDARY)) {
+            if(enabled) {
+                state |= RIGHT_CLICKED_ENABLED;
+                state |= RIGHT_CLICKED_AT_ALL;
+            } else {
+                state |= RIGHT_CLICKED_DISABLED;
+                state |= RIGHT_CLICKED_AT_ALL;
             }
         }
     }
@@ -461,7 +482,11 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
     }
     
     if(!(mouse.buttons & MB_PRIMARY)) {
-        state &= ~PRESSED;
+        state &= ~LEFT_PRESSED;
+    }
+    
+    if(!(mouse.buttons & MB_SECONDARY)) {
+        state &= ~RIGHT_PRESSED;
     }
 
     return state;
@@ -512,9 +537,9 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
 
     float scroll_max = (content_h - view_h);
 
-    if(scroll->handle_click_state & PRESSED) {
+    if(scroll->handle_click_state & LEFT_PRESSED) {
         
-        if(scroll->handle_click_state & PRESSED_NOW) {
+        if(scroll->handle_click_state & LEFT_PRESSED_NOW) {
             scroll->handle_grab_rel_p = mouse->p.y - handle_a.y;
         }
 
@@ -1252,7 +1277,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     ui_set(e, &tf->click_state, evaluate_click_state(tf->click_state, area_hovered, input, tf->enabled));
 
     
-    *_use_i_beam_cursor = (area_hovered && !(tf->scroll.handle_click_state & PRESSED));
+    *_use_i_beam_cursor = (area_hovered && !(tf->scroll.handle_click_state & LEFT_PRESSED));
 
         
     if(!tf->enabled) return;
@@ -1294,7 +1319,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
 
     bool do_scroll_to_caret = tf_state->text_did_change;
     
-    if(tf->click_state & PRESSED) {
+    if(tf->click_state & LEFT_PRESSED) {
         e->needs_redraw = true;
 
         v2 bt_top_left = text_a.p;
@@ -1310,7 +1335,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
             tf_state->last_scroll_to_caret_by_mouse_t = t;
         }
         
-        if(tf->click_state & PRESSED_NOW && !shift_is_down) {
+        if(tf->click_state & LEFT_PRESSED_NOW && !shift_is_down) {
             highlight_start->cp   = mouse_text_location.cp_index;
         };
 
@@ -1434,7 +1459,7 @@ void update_dropdown(UI_Element *e, Input_Manager *input, UI_Element *hovered_el
 
     bool was_open = dd->open;
     
-    if(dd->box_click_state & CLICKED_ENABLED) dd->open = !dd->open;
+    if(dd->box_click_state & LEFT_CLICKED_ENABLED) dd->open = !dd->open;
     else if(dd->open && !(dd->box_click_state & HOVERED)) {
         if(mouse.buttons_down & MB_PRIMARY) dd->open = false;
     }
@@ -1696,8 +1721,12 @@ UI_World_View *world_view(UI_Context ctx)
         view->clicked_tile_ix = -1;
         
         view->hovered_entity = NO_ENTITY;
-        view->pressed_entity = NO_ENTITY;
-        view->clicked_entity = NO_ENTITY;
+        
+        view->left_pressed_entity = NO_ENTITY;
+        view->left_clicked_entity = NO_ENTITY;
+        
+        view->right_pressed_entity = NO_ENTITY;
+        view->right_clicked_entity = NO_ENTITY;
     }
     
     ui_set(e, &view->a, area(ctx.layout));
@@ -1717,7 +1746,8 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
     auto *mouse = &input->mouse;
 
     view->clicked_tile_ix = -1;
-    view->clicked_entity  = NO_ENTITY;
+    view->left_clicked_entity  = NO_ENTITY;
+    view->right_clicked_entity  = NO_ENTITY;
     ui_set(e, &view->click_state, evaluate_click_state(view->click_state, e == hovered_element, input));
 
     s32       hovered_tile_ix    = -1;
@@ -1736,13 +1766,22 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 
         view->hovered_entity = (hovered_entity) ? hovered_entity->id : NO_ENTITY;
 
-        if (view->click_state & PRESSED_NOW) {
-            view->pressed_entity = view->hovered_entity;
+        if (view->click_state & LEFT_PRESSED_NOW) {
+            view->left_pressed_entity = view->hovered_entity;
+        }
+        
+        if (view->click_state & RIGHT_PRESSED_NOW) {
+            view->right_pressed_entity = view->hovered_entity;
         }
 
-        if (view->click_state & CLICKED_ENABLED) {
-            if (view->pressed_entity == view->hovered_entity) {
-                view->clicked_entity = view->pressed_entity;
+        if (view->click_state & LEFT_CLICKED_ENABLED) {
+            if (view->left_pressed_entity == view->hovered_entity) {
+                view->left_clicked_entity = view->left_pressed_entity;
+            }
+        }
+        if (view->click_state & RIGHT_CLICKED_ENABLED) {
+            if (view->right_pressed_entity == view->hovered_entity) {
+                view->right_clicked_entity = view->right_pressed_entity;
             }
         }
         
@@ -1754,11 +1793,11 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
             
                 hovered_tile_ix = floor(ground_hit.y) * room_size_x + floor(ground_hit.x);
         
-                if(view->click_state & PRESSED_NOW) {
+                if(view->click_state & LEFT_PRESSED_NOW) {
                     view->pressed_tile_ix = hovered_tile_ix;
                 }
 
-                if(view->click_state & CLICKED_ENABLED) {
+                if(view->click_state & LEFT_CLICKED_ENABLED) {
                     if(view->pressed_tile_ix == hovered_tile_ix) {
                         view->clicked_tile_ix = view->pressed_tile_ix;
                     }
@@ -1770,7 +1809,7 @@ void update_world_view(UI_Element *e, Input_Manager *input, UI_Element *hovered_
 
     view->hovered_tile_ix    = hovered_tile_ix;
 
-    if(!(view->click_state & PRESSED))
+    if(!(view->click_state & LEFT_PRESSED))
         view->pressed_tile_ix = -1;
 
     view->mouse_ray = screen_point_to_ray(input->mouse.p, view->a, view->camera.projection_inverse);
@@ -1830,11 +1869,11 @@ void update_ui_chess_board(UI_Element *e, Input_Manager *input, UI_Element *hove
 
         hovered_square_ix = (y * 8 + x);
 
-        if(cb->click_state & PRESSED_NOW) {
+        if(cb->click_state & LEFT_PRESSED_NOW) {
             cb->pressed_square_ix = hovered_square_ix;
         }
 
-        if(cb->click_state & CLICKED_ENABLED) {
+        if(cb->click_state & LEFT_CLICKED_ENABLED) {
             if(cb->pressed_square_ix == hovered_square_ix) {
                 cb->clicked_square_ix = cb->pressed_square_ix;
             }
@@ -1842,7 +1881,7 @@ void update_ui_chess_board(UI_Element *e, Input_Manager *input, UI_Element *hove
     }
 
     cb->hovered_square_ix = hovered_square_ix;
-    if(!(cb->click_state & PRESSED))
+    if(!(cb->click_state & LEFT_PRESSED))
         cb->pressed_square_ix = -1;
 }
 
@@ -1881,7 +1920,7 @@ void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
             
         String label = (*paused) ? STRING("RESUME") : STRING("PAUSE");
         bool selected = *paused;
-        if(button(P(ctx), label, true, selected) & CLICKED_ENABLED) {
+        if(button(P(ctx), label, true, selected) & LEFT_CLICKED_ENABLED) {
             *paused = !(*paused);
         }
     }
@@ -1894,14 +1933,14 @@ void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
     { _AREA_(selection_a);
         
         { _TOP_(20); _LEFT_(20);
-            if(button(P(ctx)) & PRESSED) {
+            if(button(P(ctx)) & LEFT_PRESSED) {
                 sel0 = (input->mouse.p.x - 10 - all_a.x)/(all_a.w/ARRLEN(profiler->frames));
                 sel0 = clamp<int>(sel0, 0, sel1);
             }
         }
         
         { _BOTTOM_(20); _RIGHT_(20);
-            if(button(P(ctx)) & PRESSED) {
+            if(button(P(ctx)) & LEFT_PRESSED) {
                 sel1 = (input->mouse.p.x + 10 - all_a.x)/(all_a.w/ARRLEN(profiler->frames));
                 sel1 = clamp<int>(sel1, sel0, ARRLEN(profiler->frames));
             }
@@ -1919,7 +1958,7 @@ void ui_profiler(UI_Context ctx, Profiler *profiler, Input_Manager *input)
     selected_frame_handle_a.w  = 20;
     
     { _AREA_(selected_frame_handle_a);
-        if(button(P(ctx)) & PRESSED) {
+        if(button(P(ctx)) & LEFT_PRESSED) {
             selected_frame = sel0 + (input->mouse.p.x - zoom_a.x) / zoom_frame_w;
         }
     }

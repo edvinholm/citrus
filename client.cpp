@@ -77,7 +77,8 @@ void request(Player_Action *action, Client *client)
     array_add(client->connections.room_action_queue, c_rs_act);
 }
 
-bool predicted_possible(Player_Action *action, double world_t, Client *client, Player_Action_Prediction_Info *_prediction_info = NULL)
+// IMPORTANT that we pass a copy of player_state here, because we modify it but don't want the callers' states to be modified.
+bool predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client, Player_Action_Prediction_Info *_prediction_info = NULL)
 {
     Entity *player = find_current_player_entity(client);
     if(player == NULL) return false;
@@ -89,7 +90,6 @@ bool predicted_possible(Player_Action *action, double world_t, Client *client, P
 
     auto *room = &client->room;
 
-    Player_State player_state = player_state_after_completed_action_queue(player, world_t, room);
     while(true) {
         Optional<Player_Action> action_needed_before = {0};
         if(player_action_predicted_possible(action, &player_state,
@@ -119,9 +119,9 @@ bool predicted_possible(Player_Action *action, double world_t, Client *client, P
     return false;
 }
 
-bool request_if_predicted_possible(Player_Action *action, double world_t, Client *client)
+bool request_if_predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client)
 {
-    if(!predicted_possible(action, world_t, client)) return false;
+    if(!predicted_possible(action, world_t, player_state, client)) return false;
     request(action, client);
     return true;
 }
@@ -132,16 +132,16 @@ void request(Entity_Action *action, Entity_ID target, Client *client)
     request(&player_action, client);
 }
 
-bool predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Client *client)
+bool predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Player_State player_state, Client *client)
 {
     Player_Action player_action = make_player_entity_action(action, target);
-    return predicted_possible(&player_action, world_t, client);
+    return predicted_possible(&player_action, world_t, player_state, client);
 }
 
-bool request_if_predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Client *client)
+bool request_if_predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Player_State player_state, Client *client)
 {
     Player_Action player_action = make_player_entity_action(action, target);
-    return request_if_predicted_possible(&player_action, world_t, client);
+    return request_if_predicted_possible(&player_action, world_t, player_state, client);
 }
 
 
@@ -553,7 +553,7 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
     // Set view to article of selected inventory item type.
     if(inventory_item != NULL) {
         if((!article_view_target || article_view_target->article != inventory_item->type) && 
-            !market->waiting_for_view_update)
+           !market->waiting_for_view_update)
         {
             Market_View_Target view_target;
             Zero(view_target);
@@ -662,7 +662,7 @@ String entity_action_label(Entity_Action action)
 {
     switch(action.type) {
         case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
-        case ENTITY_ACT_PLACE_IN_INVENTORY: return STRING("PLACE IN INVENTORY"); break;
+        case ENTITY_ACT_PLACE_IN_INVENTORY: return STRING("TO BACKPACK"); break;
         case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
@@ -717,6 +717,10 @@ void item_chess_tab(UI_Context ctx, Item *item, bool controls_enabled, Entity *e
     auto *board = &e->item_e.chess_board;
     auto *local = &e->item_local.chess;
 
+    auto *player_local = &player->player_local;
+    auto *player_e     = &player->player_e;
+    auto player_state_after_queue = player_local->state_before_action_in_queue[player_e->action_queue_length];
+
     { _TOP_CUT_(42);
         _GRID_(2, 1, window_default_padding);
 
@@ -754,7 +758,7 @@ void item_chess_tab(UI_Context ctx, Item *item, bool controls_enabled, Entity *e
                     break;
                 }
 
-                bool enabled  = controls_enabled && predicted_possible(&action, e->id, world_t, client);
+                bool enabled  = controls_enabled && predicted_possible(&action, e->id, world_t, player_state_after_queue, client);
                 // @Norelease: Check if another player has this action queued.
                 if(button(PC(ctx, j), STRING("JOIN"), enabled, selected) & CLICKED_ENABLED)
                 {
@@ -812,7 +816,7 @@ void item_chess_tab(UI_Context ctx, Item *item, bool controls_enabled, Entity *e
                 act.chess.type = CHESS_ACT_MOVE;
                 act.chess.move = move;
 
-                request_if_predicted_possible(&act, e->id, world_t, client);
+                request_if_predicted_possible(&act, e->id, world_t, player_state_after_queue, client);
                 // /////////////////////// //
 
                 local->selected_square_ix_plus_one = 0;    
@@ -852,7 +856,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
         auto *player_local = &player->player_local;
 
         Array<Entity_Action, ALLOC_TMP> actions = {0};
-        auto state = player_state_after_completed_action_queue(player, world_t, room);
+        auto state = player_local->state_before_action_in_queue[player->player_e.action_queue_length];
         get_available_actions_for_entity(e, &state, &actions);
 
         for(int i = 0; i < actions.n; i++) {
@@ -863,11 +867,11 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
 
             auto entity_action = actions[i];
                 
-            bool enabled = controls_enabled && predicted_possible(&entity_action, e->id, world_t, client);
+            bool enabled = controls_enabled && predicted_possible(&entity_action, e->id, world_t, state, client);
                 
             if(button(PC(ctx, i), entity_action_label(entity_action), enabled) & CLICKED_ENABLED)
             {
-                request_if_predicted_possible(&entity_action, e->id, world_t, client);
+                request(&entity_action, e->id, client);
             }
         }
     }
@@ -1165,7 +1169,21 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     Client_UI *cui = &client->cui;
 
     Rect a = area(ctx.layout);
+    
 
+    auto *room = &client->room;
+    auto world_t = world_time_for_room(room, t);
+
+    Entity *player = NULL;
+    auto *user = current_user(client);
+    if(user) {
+        player = find_player_entity(user->id, room);
+    }
+    
+    Player_State player_state_after_queue = {0}; // IMPORTANT: Only valid if player != NULL.
+    if(player) {
+        player_state_after_queue = player_state_after_completed_action_queue(player, world_t, room);
+    }
 
     bool ctrl_is_down  = false;
     bool shift_is_down = false;
@@ -1198,14 +1216,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 #endif
     
 
-    auto *room = &client->room;
-    auto world_t = world_time_for_room(room, t);
-
-    Entity *player_entity = NULL;
-    User_ID user_id = current_user_id(client);
-    if(user_id != NO_USER) {
-        player_entity = find_player_entity(user_id, room);
-    }
 
     const float menu_bar_button_s = 52;
     const float menu_bar_pad      = 4;
@@ -1411,12 +1421,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         
         // ACTION QUEUE //
         { _RIGHT_CUT_(48);
-            if(player_entity != NULL) {
-                Assert(player_entity->type == ENTITY_PLAYER);
+            if(player != NULL) {
+                Assert(player->type == ENTITY_PLAYER);
 
-                auto *player_local = &player_entity->player_local;
+                auto *player_local = &player->player_local;
 
-                auto *player_e = &player_entity->player_e;
+                auto *player_e = &player->player_e;
                 for(int i = 0; i < player_e->action_queue_length; i++)
                 {
                     auto *action   = &player_e->action_queue[i];
@@ -1480,7 +1490,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                         array_add(client->connections.room_action_queue, &action);
                     }
 
-                    auto *state_after = &player_local->state_after_action_in_queue[i];
+                    auto *state_after = &player_local->state_before_action_in_queue[i+1];
                     if(state_after->held_item.type != ITEM_NONE_OR_NUM) {
                         _TRANSLATE_({-48, -24});
                         button(PC(ctx, i), item_types[state_after->held_item.type].name);
@@ -1489,19 +1499,76 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
                 }
             }
         }
+
+
+        if(player) {
+            // ACTION MENU
+            
+            double close_animation_duration = .2;
+            bool action_menu_open = room->action_menu_open_t > room->action_menu_close_t;
+            if(action_menu_open ||
+               t - room->action_menu_close_t < close_animation_duration)
+            {
+                Entity *e = find_entity(room->action_menu_entity, room);
+                if(e) {
+                    float anim_p;
+                    if(action_menu_open) {
+                        anim_p = ease_out_elastic((t - room->action_menu_open_t) / .5);
+                    } else {
+                        anim_p = clamp(1.0f - ease_out_quint((t - room->action_menu_close_t) / close_animation_duration));
+                    }
+
+                    Array<Entity_Action, ALLOC_TMP> actions = {0};
+                    bool first_action_is_default;
+                    get_available_actions_for_entity(e, &player_state_after_queue, &actions, &first_action_is_default);
+
+                    float action_button_h = 20;
+                    
+                    Rect aa = {
+                        room->action_menu_p,
+                        { 100, action_button_h * actions.n }
+                    };
+                    aa.h *= anim_p;
+                    aa.x -= aa.w * .5f;
+                    aa.y -= aa.h - action_button_h * .55;
+
+                    float hh = aa.h / actions.n; // Current height of an action item.
+                    
+                    if(!first_action_is_default) aa.y -= hh; // Don't place first action under mouse cursor if it's not considered the 'default action'
+                    
+                    _AREA_(aa);
+
+                    _TOP_(hh);
+                    for(int i = 0; i < actions.n; i++) {
+                        auto &act = actions[i];
+                        String label = entity_action_label(act);
+                        bool enabled = predicted_possible(&act, e->id, world_t, player_state_after_queue, client);
+                        
+                        if(button(PC(ctx, i), label, enabled) & CLICKED_ENABLED) {
+                            // Request action
+                            request(&act, e->id, client);
+                            
+                            // Instantly close action menu
+                            room->action_menu_open_t  = 0;
+                            room->action_menu_close_t = 0;
+                        }
+                        
+                        slide_top(hh, ctx.layout);
+                    }
+                }
+                else {
+                    // Instantly close action menu
+                    room->action_menu_open_t  = 0;
+                    room->action_menu_close_t = 0;
+                }
+            }
+        }   
     }
     
     auto *wv = world_view(P(ctx));
 
-    auto *user = current_user(client);
     
-    if(user) {
-    
-        Player_State player_state_after_queue = {0}; // IMPORTANT: Only valid if player != NULL.
-        auto *player = find_current_player_entity(client);
-        if(player) {
-            player_state_after_queue = player_state_after_completed_action_queue(player, world_t, room);
-        }
+    if(user && player) {
     
         bool ok_to_select_entity = true;
 
@@ -1553,9 +1620,15 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             if(item_to_place) room->placement_p = item_entity_p_from_tp(tp, item_to_place, room->placement_q);
             else              room->placement_p = tp;
         }
-
-    
-        if(item_to_place) {
+        
+        if(client->room.action_menu_open_t > client->room.action_menu_close_t &&
+           (wv->click_state & LEFT_CLICKED_ENABLED || wv->click_state & RIGHT_CLICKED_ENABLED))
+        {
+            // CLOSE ACTION MENU //
+            client->room.action_menu_close_t = t;
+            ok_to_select_entity = false;
+        }
+        else if(item_to_place) {
 
             // PLACE FROM INVENTORY OR PUT DOWN //
 
@@ -1624,12 +1697,18 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
 
         // CLICK ENTITY //
-        if(wv->clicked_entity != NO_ENTITY) {
-    
-            if(ok_to_select_entity)
-            {
+        if(ok_to_select_entity)
+        {
+            if(wv->left_clicked_entity != NO_ENTITY) {
+                // OPEN ACTION MENU //
+                client->room.action_menu_entity = wv->left_clicked_entity;
+                client->room.action_menu_open_t = t;
+                client->room.action_menu_p      = input->mouse.p;
+            }
+            
+            if(wv->right_clicked_entity != NO_ENTITY) {
                 // SELECT ENTITY //
-                client->room.selected_entity = wv->clicked_entity;
+                client->room.selected_entity = wv->right_clicked_entity;   
             }
         }
     }
@@ -1767,7 +1846,7 @@ void update_client(Client *client, Input_Manager *input)
 
 
     // @Cleanup: This is a thing to find random paths (for profiling)
-    #if 0
+#if 0
     {
         v3 p1s[] = {
             { (float)random_int(0, room_size_x-1), (float)random_int(0, room_size_y-1), 0 },
@@ -1793,7 +1872,7 @@ void update_client(Client *client, Input_Manager *input)
             }
         }
     }
-    #endif
+#endif
     
 }
 

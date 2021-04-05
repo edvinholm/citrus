@@ -34,6 +34,7 @@ const char *LOG_TAG_RS_LIST = ":RS:LIST:"; // Listening loop
 // @Cleanup
 const float sleep_action_sleep_need_speed_change = 0.02f;
 const float use_toilet_action_bladder_need_speed_change = 0.1f;
+const float use_toilet_action_bowel_need_speed_change   = 0.1f;
 
 
 // NOTE: There is one version of this for the user server, and one for the room server.
@@ -735,13 +736,30 @@ double player_action_duration(Player_Action *act, double start_t, Entity *player
         } break;
 
         case ENTITY_ACT_USE_TOILET: {
-            double change_speed = use_toilet_action_bladder_need_speed_change + default_need_speeds[NEED_BLADDER];
-            Assert(change_speed > 0);
-
+            float result = 0;
+            
             float bladder_at_start = need_at_time_for_player(NEED_BLADDER, start_t, player);
-            float delta            = 1.0f - bladder_at_start;
+            float bowel_at_start   = need_at_time_for_player(NEED_BOWEL,   start_t, player);
+            
+            if(bladder_at_start <= need_limits[NEED_BLADDER]) {
+                float new_bladder_speed = use_toilet_action_bladder_need_speed_change + default_need_speeds[NEED_BLADDER];
+                Assert(new_bladder_speed > 0);
+                
+                float bladder_delta = 1.0f - bladder_at_start;
+                result = max(bladder_delta / new_bladder_speed, result);
+            }
+            
+            if(bowel_at_start <= need_limits[NEED_BOWEL]) {
+                float new_bowel_speed = use_toilet_action_bowel_need_speed_change + default_need_speeds[NEED_BOWEL];
+                Assert(new_bowel_speed > 0);
+               
+                float bowel_delta = 1.0f - bowel_at_start;
+                result = max(bowel_delta / new_bowel_speed, result);
+            }
 
-            return delta / change_speed;
+            Assert(result > 0);
+            
+            return result;
         } break;
     }
     
@@ -1245,7 +1263,22 @@ bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, R
                     player->player_e.is_on = target->id;
                     player->player_e.laying_down_instead_of_sitting = false;
 
-                    impact_need(NEED_BLADDER, use_toilet_action_bladder_need_speed_change, player, room);
+                    float bladder = need_at_time_for_player(NEED_BLADDER, room->t, player);
+                    float bowel   = need_at_time_for_player(NEED_BOWEL,   room->t, player);
+                    
+                    if(bladder <= need_limits[NEED_BLADDER]) {
+                        impact_need(NEED_BLADDER, use_toilet_action_bladder_need_speed_change, player, room);
+                        action->entity.action.use_toilet.impacting_bladder = true;
+                    } else {
+                        action->entity.action.use_toilet.impacting_bladder = false;
+                    }
+                    
+                    if(bowel <= need_limits[NEED_BOWEL]) {
+                        impact_need(NEED_BOWEL, use_toilet_action_bowel_need_speed_change, player, room);
+                        action->entity.action.use_toilet.impacting_bowel = true;
+                    } else {
+                        action->entity.action.use_toilet.impacting_bowel = false;
+                    }
 
                     return true;
 
@@ -1362,7 +1395,10 @@ bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *
 
     switch(action->entity.action.type) {
         case ENTITY_ACT_SLEEP:      impact_need(NEED_SLEEP,   -sleep_action_sleep_need_speed_change,        player, room); break;
-        case ENTITY_ACT_USE_TOILET: impact_need(NEED_BLADDER, -use_toilet_action_bladder_need_speed_change, player, room); break;
+        case ENTITY_ACT_USE_TOILET: {
+            if(action->entity.action.use_toilet.impacting_bladder) impact_need(NEED_BLADDER, -use_toilet_action_bladder_need_speed_change, player, room);
+            if(action->entity.action.use_toilet.impacting_bowel)   impact_need(NEED_BOWEL,   -use_toilet_action_bowel_need_speed_change,   player, room);
+        } break;
     }
 
     if(teleport_needed) {
@@ -1414,8 +1450,12 @@ bool update_player_action(Player_Action *action, Entity *player, Room *room, Roo
         }
     }
 
-    bool time_for_first_end_try = doubles_equal(action->end_t, room->t);
-    bool time_for_end_retry     = !time_for_first_end_try && doubles_equal(action->end_retry_t, room->t);
+	bool time_for_first_end_try = false;
+	bool time_for_end_retry     = false;
+	if (room->t >= action->end_t) {
+		if(action->end_retry_t <= 0) time_for_first_end_try        = true;
+		else if(room->t >= action->end_retry_t) time_for_end_retry = true;
+	}
     
     if(time_for_first_end_try || time_for_end_retry) {
         if(!end_player_action_if_possible(action, player, room, time_for_end_retry)) {

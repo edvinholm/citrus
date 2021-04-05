@@ -107,8 +107,8 @@ void init_recipes()
 
         static_assert(ARRLEN(r.inputs) >= 2);
         
-        r.outputs[0].substance.form   = SUBST_NUGGET;
-        r.outputs[0].substance.nugget = NUGGET_YEAST;
+        r.outputs[0].substance.form        = SUBST_NUGGET;
+        r.outputs[0].substance.nugget.type = NUGGET_YEAST;
         r.outputs[0].amount = 10; // @Norelease: This should depend on the amount of yeast in the water.
 
         r.outputs[1].substance.form = SUBST_LIQUID;

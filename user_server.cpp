@@ -86,11 +86,9 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                 slot.flags |= INV_SLOT_FILLED;
                 slot.item   = create_item(type, user.id, server);
 
-                if((item_types[slot.item.type].container_forms & SUBST_LIQUID) &&
-                   slot.item.type != ITEM_BLENDER)
+                if(item_types[slot.item.type].container_forms & SUBST_LIQUID)
                 {
                     slot.item.container.substance.form = SUBST_LIQUID;
-                    
                     float capacity = substance_container_capacity(&slot.item, SUBST_LIQUID);
 
                     if(random_float() > .5f)
@@ -100,6 +98,23 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                     
                     if(slot.item.container.substance.liquid.type != LQ_NONE_OR_NUM)
                     {
+                        float r = random_float();
+                        if(r < .25) {
+                            slot.item.container.amount = 0;
+                        } else if (r > .75) {
+                            slot.item.container.amount = capacity;
+                        } else {
+                            slot.item.container.amount = floorf((0.5f + 0.5f * random_float()) * capacity);
+                        }
+                    }
+                }
+                else if(item_types[slot.item.type].container_forms & SUBST_NUGGET)
+                {
+                    slot.item.container.substance.form = SUBST_NUGGET;
+                    float capacity = substance_container_capacity(&slot.item, SUBST_NUGGET);
+                    
+                    slot.item.container.substance.nugget.type = (Nugget_Type)random_int(0, NUGGET_NONE_OR_NUM);
+                    if(slot.item.container.substance.nugget.type != NUGGET_NONE_OR_NUM) {
                         float r = random_float();
                         if(r < .25) {
                             slot.item.container.amount = 0;
