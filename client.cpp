@@ -1,4 +1,24 @@
 
+void init_client_ui(Client_UI *cui)
+{
+    cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
+    
+    cui->user_window_open = false;//true;
+    cui->needs_window_open = false;//true;
+
+    // @Norelease: @Temporary, I think. 
+    cui->market.order_draft.price = 10;
+
+    init_ui_dock(&cui->dock);
+
+#if DEVELOPER
+    init_developer_ui(&cui->dev);
+#endif
+}
+
+
+
+
 
 void request_connection_to_room(Room_ID id, Client *client)
 {
@@ -1279,10 +1299,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     }
     
 
-    { _RIGHT_CUT_(64);
-        
-    }
-
 
     // ROOM WINDOW //
     if(cui->room_window_open)
@@ -1370,7 +1386,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }
     }
-    
+
 
     // A little @Hacky. These are when we build the world_view UI element.
     // We need to do it here just because we want to have some elements over
@@ -1380,6 +1396,13 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     // Over world view
     { _AREA_COPY_();
+
+
+        
+        // DOCK //
+        ui_dock(P(ctx), &cui->dock, input);
+
+        
 
         // CHAT // // @Temporary
         float chat_y = world_view_a.y + world_view_a.h;
@@ -1564,6 +1587,7 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }   
     }
+
     
     auto *wv = world_view(P(ctx));
 
@@ -1712,6 +1736,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }
     }
+
+
+
 }
 
 

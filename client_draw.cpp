@@ -253,12 +253,32 @@ struct Render_Loop
 };
 
 
+// REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
+void _draw_3d_border(Rect a, v4 color, bool inverted, Graphics *gfx)
+{
+    const float border_w = 1;
+
+    draw_rect((!inverted) ? right_of(a,  border_w) : left_of(a,   border_w), adjusted_brightness(color, 0.60f), gfx);
+    draw_rect((!inverted) ? bottom_of(a, border_w) : top_of(a,    border_w), adjusted_brightness(color, 0.50f), gfx);
+    draw_rect((!inverted) ? left_of(a,   border_w) : right_of(a,  border_w), adjusted_brightness(color, 1.10f), gfx);
+    draw_rect((!inverted) ? top_of(a,    border_w) : bottom_of(a, border_w), adjusted_brightness(color, 1.25f), gfx);
+}
+
+
+
 void draw_panel(UI_Element *e, UI_Manager *ui, Graphics *gfx, double t)
 {
     Assert(e->type == PANEL);
 
     _OPAQUE_UI_();
-    draw_rect(e->panel.a, e->panel.color, gfx);
+
+    auto border_color     = e->panel.color;
+    auto background_color = adjusted_brightness(e->panel.color, .9);
+    
+    draw_rect(e->panel.a, background_color, gfx);
+    
+    _draw_3d_border(e->panel.a, border_color, false, gfx);
+    _draw_3d_border(shrunken(e->panel.a, 4), border_color, true, gfx);
 }
 
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -362,19 +382,17 @@ void _draw_button_label(String label, Rect a, Graphics *gfx)
 
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
 void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx, v4 color,
-                  bool enabled = true, bool selected = false, String label = EMPTY_STRING)
+                  bool enabled = true, bool selected = false, String label = EMPTY_STRING, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT)
 {
-    float z = eat_z_for_2d(gfx);
-    v3 p0 = { a.x, a.y, z };
+    if(style == UI_BUTTON_STYLE_INVISIBLE) return;
     
     float color_saturation = saturation_of(color);
-    
-    v4 c_idle = color;
-    
-    v4 c_hovered = color;
-    c_hovered.rgb *= 1.1f;
 
+    v4 c_idle    = color;
+    v4 c_hovered = color;
     v4 c_pressed = color;
+    
+    c_hovered.rgb *= 1.1f;
     c_pressed.rgb *= 0.6f;
 
     v4 c_disabled = color;
@@ -392,9 +410,15 @@ void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx, v4 color,
     else if(click_state & HOVERED) color_to_use = c_hovered;
     else color_to_use = c_idle;
 
-    draw_quad(p0, V3_X * a.w, V3_Y * a.h, color_to_use, gfx);
-    if(label.length > 0)
-        _draw_button_label(label, a, gfx);
+    // BACKGROUND //
+    draw_rect(a, color_to_use, gfx);
+
+    // BORDER //
+    bool invert_border = (selected || (click_state & PRESSED));
+    _draw_3d_border(a, color_to_use, invert_border, gfx);
+        
+    // LABEL //
+    if(label.length > 0) _draw_button_label(label, a, gfx);
 }
 
 void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -405,7 +429,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     _OPAQUE_UI_();
 
     _draw_button(btn.a, btn.state, gfx, btn.color,
-                btn.enabled, btn.selected, get_ui_string(btn.label, ui));
+                 btn.enabled, btn.selected, get_ui_string(btn.label, ui), btn.style);
 }
 
 void draw_ui_substance_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)

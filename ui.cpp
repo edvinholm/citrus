@@ -625,7 +625,7 @@ void ui_item_image(UI_Context ctx, Item_Type_ID item_type)
 }
 
 
-UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0})
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0}, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, Cursor_Icon cursor = CURSOR_ICON_DEFAULT)
 {
     U(ctx);
     
@@ -639,7 +639,9 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled 
     ui_set(e, &btn->label,    label,     ctx.manager);
     ui_set(e, &btn->enabled,  enabled);
     ui_set(e, &btn->selected, selected);
+    ui_set(e, &btn->style,    style);
     ui_set(e, &btn->color,    get_or_default(custom_color, theme->button));
+    ui_set(e, &btn->cursor,   cursor);
     
     return btn->state;
 }
@@ -2187,7 +2189,9 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
         }   
     }
 
-    bool use_i_beam_cursor = false;
+    Cursor_Icon cursor = CURSOR_ICON_DEFAULT;
+
+    UI_Element *pressed_button = NULL;
 
     // UPDATE ELEMENTS //
     for(s64 i = 0; i < ui->elements.n; i++)
@@ -2195,14 +2199,17 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
         UI_Element *e = &ui->elements[i];
         
         switch(e->type) { // @Jai: #complete
-            case WINDOW:    update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
-            case BUTTON:    update_button(e, input, hovered_element);    break;
+            case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
+            case BUTTON: {
+                update_button(e, input, hovered_element);
+                if(e->button.state & PRESSED) pressed_button = e;
+            } break;
             case TEXTFIELD: {
                 bool became_active = (element_that_became_active == e);
                 bool area_hovered;
                 update_textfield(e, ui->element_ids[i], input, hovered_element, ui, fonts, became_active, t, &area_hovered);
                 if(area_hovered)
-                    use_i_beam_cursor = true;
+                    cursor = CURSOR_ICON_I_BEAM;
             } break;
             case SLIDER:     update_slider(e, input, hovered_element);     break;
             case DROPDOWN:   update_dropdown(e, input, hovered_element);   break;
@@ -2211,16 +2218,18 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 
             case UI_CHESS_BOARD: update_ui_chess_board(e, input, hovered_element); break;
-           
                 
             default: break;
         }
     }
+
+    if(pressed_button) {
+        cursor = pressed_button->button.cursor;
+    } else if(hovered_element != NULL && hovered_element->type == BUTTON) {
+        cursor = hovered_element->button.cursor;
+    }
     
 
-    if(use_i_beam_cursor)
-        *_cursor = CURSOR_ICON_I_BEAM;
-    else
-        *_cursor = CURSOR_ICON_DEFAULT;
+    *_cursor = cursor;
 }
  

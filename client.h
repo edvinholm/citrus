@@ -57,23 +57,9 @@ struct Client_UI
 #endif
 
     Bottom_Panel_Tab open_bottom_panel_tab;
+
+    UI_Dock dock;
 };
-
-void init_client_ui(Client_UI *cui)
-{
-    cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
-    
-    cui->user_window_open = true;
-    cui->needs_window_open = true;
-
-    // @Norelease: @Temporary, I think. 
-    cui->market.order_draft.price = 10;
-
-
-#if DEVELOPER
-    
-#endif
-}
 
 struct Market
 {
@@ -122,6 +108,7 @@ struct Client
     User   user;
     Room   room;
     Market market;
+    User_Utilities utilities;
     // --
     
     // @Norelease: Doing Developer stuff in release build...

@@ -755,6 +755,8 @@ void platform_set_cursor_icon(Cursor_Icon icon)
     switch(icon) {
         case CURSOR_ICON_DEFAULT: cursor_name = IDC_ARROW; break;
         case CURSOR_ICON_I_BEAM:  cursor_name = IDC_IBEAM; break;
+        case CURSOR_ICON_RESIZE_H: cursor_name = IDC_SIZEWE; break;
+        case CURSOR_ICON_RESIZE_V: cursor_name = IDC_SIZENS; break;
 
         default: Assert(false); return;
     }

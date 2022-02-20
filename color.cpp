@@ -31,9 +31,17 @@ void adjust_saturation(v4 *color, float factor)
     color->b = P + (color->b - P) * factor;
 }
 
+
 void adjust_brightness(v4 *color, float factor)
 {
     color->rgb *= factor;
+}
+
+v4 adjusted_brightness(v4 color, float factor)
+{
+    v4 result = color;
+    adjust_brightness(&result, factor);
+    return result;
 }
 
 

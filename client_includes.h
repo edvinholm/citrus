@@ -107,10 +107,15 @@ using namespace Client_Market;
 
 #include "machine_shared.cpp"
 
+#include "view.h"
+#include "ui_dock.h"
 
 #include "ui_dev_client.h"
 
 #include "assets.cpp"
+
+
+#include "user_utilities.cpp"
 
 #include "client.h"
 
@@ -139,7 +144,11 @@ using namespace Client_Market;
 #include "profile_draw.cpp"
 #endif
 
+#include "command.cpp"
+
 #include "ui.cpp"
+#include "view.cpp"
+#include "ui_dock.cpp"
 
 #if DEVELOPER
 #include "ui_dev_client.cpp"

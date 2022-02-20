@@ -69,6 +69,12 @@ String string(char *data)
     return string(data, cstring_length(data));
 }
 
+template<Allocator_ID A>
+String string(Array<u8, A> &array)
+{
+    return { array.e, (strlength)array.n };
+}
+
 String allocate_string(strlength length, Allocator_ID allocator)
 {
     u8 *data = alloc(length, allocator);
@@ -297,6 +303,11 @@ bool starts_with(String s, u8 *Start)
     return Start[C] == 0;
 }
 
+bool starts_with(String s, const char *start)
+{
+    return starts_with(s, (u8 *)start);
+}
+
 
 
 bool starts_with(String s, String Start)
@@ -314,7 +325,7 @@ bool starts_with(String s, String Start)
 
 
 inline
-u32 parse_u32(String s, int *_caret = NULL)
+bool parse_u32(String s, u32 *_i)
 {
     bool AnythingFound = false;
     u32 result = 0;
@@ -330,8 +341,17 @@ u32 parse_u32(String s, int *_caret = NULL)
         else if(AnythingFound) break;
         C++;
     }
-    if(_caret) *_caret = C;
-    return result;
+
+    *_i = result;
+    return AnythingFound;
+}
+
+bool is_only_digits(String s)
+{
+    for(int i = 0; i < s.length; i++) {
+        if(s[i] < '0' || s[i] > '9') return false;
+    }
+    return true;
 }
 
 

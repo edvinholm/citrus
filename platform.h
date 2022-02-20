@@ -108,7 +108,9 @@ enum Mouse_Button
 enum Cursor_Icon
 {
     CURSOR_ICON_DEFAULT,
-    CURSOR_ICON_I_BEAM
+    CURSOR_ICON_I_BEAM,
+    CURSOR_ICON_RESIZE_H,
+    CURSOR_ICON_RESIZE_V
 };
 
 

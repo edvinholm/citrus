@@ -220,6 +220,12 @@ struct UI_Image
     };
 };
 
+enum UI_Button_Style
+{
+    UI_BUTTON_STYLE_DEFAULT = 0,
+    UI_BUTTON_STYLE_INVISIBLE
+};
+
 struct UI_Button
 {
     Rect a;
@@ -230,7 +236,11 @@ struct UI_Button
     bool enabled;
     bool selected;
 
+    UI_Button_Style style;
+
     v4 color;
+
+    Cursor_Icon cursor;
 };
 
 struct UI_Graph
@@ -512,3 +522,6 @@ struct UI_Manager
     array_add(ctx.manager->color_theme_stack, ThemeID); \
     defer(ctx.manager->color_theme_stack.n -= 1;)
     
+#define _PANEL_(...) \
+    defer(panel(__VA_ARGS__););                         \
+    _SHRINK_(5);
