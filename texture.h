@@ -18,6 +18,8 @@ enum Texture_ID
     TEX_FONT_BODY,
     TEX_FONT_INPUT,
 
+    TEX_TILES,
+    
     TEX_PREVIEWS,
     
     TEX_NONE_OR_NUM
@@ -28,6 +30,8 @@ String texture_names[] = {
     STRING("FONT_BODY"),
     STRING("FONT_INPUT"),
     
+    STRING("TILES"),
+    
     STRING("PREVIEWS"),
 };
 static_assert(ARRLEN(texture_names) == TEX_NONE_OR_NUM);
@@ -36,6 +40,8 @@ const char *texture_filenames[] = {
     NULL, // Font
     NULL, // Font
     NULL, // Font
+
+    "textures/tiles.png",
 
     NULL // Previews
 };

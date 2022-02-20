@@ -91,6 +91,13 @@ void set_area_width(float w, Layout_Manager *manager)
     _AREA_(right_of(area(ctx.layout), W));
 
 
+#define _TOP_LEFT_(W, H) \
+    _AREA_(top_left_of(area(ctx.layout), W, H));
+
+#define _TOP_RIGHT_(W, H) \
+    _AREA_(top_right_of(area(ctx.layout), W, H));
+
+
 #define _TOP_CENTER_(W, H) \
     _AREA_(center_top_of(area(ctx.layout), W, H));
 
@@ -401,3 +408,6 @@ Rect slide_right_square(Layout_Manager *manager)
 
 #define _TRANSLATE_(...) \
     _AREA_(translated(area(ctx.layout), __VA_ARGS__));
+
+#define _TRANSLATE_XY_(X, Y)                        \
+    _AREA_(translated(area(ctx.layout), {X, Y}));

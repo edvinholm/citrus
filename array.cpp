@@ -386,3 +386,17 @@ void ensure_not_in_array(Static_Array<T, Size> &array, T &element)
     if(in_array(array, element, &index))
         array_unordered_remove(array, index);
 }
+
+
+
+
+
+
+template<typename T, typename U>
+U array_ordered_remove(T *e, U index, U length, U n = 1)
+{
+    Assert(length > index && index >= 0);
+
+    memmove(e + index, e + index + n, sizeof(T) * (length - (index + n)));
+    return length - n;
+}

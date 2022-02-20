@@ -11,6 +11,12 @@
   TO DO:
   ------
 
+  
+  --
+  EZ @Cleanups:
+  * Put t in UI_Context
+  ----
+
   * Pick up fruit from blender container surface (centered, so i think action positions collide with blender.)
 
   * Stove
@@ -25,7 +31,6 @@
   
   * When destroying entity A, unlock all entities where .locked_by == A.
   
-  * Check if chair is occupied.
 
  */
 

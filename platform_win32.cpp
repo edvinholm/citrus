@@ -31,7 +31,7 @@ virtual_key _win32_windows_vkey_to_virtual_key(u32 Key)
         case VK_TAB: return VKEY_TAB; 
         case VK_RETURN: return VKEY_RETURN; 
         case VK_SHIFT: return VKEY_SHIFT; 
-        case VK_CONTROL: return VKEY_CONTROL;
+        case VK_CONTROL: return VKEY_CTRL;
             
         case VK_LMENU: 
         case VK_RMENU: 

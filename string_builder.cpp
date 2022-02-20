@@ -103,7 +103,7 @@ void string_append(const char *cstring1, const char *cstring2, String_Builder &B
     string_append(cstring2, Builder);
 }
 
-void string_append_u(u64 integer, String_Builder &builder)
+void string_append(u64 integer, String_Builder &builder)
 {
     static u8 buffer[22];
     memset(buffer, 0, sizeof(buffer));
@@ -136,7 +136,18 @@ void string_append_u(u64 integer, String_Builder &builder)
     string_append((char *)buffer, builder);
 }
 
-inline
+void string_append(u32 integer, String_Builder &builder) {
+    string_append((u64)integer, builder);
+}
+
+void string_append(u16 integer, String_Builder &builder) {
+    string_append((u64)integer, builder);
+}
+
+void string_append(u8 integer, String_Builder &builder) {
+    string_append((u64)integer, builder);
+}
+
 void string_append(s64 integer, String_Builder &builder)
 {
     if(integer < 0)
@@ -144,11 +155,22 @@ void string_append(s64 integer, String_Builder &builder)
         string_append_char('-', builder);
         integer = -integer;
     }
-    string_append_u((u64)integer, builder);
+    string_append((u64)integer, builder);
 }
-    
-inline
-void string_append_float(float f, String_Builder &builder, int num_decimals = 2)
+
+void string_append(s32 integer, String_Builder &builder) {
+    string_append((s64)integer, builder);
+}
+
+void string_append(s16 integer, String_Builder &builder) {
+    string_append((s64)integer, builder);
+}
+
+void string_append(s8 integer, String_Builder &builder) {
+    string_append((s64)integer, builder);
+}
+
+void string_append(double f, String_Builder &builder, int num_decimals = 2)
 {
     if(f < 0) {
         string_append_char('-', builder);
@@ -169,6 +191,12 @@ void string_append_float(float f, String_Builder &builder, int num_decimals = 2)
     }
     
     string_append(dec, builder);
+}
+
+inline
+void string_append(float f, String_Builder &builder, int num_decimals = 2)
+{
+    return string_append((double)f, builder, num_decimals);
 }
 
 

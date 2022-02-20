@@ -1,11 +1,48 @@
 
 
+int tile_side_height(Tile tile)
+{
+    switch(tile) {
+        case TILE_WATER:       return 1;
+        case TILE_NONE_OR_NUM: return 0;
+    }
+    return 2;
+}
+
+void get_uvs_for_tile_type(Tile tile, v2 *_uv0, v2 *_uv1)
+{   
+    int cr = 16; // Number of columns/rows
+    Assert(tile >= 0 && tile < cr*cr);
+    
+    int cell_s = 128;
+
+    int x_px = (tile % cr) * cell_s;
+    int y_px = (tile / cr) * cell_s;
+
+    double u0 = x_px / (double)(cr * cell_s);
+    double v0 = y_px / (double)(cr * cell_s);
+    
+    double u1 = (x_px + cell_s) / (double)(cr * cell_s);
+    double v1 = (y_px + cell_s) / (double)(cr * cell_s);
+
+    *_uv0 = { (float)u0, (float)v0 };
+    *_uv1 = { (float)u1, (float)v1 };
+
+#if 1 // @Incomplete
+    *_uv0 += V2_ONE * 2.0f * (1.0f / (cr * cell_s));
+    *_uv1 -= V2_ONE * 2.0f * (1.0f / (cr * cell_s));
+#endif
+    
+    
+}
+
 void draw_static_world_geometry(Room *room, Graphics *gfx)
 {
-    v4 sand  = {0.6,  0.5,  0.4, 1.0f}; 
-    v4 grass = {0.25, 0.6,  0.1, 1.0f};
-    v4 stone = {0.42, 0.4, 0.35, 1.0f};
-    v4 water = {0.1,  0.3, 0.5,  0.9f};
+    v4 sand    = {0.6,  0.5,  0.4, 1.0f}; 
+    v4 grass   = {0.25, 0.6,  0.1, 1.0f};
+    v4 stone   = {0.42, 0.4, 0.35, 1.0f};
+    v4 water   = {0.1,  0.3, 0.5,  0.9f};
+    v4 asphalt = {0.1,  0.1, 0.1,  1.0f};
 
     v4 wall = {0.99, 0.99, 0.99, 1};
 
@@ -20,29 +57,35 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
 
             auto tile = tiles[y * room_size_x + x];
                 
-            v4 *color = NULL;
+            v4 color = V4_ONE;
+            Texture_ID texture = TEX_NONE_OR_NUM;
             float z = -0.0001f;
             switch(tile) {
-                case TILE_SAND:  color = &sand;  break;
-                case TILE_GRASS: color = &grass; break;
-                case TILE_STONE: color = &stone; break;
-                case TILE_WATER: color = &stone; z = -1; break;
+                case TILE_SAND:    color = sand;  break;
+                case TILE_GRASS:   texture = TEX_TILES; break;
+                case TILE_WATER:   color = stone; z = -1; break;
+                case TILE_ASPHALT: color = asphalt; break;
+                case TILE_CONCRETE_TILES_2X2: texture = TEX_TILES; break;
+                    
                 case TILE_WALL:  {
-                    color = &wall;
+                    color = wall;
 
-                    if(x >= room_size_x-2 || y >= room_size_y-2)
-                        z = 7;
+                    if(true /* @Incomplete */|| x >= room_size_x-2 || y >= room_size_y-2)
+                        z = 14;
                     else
                         z = 1.25f;
                     
                 } break;
+
+                case TILE_NONE_OR_NUM: continue;
+                    
                 default: Assert(false); break;
             }
 
 #if DEBUG
             if(tweak_bool(TWEAK_COLOR_TILES_BY_POSITION)) {
                 v4 foo = { (float)x / room_size_x, (float)y / room_size_y, 0, 1 };
-                if(tile != TILE_WATER) color = &foo;
+                if(tile != TILE_WATER) color = foo;
             }
 #endif
       
@@ -51,33 +94,56 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
 
                 // WEST
                 if(x != 0 && tiles[y * room_size_x + x - 1] != tile)
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {0, 1, 0}, color, gfx);
                 // NORTH
                 if(y != 0 && tiles[(y-1) * room_size_x + x] != tile)
-                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                    draw_quad({tile_a.x, tile_a.y,   z}, {0, 0,-z}, {1, 0, 0}, color, gfx);
                 // EAST
                 if(x != room_size_x-1 && tiles[y * room_size_x + x + 1] != tile)
-                    draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, *color, gfx);
+                    draw_quad({tile_a.x+1, tile_a.y, z}, {0, 0,-z}, {0, 1, 0}, color, gfx);
                 // SOUTH
                 if(y != room_size_y-1 && tiles[(y+1) * room_size_x + x] != tile)
-                    draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, *color, gfx);
+                    draw_quad({tile_a.x, tile_a.y+1, z}, {0, 0,-z}, {1, 0, 0}, color, gfx);
             }
             else if(tile == TILE_WALL) {
-                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, color, gfx);
 
                 // X
-                if(x == 0 || tiles[y * room_size_x + x - 1] != tile || x >= room_size_x-2) {
-                    auto cc = *color;
+                 if(x == 0 || tiles[y * room_size_x + x - 1] != tile || x >= room_size_x-2) {
+                    auto cc = color;
+                    
+                    if(x == 0 || tiles[y * room_size_x + x - 1] == TILE_NONE_OR_NUM)
+                        cc = C_BLACK;
+
                     draw_quad({tile_a.x, tile_a.y, z}, {0, 1, 0}, {0, 0, -z}, cc, gfx);
                 }
                 // Y
                 if(y == 0 || tiles[(y-1) * room_size_x + x] != tile || y >= room_size_y-2) {
-                    auto cc = *color;
+                    auto cc = color;
+                    
+                    if(y == 0 || tiles[(y-1) * room_size_x + x] == TILE_NONE_OR_NUM)
+                        cc = C_BLACK;
+                    
                     draw_quad({tile_a.x, tile_a.y, z}, {0, 0, -z}, {1, 0, 0}, cc, gfx);
                 }
             }
-            else if(color){
-                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, *color, gfx);
+            else {
+
+                v2 uv0, uv1;
+                get_uvs_for_tile_type(tile, &uv0, &uv1);
+                
+                v2 s = uv1 - uv0;
+
+                v2 delta = { (x % 2) * s.x * .5f, (y % 2) * s.y * .5f };
+                uv0 += delta;
+                uv1 += delta;
+
+                uv1 -= s * .5f;
+                
+                v2 uvs[6];
+                quad_uvs(uvs, uv0, uv1);
+                
+                draw_quad({tile_a.x, tile_a.y, z}, {1, 0, 0}, {0, 1, 0}, color, gfx, uvs, texture);
             }
         }
     }
@@ -98,33 +164,35 @@ void draw_static_world_geometry(Room *room, Graphics *gfx)
             auto prev_tile_ix = (c-1) * ((comp == 0) ? 1 : room_size_x);
             auto next_tile_ix = (c)   * ((comp == 0) ? 1 : room_size_x);
             
-            bool prev_low = (tiles[prev_tile_ix] == TILE_WATER);
+            int prev_height = tile_side_height(tiles[prev_tile_ix]);
 
             bool do_draw = (c == c1);
             if(!do_draw) {
-                bool next_low = (tiles[next_tile_ix] == TILE_WATER);
-                do_draw = (next_low != prev_low);
+                int next_height = tile_side_height(tiles[next_tile_ix]);
+                do_draw = (next_height != prev_height);
             }
 
             if(do_draw)
             {
-                float length = c - c0;
-
-                float height = (prev_low) ? 1 : 2;
-
-                v3 origin = { 0, 0, -2 };
-                origin.comp[comp] = c0;
-
-                v3 d1 = {0};
-                d1.comp[comp] = length;
-
-                v3 d2 = { 0, 0, height };
+                float height = prev_height;
                 
-                // @Hack: To get draw_quad to calculate normal correctly......... Also for correct back-face culling i guess??
-                if(comp == 1) swap(&d1, &d2);
+                if(height > 0) {
+                    float length = c - c0;
+
+                    v3 origin = { 0, 0, -2 };
+                    origin.comp[comp] = c0;
+
+                    v3 d1 = {0};
+                    d1.comp[comp] = length;
+
+                    v3 d2 = { 0, 0, height };
                 
-                draw_quad(origin, d1, d2, color, gfx);
-            
+                    // @Hack: To get draw_quad to calculate normal correctly......... Also for correct back-face culling i guess??
+                    if(comp == 1) swap(&d1, &d2);
+                
+                    draw_quad(origin, d1, d2, color, gfx);
+                }
+                
                 c0  = c;
             }
         }
@@ -190,7 +258,7 @@ void draw_aabb(AABB bbox, v4 color, Graphics *gfx)
     draw_line(d, h, normal, line_w, color, gfx);
 }
 
-void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, User *user = NULL, bool hovered = false, bool cannot_be_placed = false, bool do_debug_things = false, World_Render_Buffer *wrb = NULL)
+void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, User *user = NULL, bool hovered = false, bool cannot_be_placed = false, float desaturation = 0.0f, bool do_debug_things = false, World_Render_Buffer *wrb = NULL)
 {
     auto *s_e = static_cast<S__Entity *>(e);
 
@@ -240,8 +308,14 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
     float fill = 0;
     v4 fill_color = C_WHITE;
 
-    
-    if(e->type == ENTITY_ITEM)
+
+    if(e->type == ENTITY_DECOR)
+    {
+        auto *decor = &e->decor;
+        auto *type  = &decor_types[decor->type];
+        volume = V3(type->volume);
+    }
+    else if(e->type == ENTITY_ITEM)
     {
         update_entity_item(e, world_t);
         
@@ -351,7 +425,7 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
         base_color.b /= 1.5f;
     }
 
-    mesh = mesh_for_entity(e);
+    mesh = mesh_for_entity(e, world_t);
 
 
     if(mesh != MESH_NONE_OR_NUM &&
@@ -369,6 +443,8 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
             float alpha = 1.0f + (float)sin(world_t + random_float() * 0.05f) * .2f + (-0.05f + random_float() * 0.1f);
             mesh_obj->lightbox_color    = { 1.00f, 0.81f, 0.16f, alpha };
         }
+
+        mesh_obj->desaturation = desaturation;
     }
 
     
@@ -420,6 +496,8 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
     
     begin_vertex_render_object(&wrb->opaque, rotation_matrix(q) * translation_matrix(center));
     defer(end_vertex_render_object(&wrb->opaque););
+
+    wrb->opaque.current_vertex_object.desaturation = desaturation;
 
     
 
@@ -497,7 +575,7 @@ void draw_entity(Entity *e, double world_t, Graphics *gfx, Room *room = NULL, Us
     
 }
 
-void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Graphics *gfx,
+void draw_world(Room *room, double world_t, double t, m4x4 projection, Client *client, Graphics *gfx,
                 Entity_ID hovered_entity = NO_ENTITY, Ray mouse_ray = {0})
 {
     maybe_update_static_room_vaos(room, gfx);
@@ -510,6 +588,8 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
     auto *tiles = room->tiles;
 
     const float tile_s = 1;
+
+    auto *cui = &client->cui;
     
         // REMEMBER: Some things are in the static vao.
     
@@ -518,7 +598,27 @@ void draw_world(Room *room, double world_t, m4x4 projection, Client *client, Gra
         for(int i = 0; i < room->entities.n; i++) {
             auto *e = &room->entities[i];
             bool hovered = (e->id == hovered_entity);
-            draw_entity(e, world_t, gfx, room, current_user(client), hovered, false, true);
+
+            float desaturation = 0;
+            
+            // "Tool effects" //
+            if(cui->current_tool == TOOL_PLANTING) {
+                auto *tool = &cui->planting_tool;
+                
+                if(tool->seed_container == NO_ENTITY) desaturation = 1;
+
+                if(e->type == ENTITY_ITEM) {
+                    update_entity_item(e, world_t);
+                    Nugget_Type nugget_type;
+                    if(holds_nugget(e, &nugget_type) && nugget_type == NUGGET_SEEDS) {
+                        if(tool->seed_container == NO_ENTITY || tool->seed_container == e->id)
+                            desaturation = -.5f;
+                    }
+                }
+            }
+            //--
+            
+            draw_entity(e, world_t, gfx, room, current_user(client), hovered, false, desaturation, true);
         }
     }
 

@@ -24,7 +24,7 @@ enum virtual_key
     VKEY_TAB,
     VKEY_RETURN,
     VKEY_SHIFT,
-    VKEY_CONTROL,
+    VKEY_CTRL,
     VKEY_ALT,
     VKEY_CAPSLOCK,
     VKEY_ESCAPE,

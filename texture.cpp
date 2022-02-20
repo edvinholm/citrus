@@ -168,6 +168,12 @@ float bound_slot_for_texture(Texture_ID texture, Graphics *gfx)
 {
     if(texture == TEX_NONE_OR_NUM) return 0;
     
-    Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
-    return (float)texture+1;
+    for(int i = 0; i < gfx->num_bound_textures; i++) {
+        if(gfx->bound_textures[i] == texture) {
+            return (float)i + 1;
+        }
+    }
+    
+    Assert(false);
+    return 0;
 }

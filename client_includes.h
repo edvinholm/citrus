@@ -110,12 +110,18 @@ using namespace Client_Market;
 #include "view.h"
 #include "ui_dock.h"
 
+#include "sprite_editor.h"
 #include "ui_dev_client.h"
 
 #include "assets.cpp"
 
 
 #include "user_utilities.cpp"
+#include "tool.h"
+
+#if DEVELOPER
+#include "room_editor.h"
+#endif
 
 #include "client.h"
 
@@ -151,9 +157,18 @@ using namespace Client_Market;
 #include "ui_dock.cpp"
 
 #if DEVELOPER
+#include "room_editor.cpp"
+#include "sprite_editor.cpp"
+#endif
+
+
+#if DEVELOPER
 #include "ui_dev_client.cpp"
 #endif
 
 #include "client_draw.h"
 #include "previews.cpp"
 #include "client_draw.cpp"
+
+
+#include "tool.cpp"

@@ -561,7 +561,7 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
 }
 
 
-void panel(UI_Context ctx, Optional<v4> color = {0})
+UI_Element *panel(UI_Context ctx, Optional<v4> color = {0})
 {
     U(ctx);
 
@@ -573,6 +573,8 @@ void panel(UI_Context ctx, Optional<v4> color = {0})
     auto *panel = &e->panel;
     ui_set(e, &panel->a,     area(ctx.layout));
     ui_set(e, &panel->color, get_or_default(color, theme->panel));
+
+    return e;
 }
 
 void ui_text(UI_Context ctx, String text,
@@ -601,6 +603,15 @@ void ui_text(UI_Context ctx, String text,
     ui_set(e, &txt->v_align,   v_align);
 }
 
+void ui_text(UI_Context ctx, String text,
+             H_Align h_align, V_Align v_align = VA_TOP,
+             Font_Size font_size = FS_14, Font_ID font = FONT_BODY,
+             Optional<v4> custom_color = {0})
+{
+    U(ctx);
+    ui_text(P(ctx), text, font_size, font, h_align, v_align, custom_color);
+}
+
 UI_Element *ui_image(UI_Context ctx, UI_Image_Type type)
 {
     U(ctx);
@@ -610,6 +621,7 @@ UI_Element *ui_image(UI_Context ctx, UI_Image_Type type)
     e->clickthrough = true;
 
     auto *img = &e->image;
+    ui_set(e, &img->type, type);
     ui_set(e, &img->a, area(ctx.layout));
     
     return e;
@@ -619,13 +631,43 @@ void ui_item_image(UI_Context ctx, Item_Type_ID item_type)
 {
     U(ctx);
     auto *e = ui_image(P(ctx), UI_IMG_ITEM);
-    Assert(e->type == UI_IMAGE);
 
     ui_set(e, &e->image.item_type, item_type);
 }
 
+void ui_texture_image(UI_Context ctx, Texture_ID texture)
+{
+    U(ctx);
+    auto *e = ui_image(P(ctx), UI_IMG_TEXTURE);
 
-UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0}, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, Cursor_Icon cursor = CURSOR_ICON_DEFAULT)
+    ui_set(e, &e->image.texture, texture);
+}
+
+
+const double action_menu_close_duration = .05;
+
+float action_menu_anim_p(double t0, double t, bool opening)
+{
+    double dt = t - t0;
+    if(opening) {
+        return ease_out_elastic(.25 + .75 * dt / .4);
+    } else {
+        return clamp(1.0f - ease_out_quint(dt) / action_menu_close_duration);
+    }
+}
+
+float action_menu_height(int num_items, float anim_p)
+{
+    return 20 * num_items * anim_p;
+}
+
+float action_menu_height(int num_items, double anim_t0, double t, bool opening)
+{
+    return action_menu_height(num_items, action_menu_anim_p(anim_t0, t, opening));
+}
+
+
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0}, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, UI_Button_Flags flags = 0, Cursor_Icon cursor = CURSOR_ICON_DEFAULT)
 {
     U(ctx);
     
@@ -642,6 +684,7 @@ UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled 
     ui_set(e, &btn->style,    style);
     ui_set(e, &btn->color,    get_or_default(custom_color, theme->button));
     ui_set(e, &btn->cursor,   cursor);
+    ui_set(e, &btn->flags,    flags);
     
     return btn->state;
 }
@@ -690,8 +733,7 @@ UI_Element *progress_bar(UI_Context ctx, float fill_factor, v4 color = C_BLACK, 
 }
 
 
-
-void ui_substance_container(UI_Context ctx, Substance_Container *c, Liquid_Amount capacity)
+UI_Substance_Container *ui_substance_container(UI_Context ctx, Substance_Container *c, Substance_Amount capacity, bool action_menu_available = false, UI_ID *_id = NULL)
 {
     U(ctx);
 
@@ -707,6 +749,11 @@ void ui_substance_container(UI_Context ctx, Substance_Container *c, Liquid_Amoun
     ui_set(e, &ui_c->capacity, capacity);
 
     ui_set(e, &ui_c->text_color, theme->text);
+
+    ui_set(e, &ui_c->action_menu_available, action_menu_available);
+
+    if(_id) *_id = id;
+    return ui_c;
 }
 
 UI_Click_State ui_inventory_slot(UI_Context ctx, Inventory_Slot *slot, bool enabled = true, bool selected = false)
@@ -770,6 +817,24 @@ void update_button(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     ui_set(e, &btn.state, evaluate_click_state(btn.state, e == hovered_element, input, btn.enabled));
 }
 
+void update_ui_substance_container(UI_Element *e, Input_Manager *input, UI_Element *hovered_element, double t)
+{
+    Assert(e->type == UI_SUBSTANCE_CONTAINER);
+    auto &ui_c = e->substance_container;
+
+    // @Incomplete: Click state should be for icon area only.
+    auto click = evaluate_click_state(ui_c.icon_click_state, e == hovered_element, input, true);
+    ui_set(e, &ui_c.icon_click_state, click);
+
+    if(ui_c.action_menu_available) {
+        if(click & CLICKED_ENABLED) {
+            ui_set(e, &ui_c.action_menu_open_t, t);
+            ui_set(e, &ui_c.action_menu_p,      input->mouse.p);
+        }
+    }
+}
+
+
 void update_inventory_slot(UI_Element *e, Input_Manager *input, UI_Element *hovered_element)
 {
     Assert(e->type == UI_INVENTORY_SLOT);
@@ -788,10 +853,10 @@ Rect slider_handle_rect(Rect slider_a, float value)
 }
 
 inline
-bool is_allowed_input(u32 cp, bool single_line_mode /*= false*/)
+bool is_allowed_input(u32 cp, bool multi_line_mode)
 {
     if(cp == '\n') {
-        return !single_line_mode;
+        return multi_line_mode;
     }
 
     if(cp < 32) return false; // @Temporary: TODO: @NoRelease: We need to disallow all unicode codepoints we don't have glyphs for.
@@ -821,7 +886,20 @@ void get_textfield_scrollbar_rects(Rect textfield_a, float textfield_inner_h, fl
 
 Rect textfield_inner_rect(UI_Textfield *tf)
 {
-    return shrunken(tf->a, 10, textfield_scrollbar_w, 8, 8);
+    float right_shrink = (tf->flags & UI_TEXTFIELD_MULTI_LINE) ? textfield_scrollbar_w : 8;
+    return shrunken(tf->a, 10, right_shrink, 8, 8);
+}
+
+Rect textfield_text_rect(Rect inner_a, float text_h, UI_Textfield *tf)
+{
+    Rect text_a = top_of(inner_a, text_h);
+    if(tf->flags & UI_TEXTFIELD_MULTI_LINE) {
+        text_a.y += tf->scroll.value;
+    } else {
+        text_a.y -= (inner_a.h - text_h) / 2.0f;
+    }
+
+    return text_a;
 }
 
 Body_Text create_textfield_body_text(String text, Rect inner_a, Font_Table *fonts)
@@ -830,18 +908,17 @@ Body_Text create_textfield_body_text(String text, Rect inner_a, Font_Table *font
 }
 
 
-String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui, Layout_Manager *layout, bool *_text_did_change, bool enabled = true, bool *_is_active = NULL)
+String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui, Layout_Manager *layout, bool *_text_did_change, bool enabled = true, UI_Textfield_Flags flags = 0, bool *_is_active = NULL)
 {
     // IMPORTANT: Don't use the carets before we've clamped them to the text length. (We do that further down in this proc) -EH, 2020-11-13
     
     if(_is_active) *_is_active = false;
 
-    const bool multiline = true; // @Temporary
-
     UI_Element *e = find_or_create_ui_element(id, TEXTFIELD, ui);
     auto *tf = &e->textfield;
     ui_set(e, &tf->a,       area(layout));
     ui_set(e, &tf->enabled, enabled);
+    ui_set(e, &tf->flags,   flags);
 
 
     // TEXT //
@@ -909,7 +986,7 @@ String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui
                     break;
                 }
 
-                if(!is_allowed_input(cp, !multiline)) continue;
+                if(!is_allowed_input(cp, tf->flags & UI_TEXTFIELD_MULTI_LINE)) continue;
 
                 do_erase_highlight = true;
                 input_at = cp_start;
@@ -969,7 +1046,7 @@ String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui
 
             Assert(cp != '\b'); // See comment in Input_Manager for an explanation of why this always should be true.
             
-            if(!is_allowed_input(cp, !multiline)) continue;
+            if(!is_allowed_input(cp, tf->flags & UI_TEXTFIELD_MULTI_LINE)) continue;
 
             strlength byte_length = input_at - cp_start;
             push_ui_string({cp_start, byte_length}, ui);
@@ -1014,16 +1091,16 @@ String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui
 
 // @Cleanup: Should not pass the Input_Manager here (I think), when we do the
 //           update_ui_element(Input_Frame) thing....
-String textfield_tmp(UI_Context ctx, String text, Input_Manager *input, bool *_text_did_change, bool enabled = true, bool *_is_active = NULL)
+String textfield_tmp(UI_Context ctx, String text, Input_Manager *input, bool *_text_did_change, bool enabled = true, UI_Textfield_Flags flags = 0, bool *_is_active = NULL)
 {
     U(ctx);
 
-    return textfield_tmp(ctx.get_id(), text, input, ctx.manager, ctx.layout, _text_did_change, enabled, _is_active);
+    return textfield_tmp(ctx.get_id(), text, input, ctx.manager, ctx.layout, _text_did_change,  enabled, flags, _is_active);
 }
 
 // @Norelease: Should limit text length so int doesn't overflow.
 // @Norelease: Should not move caret when entering non-digit characters.
-s64 textfield_s64(UI_Context ctx, int value, Input_Manager *input, bool enabled = true)
+s64 textfield_s64(UI_Context ctx, int value, Input_Manager *input, bool enabled = true, UI_Textfield_Flags flags = 0)
 {
     U(ctx);
     UI_ID id = ctx.get_id();
@@ -1052,7 +1129,7 @@ s64 textfield_s64(UI_Context ctx, int value, Input_Manager *input, bool enabled 
 
     bool text_did_change;
     bool is_active;
-    text = textfield_tmp(id, text, input, ui, ctx.layout, &text_did_change, enabled, &is_active);
+    text = textfield_tmp(id, text, input, ui, ctx.layout, &text_did_change, enabled, flags, &is_active);
     
     if(text_did_change) {
         
@@ -1251,7 +1328,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     Body_Text bt = create_textfield_body_text(text, inner_a, fonts);
     
     float text_h = bt.lines.n * bt.line_height;
-    tf->scrollbar_visible = (text_h > inner_a.h);
+    tf->scrollbar_visible = (text_h > inner_a.h) && (tf->flags & UI_TEXTFIELD_MULTI_LINE);
     
     bool area_hovered = (e == hovered_element);
     if(tf->scrollbar_visible)
@@ -1293,10 +1370,8 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     auto *tf_state = &ui->active_textfield_state;
     auto *caret           = &tf_state->caret;
     auto *highlight_start = &tf_state->highlight_start;
-    
-    Rect text_a = top_of(inner_a, text_h);
-    text_a.y   += tf->scroll.value;
-    
+
+    Rect text_a = textfield_text_rect(inner_a, text_h, tf);
 
     if(became_active) {
         ui->active_textfield_state.last_resize_w = text_a.w;
@@ -1307,7 +1382,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
     
     for(int i = 0; i < input->keys.n; i++) {
         if(input->keys[i] == VKEY_SHIFT)   { shift_is_down = true; continue; }
-        if(input->keys[i] == VKEY_CONTROL) { ctrl_is_down = true; continue; }
+        if(input->keys[i] == VKEY_CTRL) { ctrl_is_down = true; continue; }
     }
     
     // SELECT ALL //
@@ -1541,6 +1616,35 @@ void update_window_move_and_resize(UI_Element *e, Client *client)
         e->needs_redraw = true;
 }
 
+void begin_viewport(UI_ID *_id, UI_Context ctx)
+{
+    U(ctx);
+
+    UI_ID id = ctx.get_id();
+    auto *ui = ctx.manager;
+
+    UI_Element *e = find_or_create_ui_element(id, VIEWPORT, ui);
+
+    auto *port = &e->viewport;
+    ui_set(e, &port->a, area(ctx.layout));    
+
+    *_id = id;
+}
+
+void end_viewport(UI_ID id, UI_Manager *ui)
+{
+    UI_Element *e = find_ui_element(id, ui);
+    Assert(e);
+    Assert(e->type == VIEWPORT);
+    auto *port = &e->viewport;
+
+    // Move to back and count number of children
+    s64 old_depth_index;
+    move_to_back(id, ui, &old_depth_index);
+        
+    port->num_children = (ui->elements_in_depth_order.n-1) - old_depth_index;
+}
+
 Rect begin_window(UI_ID *_id, UI_Context ctx, String title = EMPTY_STRING, bool use_default_padding = true,
                   Optional<v4> custom_border_color     = {0},
                   Optional<v4> custom_background_color = {0},
@@ -1605,6 +1709,7 @@ void end_window(UI_ID id, UI_Manager *ui, UI_Click_State *_close_button_state = 
         win->has_close_button = false;
     }
 
+    // Move to back and count number of children
     s64 old_depth_index;
     move_to_back(id, ui, &old_depth_index);
         
@@ -1982,6 +2087,8 @@ Rect ui_element_rect(UI_Element *e)
     switch(e->type) { // @Jai: #complete
         case PANEL:     return e->panel.a;
         case WINDOW:    return e->window.current_a;
+        case VIEWPORT:  return e->viewport.a;
+
         case BUTTON:    return e->button.a;
         case TEXTFIELD: return e->textfield.a;
         case SLIDER:    return e->slider.a;
@@ -2218,6 +2325,9 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
             case UI_INVENTORY_SLOT: update_inventory_slot(e, input, hovered_element); break;
 
             case UI_CHESS_BOARD: update_ui_chess_board(e, input, hovered_element); break;
+
+            case UI_SUBSTANCE_CONTAINER: update_ui_substance_container(e, input, hovered_element, t); break;
+           
                 
             default: break;
         }

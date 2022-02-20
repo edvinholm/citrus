@@ -67,8 +67,8 @@ void quad_uvs(v2 *_uvs, v2 uv0, v2 uv1)
     _uvs[2] = { uv0.x, uv1.y };
     
     _uvs[3] = { uv0.x, uv0.y };
-    _uvs[4] = { uv1.x, uv1.y };
-    _uvs[5] = { uv1.x, uv0.y };
+    _uvs[4] = { uv1.x, uv0.y };
+    _uvs[5] = { uv1.x, uv1.y };
 }
 
 
@@ -93,8 +93,8 @@ void draw_quad_abs(v3 a, v3 b, v3 c, v3 d, v4 color, Graphics *gfx, v2 *uvs = NU
         0, 1,
 
         0, 0,
-        1, 1,
-        1, 0
+        1, 0,
+        1, 1
     };
 
     v4 colors[6] = {
@@ -459,13 +459,8 @@ void draw_rect(Rect a, v4 color, Graphics *gfx, float z_3d = 0, v2 *uvs = NULL, 
     };
 
 
-    float t = 0;
-
-    if(texture != TEX_NONE_OR_NUM)
-    {
-        Assert(gfx->num_bound_textures > texture && gfx->bound_textures[texture] == texture);    
-        t = (float)texture+1;
-    }
+    float t = bound_slot_for_texture(texture, gfx);
+    Assert(t >= 0);
              
     float tex[6] = {
         t, t, t,

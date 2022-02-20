@@ -1,4 +1,21 @@
 
+enum Sprite_ID
+{
+    #include "gen/sprite_ids.cpp"
+};
+
+String sprite_names[] = {
+    #include "gen/sprite_names.cpp"
+};
+static_assert(ARRLEN(sprite_names) == SPRITE_NONE_OR_NUM);
+
+Sprite sprites[] = {
+    #include "gen/sprite_definitions.cpp"
+};
+static_assert(ARRLEN(sprites) == SPRITE_NONE_OR_NUM);
+
+
+
 enum Mesh_ID
 {
     MESH_BED,
@@ -11,6 +28,23 @@ enum Mesh_ID
     MESH_GRINDER,
     MESH_TOILET,
 
+    MESH_APPLE_TREE_10,
+    MESH_APPLE_TREE_25,
+    MESH_APPLE_TREE_50,
+    MESH_APPLE_TREE_75,
+    MESH_APPLE_TREE_100,
+    MESH_APPLE_TREE_100_FRUIT,
+
+    MESH_FENCE,
+    MESH_STREET_LIGHT,
+    MESH_AWNING,
+    MESH_FOUNTAIN,
+    MESH_DOOR,
+    MESH_WINDOW,
+    MESH_FLOWER_BOX_WALL,
+
+    MESH_SIGN_CHESS,
+    
     MESH_NONE_OR_NUM
 };
 
@@ -39,7 +73,24 @@ char *mesh_filenames[] = {
     "res/meshes/filter_press.obj",
     "res/meshes/kitchenStove.obj",
     "res/meshes/grinder.obj",
-    "res/meshes/toiletSquare.obj"
+    "res/meshes/toiletSquare.obj",
+
+    "res/meshes/apple_tree_10.obj",
+    "res/meshes/apple_tree_25.obj",
+    "res/meshes/apple_tree_50.obj",
+    "res/meshes/apple_tree_75.obj",
+    "res/meshes/apple_tree_100.obj",
+    "res/meshes/apple_tree_100_fruit.obj",
+
+    "res/meshes/fence.obj",
+    "res/meshes/street_light.obj",
+    "res/meshes/awning.obj",
+    "res/meshes/fountain.obj",
+    "res/meshes/door.obj",
+    "res/meshes/window.obj",
+    "res/meshes/flower_box_wall.obj",
+
+    "res/meshes/sign_chess.obj"
 };
 static_assert(ARRLEN(mesh_filenames) == MESH_NONE_OR_NUM);
 static_assert(ARRLEN(mesh_filenames) == ARRLEN(Asset_Catalog::meshes));
@@ -95,6 +146,8 @@ bool load_assets(Asset_Catalog *cat)
 
 void init_assets_for_drawing(Asset_Catalog *cat, Graphics *gfx)
 {
+    load_texture_catalog(&gfx->textures);
+    
     for(int i = 0; i < ARRLEN(cat->meshes); i++) {
         if(!cat->mesh_loaded[i]) continue;
 

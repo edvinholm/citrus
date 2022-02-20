@@ -22,3 +22,15 @@ Item_Type_ID crop_type_for_plant(Entity *e)
 
     return result;
 }
+
+
+Item_Type_ID plant_type_for_seed(Seed_Type seed)
+{
+    switch(seed) { // @Jai: #complete
+        case SEED_APPLE: return ITEM_APPLE_TREE; break;
+        case SEED_WHEAT: return ITEM_WHEAT;      break;
+    }
+    
+    Assert(false);
+    return ITEM_NONE_OR_NUM;
+}

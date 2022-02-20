@@ -17,6 +17,9 @@ Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "citrus", "citrus.exe", "{9D
 	EndProjectSection
 EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
 	EndGlobalSection

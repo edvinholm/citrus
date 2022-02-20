@@ -8,8 +8,8 @@ struct Recipe_Input
         } item;
         
         struct {
-            Liquid_Type   type;
-            Liquid_Amount amount;
+            Liquid_Type      type;
+            Substance_Amount amount;
         } liquid;
     };
 };
@@ -29,7 +29,7 @@ static_assert(MAX_RECIPE_OUTPUTS <= U8_MAX); // Because Recipe.num_outputs is a 
 Recipe recipes[4];
 static_assert(ARRLEN(recipes) <= S32_MAX); // Because Recipe_ID is s32
 
-Recipe_Input liquid_recipe_input(Liquid_Type type, Liquid_Amount amount)
+Recipe_Input liquid_recipe_input(Liquid_Type type, Substance_Amount amount)
 {
     Recipe_Input component = {0};
     component.is_liquid = true;

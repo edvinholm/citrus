@@ -1,11 +1,25 @@
 
+struct Pending_Player_Action: public Player_Action
+{
+    union {
+        bool is_pick_up_for_planting;
+    };
+};
+
+
 enum C_RS_Action_Type
 {
     C_RS_ACT_CLICK_TILE, // @Cleanup: Should be in player action. (?)
     C_RS_ACT_PLAYER_ACTION,
     C_RS_ACT_PLAYER_ACTION_DEQUEUE,
-    C_RS_ACT_CHAT
+    C_RS_ACT_PLAYER_ACTION_QUEUE_PAUSE,
+    C_RS_ACT_CHAT,
+
+#if DEVELOPER
+    C_RS_ACT_DEVELOPER
+#endif
 };
+
 
 struct C_RS_Action
 {
@@ -15,15 +29,22 @@ struct C_RS_Action
             s64 tile_ix;
         } click_tile;
 
-        Player_Action player_action;
+        Pending_Player_Action player_action;
 
         struct {
             Player_Action_ID action_id;
         } player_action_dequeue;
+        
+        struct {
+            bool remove;
+            int ix_of_action_after;
+        } player_action_queue_pause;
 
         struct {
             
         } chat;
+
+        RSB_Developer_Packet developer_packet;
     };
 };
 
@@ -66,6 +87,8 @@ struct Room_Server_Connection
     bool connected;
     Room_ID current_room;
     Network_Node node;
+
+    u32 prev_rsb_packet_id; // NOTE: Not all RSB types use IDs => This will not always increase for every packet.
 
     bool last_connect_attempt_failed;
 };

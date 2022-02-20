@@ -32,10 +32,27 @@ struct Network_Loop
     }                                                               \
 
 
-bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, ALLOC_MALLOC> *action_queue,
+u32 add_pending_rs_operation(RSB_Packet_Type packet_type, Room *room, Room_Server_Connection *con, double t)
+{
+    Pending_RS_Operation op = {0};
+    op.rsb_packet_type = packet_type;
+    op.rsb_packet_id   = ++con->prev_rsb_packet_id;
+
+#if DEVELOPER
+    op.creation_t = t;
+#endif
+    
+    array_add(room->pending_rs_operations, op);
+    return op.rsb_packet_id;
+}
+
+
+bool talk_to_room_server(Room_Server_Connection *con, Client *client, Array<C_RS_Action, ALLOC_MALLOC> *action_queue,
                          bool *_server_said_goodbye)
 {
     *_server_said_goodbye = false;
+
+    auto *node = &con->node;
 
     auto *room = &client->room; // IMPORTANT: @Robustness: This is safe only because the room always is at the same place.
 
@@ -54,6 +71,9 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
     //              figure out what packets need to be sent?
     lock_mutex(client->mutex);
     {
+        Entity *player = find_current_player_entity(client);
+        auto *player_e = &player->player_e;
+        
         for(int i = 0; i < action_queue->n; i++)
         {
             auto &action = action_queue->e[i];
@@ -65,11 +85,39 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     
                 case C_RS_ACT_PLAYER_ACTION: {
                     auto &act = action.player_action;
-                    Enqueue(RSB_PLAYER_ACTION, node, act);
+
+                    u32 rsb_id = 0;
+                    
+                    if(act.type != PLAYER_ACT_PLACE_FROM_INVENTORY) // Because this is not an action that is enqueued.
+                    {
+                        Assert(player_e->action_queue_length < ARRLEN(player_e->action_queue));
+                        
+                        double t = platform_get_time(); // @Speed?
+                        rsb_id = add_pending_rs_operation(RSB_PLAYER_ACTION, room, con, t);
+
+                        Assert(room->num_pending_actions < ARRLEN(room->pending_actions));
+                        auto ix = room->num_pending_actions++;
+                        room->pending_actions[ix] = act;
+                        room->pending_action_rsb_packet_ids[ix] = rsb_id;
+                    }
+                    
+                    Enqueue(RSB_PLAYER_ACTION, node, rsb_id, act);
                 } break;
                     
                 case C_RS_ACT_PLAYER_ACTION_DEQUEUE: {
                     Enqueue(RSB_PLAYER_ACTION_DEQUEUE, node, action.player_action_dequeue.action_id);
+                } break;
+                    
+                case C_RS_ACT_PLAYER_ACTION_QUEUE_PAUSE: {
+                    Assert(player);
+                    auto *x = &action.player_action_queue_pause; 
+                    Assert(x->ix_of_action_after <= player->player_e.action_queue_length);
+
+                    Player_Action_ID id_of_action_after = 0;
+                    if(x->ix_of_action_after < player->player_e.action_queue_length)
+                        id_of_action_after = player->player_e.action_ids[x->ix_of_action_after];
+                    
+                    Enqueue(RSB_PLAYER_ACTION_QUEUE_PAUSE, node, x->remove, id_of_action_after);
                 } break;
 
                 case C_RS_ACT_CHAT: {                    
@@ -85,6 +133,12 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                     Enqueue(RSB_CHAT, node, message_text);
                     draft->n = 0;
                 } break;
+
+#if DEVELOPER
+                case C_RS_ACT_DEVELOPER: {
+                    Enqueue(RSB_DEVELOPER, node, &action.developer_packet);
+                } break;
+#endif
 
                 default: Assert(false); break;
             }
@@ -220,7 +274,9 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                 
                     for(int i = 0; i < p->num_entities; i++) {
                         Read_To_Ptr(Entity, &s_entities[i], node);
-                        Assert(s_entities[i].type == ENTITY_PLAYER || s_entities[i].type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
+                        Assert(s_entities[i].type == ENTITY_PLAYER ||
+                               s_entities[i].type == ENTITY_ITEM   ||
+                               s_entities[i].type == ENTITY_DECOR); // @Temporary: Should be checked in read_Entity()
                     }
 
                     Fail_If_True(p->num_chat_messages > MAX_CHAT_MESSAGES_PER_ROOM);
@@ -259,9 +315,6 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                         
                         auto *e = find_or_add_entity(s_entities[i].id, room);
                         auto *s_e = static_cast<S__Entity *>(e);
-
-                        Assert(s_entities[i].type == ENTITY_PLAYER || s_entities[i].type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
-                        Assert(s_e->type == ENTITY_PLAYER || s_e->type == ENTITY_ITEM); // @Temporary: Should be checked in read_Entity()
 
                         if(s_entities[i].type == ENTITY_PLAYER)
                         {
@@ -319,6 +372,35 @@ bool talk_to_room_server(Network_Node *node, Client *client, Array<C_RS_Action, 
                 }
 
 
+            } break;
+
+
+
+            case RCB_PACKET_RESULT: {
+                auto *p = &header.packet_result;
+
+                if(p->rsb_packet_id != 0) {
+                    
+                    { Scoped_Lock(client->mutex);
+                        auto &pendings = client->room.pending_rs_operations;
+                        bool found = false;
+                        for(int i = 0; i < pendings.n; i++) {
+                            auto *pending = &pendings[i];
+                            if(pending->rsb_packet_id != p->rsb_packet_id) continue;
+                            Assert(pending->rsb_packet_type == p->rsb_packet_type);
+
+                            found = true;
+                            Assert(!pending->result_received);
+                            pending->result_received = true;
+                            pending->success = p->success;
+                            pending->result_payload = p->payload;
+                        }
+
+                        Assert(found);
+                    }
+                
+                    Debug_Print("RSB packet with ID = %u: success = %s.\n", p->rsb_packet_id, p->success ? "true" : "false");
+                }
             } break;
             
             default: {
@@ -770,7 +852,7 @@ DWORD network_loop(void *loop_)
             {
                 // NOTE: talk_to_room_server might lock client->mutex.
                 bool server_said_goodbye = false;
-                bool talk = talk_to_room_server(&rs_connection.node, client,
+                bool talk = talk_to_room_server(&rs_connection, client,
                                                 &room_action_queue, &server_said_goodbye);
                 if(!talk || server_said_goodbye)
                 {

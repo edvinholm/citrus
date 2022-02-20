@@ -26,7 +26,7 @@ void update_previews(Graphics *gfx)
         m4x4 projection = world_projection_matrix(V2_ONE, type->volume.x, type->volume.y, type->volume.z, 0, false);
         config_gpu_for_world(gfx, { 0, 0, 2048, 2048 }, projection);
 
-        draw_entity(&e, 0, gfx, NULL, NULL, false, false, false, &gfx->previews_render_buffer);
+        draw_entity(&e, 0, gfx, NULL, NULL, false, false, 0.0f, false, &gfx->previews_render_buffer);
         
         gpu_clear_depth_buffer();
         gpu_set_viewport((i % preview_cells_per_side) * preview_cell_size, (i / preview_cells_per_side) * preview_cell_size, preview_cell_size, preview_cell_size);

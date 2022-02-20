@@ -1,5 +1,53 @@
 
 
+@Continue: Make our new room look dope.
+Decors to model:
+- Flower boxes on fence
+- Pallkragar
+- Chess sign
+- Windows
+- Doors
+- Roof pieces
+- Potted plants
+- Fountain
+- Café tables
+- Park bench
+- Bin
+x Street lights
+x Markiser
+
+Tiles:
+- 1x1 concrete tiles
+
+Make it so walls can have textures.
+- Add bricks
+- Add yellow wooden
+
+
+
+
+ROOM EDITOR
+-------------
+* Set Z of decor entities
+* Set wall heights
+* Mark areas where players can't go. For example on roads, or stupid spots where only psychopaths would walk.
+* Mark exits without a door.
+* Change tiles.
+* Delete entities.
+* Move entities.
+* Particles?
+
+
+
+
+
+
+
+
+
+
+
+
 Logging with tags
 
 

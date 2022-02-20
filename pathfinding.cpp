@@ -33,7 +33,10 @@ void generate_walk_map(Room *room, v3s walker_volume, Walk_Map *_map)
     
     for(int t = 0; t < room_size_x * room_size_y; t++) {
         
-        if(room->tiles[t] == TILE_WALL || room->tiles[t] == TILE_WATER) {
+        if(room->tiles[t] == TILE_WALL ||
+           room->tiles[t] == TILE_WATER ||
+           room->tiles[t] == TILE_NONE_OR_NUM)
+        {
 
             auto x = t % room_size_x;
             auto y = t / room_size_y;
@@ -46,7 +49,7 @@ void generate_walk_map(Room *room, v3s walker_volume, Walk_Map *_map)
     // Fill in squares occupied by entities.
     for(int i = 0; i < room->num_entities; i++) {
         auto *e = &room->entities[i];
-        if(e->type != ENTITY_ITEM) continue;
+        if(e->type != ENTITY_ITEM && e->type != ENTITY_DECOR) continue;
         if(e->held_by != NO_ENTITY) continue;
         
         auto hitbox = entity_hitbox(e, room->t, room);

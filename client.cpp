@@ -5,6 +5,7 @@ void init_client_ui(Client_UI *cui)
     
     cui->user_window_open = false;//true;
     cui->needs_window_open = false;//true;
+    cui->tools_window_open = false;
 
     // @Norelease: @Temporary, I think. 
     cui->market.order_draft.price = 10;
@@ -67,6 +68,7 @@ Entity *find_current_player_entity(Client *client)
     return find_player_entity(user_id, &client->room);
 }
 
+
 bool action_of_type_in_queue(C_MS_Action_Type type, Client *client)
 {
     auto &queue = client->connections.market_action_queue;
@@ -88,17 +90,22 @@ bool action_of_type_in_queue(C_RS_Action_Type type, Client *client)
 }
 
 
-void request(Player_Action *action, Client *client)
+Pending_Player_Action *request(Player_Action *action, Client *client)
 {
+    Pending_Player_Action pact;
+    Zero(pact);
+    *static_cast<Player_Action *>(&pact) = *action;
+    
     C_RS_Action c_rs_act = {0};
     c_rs_act.type = C_RS_ACT_PLAYER_ACTION;
-    c_rs_act.player_action = *action;
+    c_rs_act.player_action = pact;
 
-    array_add(client->connections.room_action_queue, c_rs_act);
+    auto *added = array_add(client->connections.room_action_queue, c_rs_act);
+    return &added->player_action;
 }
 
 // IMPORTANT that we pass a copy of player_state here, because we modify it but don't want the callers' states to be modified.
-bool predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client, Player_Action_Prediction_Info *_prediction_info = NULL)
+bool predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client, Action_Prediction_Info *_prediction_info/* = NULL*/)
 {
     Entity *player = find_current_player_entity(client);
     if(player == NULL) return false;
@@ -146,10 +153,10 @@ bool request_if_predicted_possible(Player_Action *action, double world_t, Player
     return true;
 }
 
-void request(Entity_Action *action, Entity_ID target, Client *client)
+Pending_Player_Action *request(Entity_Action *action, Entity_ID target, Client *client)
 {
     Player_Action player_action = make_player_entity_action(action, target);
-    request(&player_action, client);
+    return request(&player_action, client);
 }
 
 bool predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Player_State player_state, Client *client)
@@ -181,7 +188,7 @@ void needs_window(UI_Context ctx, double world_t, Client *client)
     int rows = NEED_NONE_OR_NUM / cols;
     if(NEED_NONE_OR_NUM % cols > 0) rows++;
     rows = max(3, rows);
-
+    
     { _GRID_(cols, rows, window_default_padding);
 
         for(int i = 0; i < NEED_NONE_OR_NUM; i++) {
@@ -678,44 +685,6 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
 }
 
 
-String entity_action_label(Entity_Action action)
-{
-    switch(action.type) {
-        case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
-        case ENTITY_ACT_PLACE_IN_INVENTORY: return STRING("TO BACKPACK"); break;
-        case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
-        case ENTITY_ACT_SET_POWER_MODE: {
-            auto *x = &action.set_power_mode;
-            if(x->set_to_on) {
-                return STRING("START");
-            } else {
-                return STRING("STOP");
-            }
-        } break;
-        case ENTITY_ACT_WATER:      return STRING("WATER"); break;
-        case ENTITY_ACT_CHESS: {
-            auto *chess_action = &action.chess;
-            switch(chess_action->type) {
-                case CHESS_ACT_MOVE: return STRING("CHESS MOVE"); break;
-                default:             return STRING("CHESS ???"); break;
-            }
-        }
-        case ENTITY_ACT_SIT_OR_UNSIT: {
-            auto *x = &action.sit_or_unsit;
-            if(x->unsit) return STRING("STAND UP");
-            else         return STRING("SIT");
-        } break;
-
-        case ENTITY_ACT_SLEEP:      return STRING("SLEEP"); break;
-        case ENTITY_ACT_USE_TOILET: return STRING("USE");   break;
-
-        default: Assert(false); return STRING("???"); break;
-    }
-
-    Assert(false);
-    return EMPTY_STRING;
-}
-
 void chess_player(UI_Context ctx, Chess_Player *cp)
 {
     U(ctx);
@@ -854,8 +823,77 @@ void item_chess_tab(UI_Context ctx, Item *item, bool controls_enabled, Entity *e
     }
 }
 
+void item_substance_container_ui(UI_Context ctx, Substance_Container *c, Item *item, bool controls_enabled, double t, Client *client,
+                                 Entity *e/*= NULL*/, Player_State *player_state_after_queue/*= NULL*/, double world_t/* = 0*/, Room *room/*= NULL*/)
+{
+    U(ctx);
 
-void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *client, Entity *e = NULL, Entity *player = NULL, double world_t = 0)
+    auto *input = &client->input;
+    auto *cui   = &client->cui;
+
+    auto *player = find_current_player_entity(client);
+    if(!player) controls_enabled = false;
+
+    Assert(e == NULL || (player_state_after_queue != NULL && room != NULL)); // If e != NULL, room and player_state_after_queue must also be != NULL
+
+    UI_ID id;
+    UI_Substance_Container *ui_c = ui_substance_container(P(ctx), c, substance_container_capacity(item, item->container.substance.form), true, &id); // @Norelease: Pass controls_enabled to ui_substance_container
+    
+    if(!e) return;
+
+    bool hovered = false;
+    
+    if(ui_c->action_menu_open_t > ui_c->action_menu_close_t ||
+       t - ui_c->action_menu_close_t < action_menu_close_duration) {
+
+        if(!e ||
+           c->amount <= 0 || c->substance.form != SUBST_NUGGET || c->substance.nugget.type != NUGGET_SEEDS) {
+            // Instantly close menu
+            ui_c->action_menu_open_t = 0;
+            ui_c->action_menu_close_t = 0;
+            return;
+        }
+        
+        Assert(e && room);
+
+        const int num_actions = 1;
+        
+        bool opening = (ui_c->action_menu_close_t < ui_c->action_menu_open_t);
+        float menu_h = action_menu_height(num_actions, ui_c->action_menu_open_t, t, opening);
+        Rect aa = { ui_c->action_menu_p, {100, menu_h} };
+        aa.x -= aa.w * .5f;
+
+        float item_h = menu_h / num_actions;
+
+        aa.y -= aa.h - item_h * .55f;
+        
+        _AREA_(aa);
+
+        
+        for(int i = 0; i < num_actions; i++) {
+            _TOP_CUT_(item_h);
+
+            bool enabled = controls_enabled && start_planting_predicted_possible(e, world_t, player_state_after_queue, client);
+            auto state = button(P(ctx), STRING("PLANT"), controls_enabled);
+            if(state & CLICKED_ENABLED) {
+                Assert(player);
+                start_planting(e, player, t, cui, client);
+            }
+            if(state & HOVERED) hovered = true; // @Hack..
+        }
+        
+        move_to_back(id, ctx.manager);
+
+    }
+    
+    if(!hovered && input->mouse.buttons_up & MB_PRIMARY) {
+        // Instantly close menu
+        ui_c->action_menu_open_t = 0;
+        ui_c->action_menu_close_t = 0;
+    }
+}
+
+void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, double t, Client_UI *cui, Client *client, Entity *e = NULL, Entity *player = NULL, double world_t = 0)
 {
     U(ctx);
         
@@ -935,7 +973,8 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
        item->container.substance.form != SUBST_NONE)
     {
         { _TOP_CUT_(40);
-            ui_substance_container(P(ctx), &item->container, substance_container_capacity(item, item->container.substance.form));
+            auto *player_state_after_queue = &player->player_local.state_before_action_in_queue[player->player_e.action_queue_length];
+            item_substance_container_ui(P(ctx), &item->container, item, controls_enabled, t, client, e, player_state_after_queue, world_t, room);
         }
     }
 
@@ -1043,7 +1082,7 @@ void item_info_tab(UI_Context ctx, Item *item, bool controls_enabled, Client *cl
 // NOTE: If the item is on an entity, REMEMBER to do update_entity_item()!
 // REMEMBER: world_t is local to the Room Server we're on. User Server has no world_t.
 //           So passing a world_t but no entity does not make sense... -EH, 2021-01-30
-void item_window(UI_Context ctx, Item *item, Item_UI *iui, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL, double world_t = 0)
+void item_window(UI_Context ctx, Item *item, Item_UI *iui, double t, Client_UI *cui, Client *client, UI_Click_State *_close_button_state = NULL, Entity *e = NULL, double world_t = 0)
 {
     U(ctx);
     
@@ -1102,7 +1141,7 @@ void item_window(UI_Context ctx, Item *item, Item_UI *iui, Client *client, UI_Cl
 
         switch(iui->tab)
         {
-            case ITEM_TAB_INFO:  { item_info_tab(P(ctx), item, controls_enabled, client, e, player, world_t); } break;
+            case ITEM_TAB_INFO:  { item_info_tab(P(ctx), item, controls_enabled, t, cui, client, e, player, world_t); } break;
             case ITEM_TAB_CHESS: { item_chess_tab(P(ctx), item, controls_enabled, e, player, world_t, client); } break;
         }
         
@@ -1142,6 +1181,33 @@ void room_window(UI_Context ctx, Client *client)
     }
 }
 
+void tools_window(UI_Context ctx, Client_UI *cui, double t)
+{
+    U(ctx);
+
+    struct {
+        Tool_ID tool;
+        String label;
+    } tools[] = {
+        { TOOL_NONE,     STRING("NONE") },
+        { TOOL_PLANTING, STRING("PLANT") }
+
+#if DEVELOPER
+        , { TOOL_DEV_ROOM_EDITOR, STRING("EDITOR") }
+#endif
+    };
+    
+    _WINDOW_(P(ctx), STRING("TOOLS"));
+    _GRID_(ARRLEN(tools), 1, window_default_padding);
+    for(int i = 0; i < ARRLEN(tools); i++)
+    {
+        _CELL_();
+        bool selected = (cui->current_tool == tools[i].tool);
+        if(button(PC(ctx, i), tools[i].label, true, selected) & CLICKED_ENABLED) {
+            set_current_tool(tools[i].tool, cui, t);
+        }
+    }
+}
 
 void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
 {
@@ -1180,6 +1246,457 @@ void chat_panel(UI_Context ctx, Input_Manager *input, Client *client)
     panel(P(ctx));
 }
 
+void action_queue(UI_Context ctx, double t, Entity *player, double world_t, Room *room, Input_Manager *input, Client *client)
+{
+    U(ctx);
+
+    auto *cui = &client->cui;
+    
+    auto *player_local = &player->player_local;
+    auto *player_e = &player->player_e;
+
+    float pause_col_w = 20;
+    float item_h = area(ctx.layout).w - pause_col_w;
+
+    // @Hack... So @Ugly! -----------------------
+    Player_Action_ID fake_ids_for_pending_actions[ARRLEN(player_e->action_queue)];
+    for(int i = 0; i < ARRLEN(fake_ids_for_pending_actions); i++) {
+        Player_Action_ID id;
+        while(true) {
+            id = (Player_Action_ID)random_int(0, U32_MAX);
+            bool unique = true;
+            for(int j = 0; j < player_e->action_queue_length; j++) {
+                if(player_e->action_ids[j] == id) { unique = false; break; }
+            }
+            for(int j = 0; j < i; j++) {
+                if(fake_ids_for_pending_actions[j] == id) { unique = false; break; }
+            }
+            if(unique) break;
+        }
+
+        fake_ids_for_pending_actions[i] = id;
+    }
+    //-------------------------------
+    
+    static bool hovered = false; // @Cleanup
+    bool any_hovered = false;
+    
+    _TOP_(item_h * ARRLEN(player_e->action_queue));
+
+    { _AREA_COPY_();
+        
+        { _LEFT_CUT_(pause_col_w);
+            if(hovered) {
+                Rect aa = area(ctx.layout);
+                float rel_y = input->mouse.p.y - aa.y;
+                
+                bool queue_is_empty = (player_e->action_queue_length == 0);
+                bool do_button = true;
+                
+                int ix_of_action_after = -1;
+                if(queue_is_empty) {
+                    ix_of_action_after = 0;
+                }
+                else {
+                    ix_of_action_after = roundf((aa.h - rel_y) / item_h);
+
+                    int min = 1;
+                    if(player_e->action_queue_pauses[0]) {
+                        ix_of_action_after--;
+                        min = 0;
+                    }
+                    
+                    ix_of_action_after = clamp<int>(ix_of_action_after, min, player_e->action_queue_length);
+                }
+                
+                if(ix_of_action_after >= 0)
+                {
+                    v2 p = { center_x(aa), aa.y + aa.h - ix_of_action_after * item_h };
+                    if(queue_is_empty || player_e->action_queue_pauses[0])
+                        p.y -= item_h;
+                    
+                    _AREA_(rect_around_point(p, V2_XY * 20));
+                    auto state = button(P(ctx), STRING("||"), true, false, opt(C_RED));
+                    if(state & HOVERED) any_hovered = true;
+
+                    if(state & CLICKED_ENABLED) {
+                        // Request pause add
+                        C_RS_Action action = {0};
+                        action.type = C_RS_ACT_PLAYER_ACTION_QUEUE_PAUSE;
+                        action.player_action_queue_pause.remove = player_e->action_queue_pauses[ix_of_action_after];
+                        action.player_action_queue_pause.ix_of_action_after = ix_of_action_after;
+
+                        // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+                        array_add(client->connections.room_action_queue, &action);
+                    }
+                }
+            }
+            
+            if(button(P(ctx), EMPTY_STRING, true, false, opt<v4>({ 0.10, 0.10, 0.10, 1}), UI_BUTTON_STYLE_DEFAULT, UI_BUTTON_DONT_ANIMATE)
+                      & HOVERED)
+            {
+                any_hovered = true;
+            }
+        }
+
+        { _AREA_COPY_();
+            if(player_e->action_queue_pauses[0] || player_e->action_queue_length == 0) {
+                set_area_y(area(ctx.layout).y - item_h, ctx.layout);
+            }
+
+            int i1 = player_e->action_queue_length;
+            i1 += room->num_pending_actions;
+            
+            Assert(i1 <= ARRLEN(player_e->action_queue) + 1);
+            
+            for(int i = 0; i <= i1; i++)
+            {
+                if(i <= player_e->action_queue_length && // So we don't do this for pending actions.
+                   player_e->action_queue_pauses[i])
+                {
+                    _TOP_(2);
+
+                    _TRANSLATE_(V2_Y * 1);
+                    panel(PC(ctx, i), opt(C_RED));
+                }
+                if(i >= i1) continue;
+
+                
+                Player_Action_ID action_id = 0;
+
+                bool pending;
+                Player_Action *action;
+                if(i >= player_e->action_queue_length) {
+                    pending = true;
+                    action    = &room->pending_actions[i-player_e->action_queue_length];
+                    action_id =   fake_ids_for_pending_actions[i-player_e->action_queue_length];
+                } else {
+                    pending = false;
+                    action    = &player_e->action_queue[i];
+                    action_id =  player_e->action_ids[i];
+                }
+
+                String label = STRING("?");
+                Item_Type_ID image_item = ITEM_NONE_OR_NUM;
+                    
+                switch(action->type) {
+                    case PLAYER_ACT_ENTITY: {
+                        auto *entity_action = &action->entity;
+                            
+                        Assert(entity_action->target != NO_ENTITY);
+                        Entity *target = find_entity(entity_action->target, room);
+
+                        if (target) {
+                            Assert(target->type == ENTITY_ITEM);
+                            image_item = target->item_e.item.type;
+                            label = EMPTY_STRING;
+                        }
+
+                    } break;
+
+                    case PLAYER_ACT_WALK: {
+                        label = STRING("WALK");
+                    } break;
+
+                    case PLAYER_ACT_PUT_DOWN: {
+                        label = STRING("PUT");
+                    } break;
+
+                    default: Assert(false); break;
+                }
+                    
+                _TOP_CUT_(item_h);
+       
+                { _SHRINK_(8);
+                    if(image_item != ITEM_NONE_OR_NUM) {
+                        ui_item_image(PC(ctx, i), image_item);
+                    }
+
+                    v4 color;
+                    
+                    if(i == 0 && !pending &&
+                       !player_e->action_queue_pauses[0])
+                    {
+                        color = C_ORANGE;
+
+                        if(world_t > action->reach_t)
+                        {   
+                            _BOTTOM_(12);
+                            double t0, t1;
+                            if(world_t > action->update_t && action->end_t > action->update_t) {
+                                t0 = action->update_t;
+                                t1 = action->end_t;
+                            } else {
+                                t0 = action->reach_t;
+                                t1 = action->update_t;
+                            }
+                            
+                            auto *pb = progress_bar(PC(ctx, i), lerp(0.0f, 1.0f, t0, t1, world_t));
+                            pb->clickthrough = true;
+                        }
+                    }
+                    else {
+                        color = C_SKY;
+                    }
+                    
+                    if(action->dequeue_requested)
+                        color = C_RED;
+                    if(action->end_retry_t > action->end_t && world_t > action->end_t)
+                        color = lerp(color, C_YELLOW, .5f + .5f * sin(world_t - action->end_t + .75 * TAU));
+
+                    if(pending) color.a *= .6f + sin(t * 4) * .25f;
+       
+                    bool enabled = (!pending) && true;
+                    auto btn_state = button(PC(ctx, action_id), label, enabled, false, opt(color));
+                    if(btn_state & CLICKED_ENABLED) {
+                        Assert(!pending);
+                        
+                        // Request dequeue
+                        C_RS_Action action = {0};
+                        action.type = C_RS_ACT_PLAYER_ACTION_DEQUEUE;
+                        action.player_action_dequeue.action_id = action_id;
+
+                        // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+                        array_add(client->connections.room_action_queue, &action);
+                    }
+
+                    if(btn_state & HOVERED) any_hovered = true;
+
+                    auto *state_after = &player_local->state_before_action_in_queue[i+1];
+                    if(state_after->held_item.type != ITEM_NONE_OR_NUM) {
+                        _TRANSLATE_({-48, -24});
+                        button(PC(ctx, i), item_types[state_after->held_item.type].name);
+                    }
+                }        
+            }
+        }
+        
+        // Background for current action...
+        { _TOP_(item_h);
+            auto *p = panel(P(ctx), opt<v4>({ 0.06, 0.06, 0.06, 1}));
+            p->clickthrough = true;
+        }
+    }
+
+
+    Assert(item_h >= 0);
+
+    { _BOTTOM_SQUARE_(); _TRANSLATE_(-V2_Y * area(ctx.layout).h);
+        auto *state_after_queue = &player_local->state_before_action_in_queue[player_e->action_queue_length];
+        if(state_after_queue->held_item.type != ITEM_NONE_OR_NUM) {
+            ui_item_image(P(ctx), state_after_queue->held_item.type);
+        }
+    }
+    
+    
+    auto bg_state = button(P(ctx), EMPTY_STRING, true, false, opt(C_BLACK), UI_BUTTON_STYLE_DEFAULT, UI_BUTTON_DONT_ANIMATE);
+    hovered = (bg_state & HOVERED) || (any_hovered);
+}
+
+
+void tool_ui(UI_Context ctx, Client_UI *cui, double t, Player_State *player_state_after_queue, double world_t, Room *room, Client *client)
+{
+    U(ctx);
+
+
+    Tool_ID first = cui->current_tool;
+    
+    for(int i = 0; i < 2; i++) {
+        
+        bool is_current = (i == 0);
+        auto tool = (is_current) ? cui->current_tool : cui->last_tool;
+
+        if(!is_current && tool == first) break; // So we don't do the same tool twice.
+        
+
+        auto stay_open = TOOL_STAY_OPEN;
+        
+        switch(tool) { // @Jai: #complete
+            case TOOL_ENTITY_MENU: {
+                stay_open = entity_menu_ui(PC(ctx, tool), &cui->entity_menu, is_current, t, player_state_after_queue, world_t, room, client);
+            } break;
+
+            case TOOL_PLANTING: {
+                stay_open = planting_tool_ui(PC(ctx, tool), &cui->planting_tool, is_current, t, cui, player_state_after_queue, world_t, room, client);
+            } break;
+
+            case TOOL_DEV_ROOM_EDITOR: {
+                stay_open = room_editor_ui(PC(ctx, tool), &cui->room_editor, is_current, t, cui, world_t, room, client);
+            } break;
+
+            case TOOL_NONE: break;
+                
+            default: Assert(false);
+        }
+
+        if(is_current && stay_open != TOOL_STAY_OPEN && cui->current_tool == tool) {
+            double switch_t = (stay_open == TOOL_CLOSE_INSTANTLY) ? 0 : t;
+            set_current_tool(TOOL_NONE, cui, switch_t);
+        }
+    }
+}
+
+    
+
+void update_current_tool(Client_UI *cui, double t, UI_World_View *wv, Player_State *player_state_after_queue,
+                         double world_t, User *user, Entity *player, Room *room,
+                         Input_Manager *input, Client *client)
+{
+    if(!user || !player) return;
+    
+    if(cui->current_tool != TOOL_NONE) {
+        switch(cui->current_tool) { // @Jai: #complete
+            case TOOL_ENTITY_MENU: update_entity_menu(&cui->entity_menu, t, wv, cui); break;
+            case TOOL_PLANTING:    update_planting_tool(&cui->planting_tool, t, wv, cui, player_state_after_queue, world_t, room, client); break;
+
+#if DEVELOPER
+            case TOOL_DEV_ROOM_EDITOR: update_room_editor(&cui->room_editor, wv, world_t, room, input, client); break;
+#endif
+                
+            default: Assert(false); break;
+        }
+
+        return;
+    }
+
+    
+    bool ok_to_select_entity = true;
+
+    // Placing Held Item ? //
+    room->placing_held_item = in_array(input->keys, VKEY_CTRL);
+    // // //
+    
+    // PLACEMENT //
+        
+    // position
+    v3 tp = tp_from_index(wv->hovered_tile_ix);
+
+    bool ignore_surfaces = in_array(input->keys, VKEY_ALT);
+
+    bool use_tp_for_placement_p = true;
+        
+    Surface hovered_surface;
+    if(!ignore_surfaces && get(wv->hovered_surface, &hovered_surface)) {
+        if(hovered_surface.flags & SURF_CENTERING) {
+            room->placement_p   = hovered_surface.p + V3(hovered_surface.s) * .5;
+            use_tp_for_placement_p = false;
+        } else { 
+            tp   = tp_from_p(wv->hovered_surface_hit_p);
+            tp.z = wv->hovered_surface_hit_p.z;
+        }
+    }
+
+    // rotation
+    if(!floats_equal(magnitude(room->placement_q), 1.0f))
+        room->placement_q = Q_IDENTITY; // placement_q will be zero the first time, since Rooms are zero-initialized.
+            
+    if(in_array(input->keys_down, VKEY_z))
+        room->placement_q *= axis_rotation(V3_Z, -0.25f * TAU);
+    //--
+            
+    // // //
+
+    Item *item_to_place = NULL;
+        
+    if(room->placing_held_item) {
+        if(player_state_after_queue->held_item.type != ITEM_NONE_OR_NUM) {
+            item_to_place = &player_state_after_queue->held_item;
+        }
+    }
+    else item_to_place = get_selected_inventory_item(user);
+
+        
+    if(use_tp_for_placement_p) {
+        if(item_to_place) room->placement_p = item_entity_p_from_tp(tp, item_to_place, room->placement_q);
+        else              room->placement_p = tp;
+    }
+
+    
+    if(item_to_place) {
+
+        // PLACE FROM INVENTORY OR PUT DOWN //
+
+        if(wv->click_state & CLICKED_ENABLED)
+        {
+            v3   p = room->placement_p;
+            Quat q = room->placement_q;
+
+            // @Norelease: @Robustness For PUT_DOWN we should do entity_action_predicted_possible() instead of can_place_item_entity_at_tp().
+            if (can_place_item_entity(item_to_place, p, q, world_t, room))
+            {
+                if(room->placing_held_item) {
+                    Player_Action action = {0};
+                    action.type = PLAYER_ACT_PUT_DOWN;
+                    action.put_down.p = p;
+                    action.put_down.q = q;
+
+                    request(&action, client);
+                        
+                } else {
+                    Player_Action action = {0};
+                    action.type = PLAYER_ACT_PLACE_FROM_INVENTORY;
+                    action.place_from_inventory.item = item_to_place->id;
+                    action.place_from_inventory.p = p;
+                    action.place_from_inventory.q = q;
+                
+                    request(&action, client);
+
+                    Entity preview_entity = create_preview_item_entity(item_to_place, p, q, world_t);
+
+                    // NOTE: We add a preview entity and remove the placed item locally, before
+                    //       we know if the operation succeeds.
+                    //       We assumes the servers will send us a ROOM_UPDATE / USER_UPDATE on
+                    //       transaction abort so we get our stuff back / know when to remove the
+                    //       preview entity.
+
+                    auto type = item_to_place->type;
+
+                    add_entity(preview_entity, room);
+                    inventory_remove_item_locally(item_to_place->id, user);
+
+                    if (!in_array(input->keys, VKEY_SHIFT) ||
+                        !select_next_inventory_item_of_type(type, user))
+                    {
+                        inventory_deselect(user);
+                    }
+                }
+            }
+        }
+        
+        ok_to_select_entity = false;
+    }
+    else if(wv->clicked_tile_ix >= 0 && wv->hovered_entity == NO_ENTITY) {
+        
+        // WALK //
+        
+        C_RS_Action action = {0};
+        action.type = C_RS_ACT_CLICK_TILE;
+        auto &ct = action.click_tile;
+        ct.tile_ix = wv->clicked_tile_ix;
+
+        // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
+        array_add(client->connections.room_action_queue, &action);
+            
+        ok_to_select_entity = false;
+    }
+
+    // CLICK ENTITY //
+    if(ok_to_select_entity)
+    {
+        if(wv->left_clicked_entity != NO_ENTITY) {
+            // OPEN ENTITY MENU //
+            set_current_tool(TOOL_ENTITY_MENU, cui, t);
+            cui->entity_menu.entity = wv->left_clicked_entity;
+            cui->entity_menu.p      = input->mouse.p;
+        }
+            
+        if(wv->right_clicked_entity != NO_ENTITY) {
+            // SELECT ENTITY //
+            client->room.selected_entity = wv->right_clicked_entity;   
+        }
+    }
+}
+
 void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 {
     Function_Profile();
@@ -1194,6 +1711,11 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     auto *room = &client->room;
     auto world_t = world_time_for_room(room, t);
 
+    bool ctrl_is_down  = in_array(input->keys, VKEY_CTRL);
+    bool alt_is_down   = in_array(input->keys, VKEY_ALT);
+    bool shift_is_down = in_array(input->keys, VKEY_SHIFT);
+    
+
     Entity *player = NULL;
     auto *user = current_user(client);
     if(user) {
@@ -1203,29 +1725,16 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     Player_State player_state_after_queue = {0}; // IMPORTANT: Only valid if player != NULL.
     if(player) {
         player_state_after_queue = player_state_after_completed_action_queue(player, world_t, room);
-    }
+    }    
 
-    bool ctrl_is_down  = false;
-    bool shift_is_down = false;
-    bool alt_is_down   = false;
-    for(int i = 0; i < input->keys.n; i++) {
-        switch(input->keys.e[i]) {
-            case VKEY_CONTROL: ctrl_is_down  = true; break;
-            case VKEY_SHIFT:   shift_is_down = true; break;
-            case VKEY_ALT:     alt_is_down   = true; break;
-        }
-    }
     
-
 #if DEVELOPER
-    if(cui->dev.window_open)
     { _AREA_COPY_();
         if(cui->user_window_open) cut_right(320 + 64, ctx.layout);
-        _RIGHT_(320); _BOTTOM_(480);
-        
-        client_developer_window(P(ctx), input, &cui->dev, client);
+        client_developer_ui(P(ctx), t, input, &cui->dev, client);
     }
 #endif
+    
 
 #if DEBUG
     // PROFILER //
@@ -1249,6 +1758,15 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             { _TOP_SLIDE_(menu_bar_button_s);
                 if(button_colored(P(ctx), C_ROOM_BASE, STRING("ROOM"), true, cui->room_window_open) & CLICKED_ENABLED) {
                     cui->room_window_open = !cui->room_window_open;
+                }
+            }
+            
+            slide_top(menu_bar_pad, ctx.layout);
+            
+            // TOOLS BUTTON
+            { _TOP_SLIDE_(menu_bar_button_s);
+                if(button(P(ctx), STRING("TOOLS"), true, cui->tools_window_open) & CLICKED_ENABLED) {
+                    cui->tools_window_open = !cui->tools_window_open;
                 }
             }
             
@@ -1288,9 +1806,25 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 #if DEVELOPER
             // DEVELOPER BUTTON
             { _TOP_SLIDE_(menu_bar_button_s);
-                if(button(P(ctx), STRING("DEV"), true, cui->dev.window_open) & CLICKED_ENABLED) {
-                    cui->dev.window_open = !cui->dev.window_open;
+
+                double error_f = dev_ui_error_indication_factor(t, client);
+                    
+                // Error indicator
+                auto error_s = menu_bar_button_s * .2;
+                {
+                    _SHRINK_(4);
+                    _TOP_RIGHT_(error_s, error_s);
+
+                    auto f = ease_out_elastic(error_f * 2);
+                    
+                    _CENTER_(error_s * f, error_s * f);
+                    panel(P(ctx), opt(C_RED));
                 }
+                
+                if(button(P(ctx), STRING("DEV"), true, cui->dev.main_window_open) & CLICKED_ENABLED) {
+                    cui->dev.main_window_open = !cui->dev.main_window_open;
+                }
+
             }
 #endif
         }
@@ -1305,6 +1839,12 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
     { _TOP_(window_border_width + window_title_height + window_default_padding + 40 + window_default_padding + 40 + window_default_padding + window_border_width);
         _LEFT_(min(area(ctx.layout).w, 480));
         room_window(P(ctx), client);
+    }
+
+    // TOOLS WINDOW //
+    if(cui->tools_window_open)
+    { _TOP_LEFT_(240, 80);
+        tools_window(P(ctx), cui, t);
     }
 
     // USER WINDOW //
@@ -1331,20 +1871,20 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         
         Item *selected_item = get_selected_inventory_item(&client->user);
         if(selected_item) {
-            item_window(P(ctx), selected_item, &cui->item, client);
+            item_window(P(ctx), selected_item, &cui->item, t, cui, client);
         }
 
         
         if(room->selected_entity != NO_ENTITY)
         {
             Entity *e = find_entity(room->selected_entity, room);
-            if(e) {
+            if(e){
                 if(e->type == ENTITY_ITEM)
                 {
                     update_entity_item(e, world_t);
 
                     UI_Click_State close_button_state;
-                    item_window(P(ctx), &e->item_e.item, &cui->item, client, &close_button_state, e, world_t);
+                    item_window(P(ctx), &e->item_e.item, &cui->item, t, cui, client, &close_button_state, e, world_t);
                     if(close_button_state & CLICKED_ENABLED) {
                         room->selected_entity = NO_ENTITY;
                     }
@@ -1386,7 +1926,15 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }
     }
+    
+    // ACTION QUEUE //
+    { _RIGHT_CUT_(68);
+        if(player != NULL) {
+            action_queue(P(ctx), t, player, world_t, room, input, client);
+        }
+    }
 
+    
 
     // A little @Hacky. These are when we build the world_view UI element.
     // We need to do it here just because we want to have some elements over
@@ -1442,155 +1990,14 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             ui_chat(PC(ctx, i), chat->text);
         }
         
-        // ACTION QUEUE //
-        { _RIGHT_CUT_(48);
-            if(player != NULL) {
-                Assert(player->type == ENTITY_PLAYER);
-
-                auto *player_local = &player->player_local;
-
-                auto *player_e = &player->player_e;
-                for(int i = 0; i < player_e->action_queue_length; i++)
-                {
-                    auto *action   = &player_e->action_queue[i];
-                    auto action_id = player_e->action_ids[i];
-
-                    String label = STRING("?");
-                    Item_Type_ID image_item = ITEM_NONE_OR_NUM;
-                    
-                    switch(action->type) {
-                        case PLAYER_ACT_ENTITY: {
-                            auto *entity_action = &action->entity;
-                            
-                            Assert(entity_action->target != NO_ENTITY);
-                            Entity *target = find_entity(entity_action->target, room);
-
-                            if (target) {
-                                Assert(target->type == ENTITY_ITEM);
-                                image_item = target->item_e.item.type;
-                                label = EMPTY_STRING;
-                            }
-
-                        } break;
-
-                        case PLAYER_ACT_WALK: {
-                            label = STRING("WALK");
-                        } break;
-
-                        case PLAYER_ACT_PUT_DOWN: {
-                            label = STRING("PUT");
-                        } break;
-
-                        default: Assert(false); break;
-                    }
-                    
-                    _TOP_SQUARE_CUT_();
-                    _SHRINK_(8);
-                    if(image_item != ITEM_NONE_OR_NUM) {
-                        ui_item_image(PC(ctx, i), image_item);
-                    }
-                    
-                    if(i == 0 && world_t > action->reach_t) {
-                        _BOTTOM_(12);
-                        auto *pb = progress_bar(PC(ctx, i), lerp(0.0f, 1.0f, action->reach_t, action->end_t, world_t));
-                        pb->clickthrough = true;
-                    }
-
-                    v4 color = C_BUTTON_DEFAULT;
-                    if(action->dequeue_requested)
-                        color = C_RED;
-                    if(action->end_retry_t > action->end_t && world_t > action->end_t)
-                        color = lerp(color, C_YELLOW, .5f + .5f * sin(world_t - action->end_t + .75 * TAU));
-       
-                    bool enabled = true;
-                    if(button(PC(ctx, action_id), label, enabled, false, opt(color)) & CLICKED_ENABLED) {
-                        // Request dequeue
-                        C_RS_Action action = {0};
-                        action.type = C_RS_ACT_PLAYER_ACTION_DEQUEUE;
-                        action.player_action_dequeue.action_id = action_id;
-
-                        // @Norelease: IMPORTANT: Any time we want to enqueue a C_RS_Action, we should check that we're connected to a room!
-                        array_add(client->connections.room_action_queue, &action);
-                    }
-
-                    auto *state_after = &player_local->state_before_action_in_queue[i+1];
-                    if(state_after->held_item.type != ITEM_NONE_OR_NUM) {
-                        _TRANSLATE_({-48, -24});
-                        button(PC(ctx, i), item_types[state_after->held_item.type].name);
-                    }
-                    
-                }
-            }
-        }
-
 
         if(player) {
-            // ACTION MENU
-            
-            double close_animation_duration = .2;
-            bool action_menu_open = room->action_menu_open_t > room->action_menu_close_t;
-            if(action_menu_open ||
-               t - room->action_menu_close_t < close_animation_duration)
-            {
-                Entity *e = find_entity(room->action_menu_entity, room);
-                if(e) {
-                    float anim_p;
-                    if(action_menu_open) {
-                        anim_p = ease_out_elastic((t - room->action_menu_open_t) / .5);
-                    } else {
-                        anim_p = clamp(1.0f - ease_out_quint((t - room->action_menu_close_t) / close_animation_duration));
-                    }
-
-                    Array<Entity_Action, ALLOC_TMP> actions = {0};
-                    bool first_action_is_default;
-                    get_available_actions_for_entity(e, &player_state_after_queue, &actions, &first_action_is_default);
-
-                    float action_button_h = 20;
-                    
-                    Rect aa = {
-                        room->action_menu_p,
-                        { 100, action_button_h * actions.n }
-                    };
-                    aa.h *= anim_p;
-                    aa.x -= aa.w * .5f;
-                    aa.y -= aa.h - action_button_h * .55;
-
-                    float hh = aa.h / actions.n; // Current height of an action item.
-                    
-                    if(!first_action_is_default) aa.y -= hh; // Don't place first action under mouse cursor if it's not considered the 'default action'
-                    
-                    _AREA_(aa);
-
-                    _TOP_(hh);
-                    for(int i = 0; i < actions.n; i++) {
-                        auto &act = actions[i];
-                        String label = entity_action_label(act);
-                        bool enabled = predicted_possible(&act, e->id, world_t, player_state_after_queue, client);
-                        
-                        if(button(PC(ctx, i), label, enabled) & CLICKED_ENABLED) {
-                            // Request action
-                            request(&act, e->id, client);
-                            
-                            // Instantly close action menu
-                            room->action_menu_open_t  = 0;
-                            room->action_menu_close_t = 0;
-                        }
-                        
-                        slide_top(hh, ctx.layout);
-                    }
-                }
-                else {
-                    // Instantly close action menu
-                    room->action_menu_open_t  = 0;
-                    room->action_menu_close_t = 0;
-                }
-            }
-        }   
+            tool_ui(P(ctx), cui, t, &player_state_after_queue, world_t, room, client);
+        }
     }
 
     
     auto *wv = world_view(P(ctx));
-
     
     if(user && player) {
     
@@ -1739,6 +2146,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
 
 
+    update_current_tool(cui, t, wv, &player_state_after_queue,
+                        world_t, user, player, room,
+                        input, client);
 }
 
 
@@ -1847,11 +2257,17 @@ void client_set_window_delegate(Window *window, Client *client)
 
 void update_client(Client *client, Input_Manager *input)
 {
-    User *user = current_user(client);
+    double t       = platform_get_time();
+    double world_t = world_time_for_room(&client->room, t);
+
+    User    *user   = current_user(client);
+    Room    *room   = &client->room;
+    
+    Entity  *player = NULL;
+    if(user) player = find_player_entity(user->id, room);
     
     // ESCAPE KEY //
     if(in_array(input->keys_down, VKEY_ESCAPE)) {
-        
         if(client->user.selected_inventory_item_plus_one > 0) {
             inventory_deselect(&client->user);
         }
@@ -1870,6 +2286,72 @@ void update_client(Client *client, Input_Manager *input)
             request_connection_to_market(client);
         }
     }
+
+
+    // PENDING PLAYER ACTIONS //
+    if(player) {
+        auto *ploc     = &player->player_local;
+        auto *player_e = &player->player_e;
+        for(int i = 0; i < room->num_pending_actions; i++) {
+            auto rsb_id = room->pending_action_rsb_packet_ids[i];
+            Assert(rsb_id != 0);
+
+            auto &pendings = client->room.pending_rs_operations;
+            for(int j = 0; j < pendings.n; j++) {
+                auto *pending = &pendings[j];
+                if(!pending->result_received) continue;
+                if(pending->rsb_packet_id != rsb_id) continue;
+
+                Assert(pending->rsb_packet_type == RSB_PLAYER_ACTION);
+                
+                auto *pact = &room->pending_actions[i]; // NOTE: It is INTENTIONAL not to access pending_actions[i] before we need it.
+                if(pact->type == PLAYER_ACT_ENTITY) {
+                    auto *entity_act = &pact->entity;
+
+                    // Notify the planting tool that we enqueued (or failed to enqueue) a pick-up for its seed container.
+                    if(entity_act->action.type == ENTITY_ACT_PICK_UP && pact->is_pick_up_for_planting) {
+                        auto *tool = &client->cui.planting_tool;
+                        if(tool->seed_container == entity_act->target) {
+                            Assert(tool->waiting_for_pickup_enqueue);
+                            tool->waiting_for_pickup_enqueue = false;
+                        }
+                    }
+                }
+                    
+                if(pending->success) {
+                    // Add action if not added already (depends on if we recevied a ROOM_UPDATE before this)... @Robustness
+                    auto id = pending->result_payload.enqueued_action_id;
+                    bool exists = false;
+                    for(int k = 0; k < player_e->action_queue_length; k++) {
+                        if(player_e->action_ids[k] == id) {
+                            exists = true;
+                            break;
+                        }
+                    }
+
+                    if(!exists) {
+                        Assert(player_e->action_queue_length < ARRLEN(player_e->action_queue));
+                        auto ix = player_e->action_queue_length++;
+                        player_e->action_queue[ix] = *static_cast<Player_Action *>(pact);
+                        player_e->action_ids[ix]   = id;
+                        player_e->action_queue_pauses[ix+1] = false;
+                        update_local_data_for_room(&client->room, world_t, client); // @Speed!!! Should only update player state stuff
+                    }
+                }
+                
+                // Remove pending action
+                array_ordered_remove(room->pending_actions, i, room->num_pending_actions);
+                room->num_pending_actions = array_ordered_remove(room->pending_action_rsb_packet_ids, i, room->num_pending_actions);
+                i--;
+
+                // Remove pending operation // @Speed: Should we do unordered?
+                array_ordered_remove(pendings, j);
+                j--;
+            }
+        }
+    }
+    // // //
+    
 
 
     // @Cleanup: This is a thing to find random paths (for profiling)
@@ -1938,7 +2420,7 @@ int client_entry_point(int num_args, char **arguments)
     // LOAD ASSETS //
     load_assets(&client.assets);
     //--
-
+    
     // INIT CLIENT UI //
     init_client_ui(&client.cui);
     //--

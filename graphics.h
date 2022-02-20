@@ -67,6 +67,10 @@ struct Render_Object
     
     m4x4  transform;
     v4    color;
+    
+    Optional<Rect> scissor;
+    
+    float desaturation;
 
     v3 lightbox_center;
     v3 lightbox_radiuses;
@@ -161,6 +165,12 @@ m4x4 current(Static_Stack<m4x4, Max> &stack)
     return current_(stack, M_IDENTITY);
 }
 
+template<int Max>
+Rect current(Static_Stack<Rect, Max> &stack)
+{
+    return current_(stack, {0});
+}
+
 
 struct Asset_Catalog;
 
@@ -183,7 +193,8 @@ struct Graphics
     u8 buffer_set_index;
     Static_Stack<Vertex_Buffer<ALLOC_MALLOC> *, 8> vertex_buffer; // IMPORTANT: Don't set this directly. Use push_vertex_destination().
     Static_Stack<m4x4,      16> transform;
-    Static_Stack<Draw_Mode, 16> draw_mode; 
+    Static_Stack<Rect,      16> scissor;
+    Static_Stack<Draw_Mode, 16> draw_mode;
     
     float   z_for_2d; // This is the Z value that will be set for "2D vertices"
                       // NOTE: Use eat_z_for_2d() to get the copy current value and then decrease the original, so that the next thing you draw have a smaller z.
@@ -206,6 +217,7 @@ struct Graphics
     Texture_Catalog textures; // @Cleanup: Should probably be moved to Asset_Catalog.
     Texture_ID bound_textures[4]; // In fragment shader
     u8 num_bound_textures;
+    bool bound_textures_synced;
     
     Sprite_Map glyph_maps[NUM_FONTS];
 

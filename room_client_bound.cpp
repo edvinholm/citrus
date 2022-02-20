@@ -16,8 +16,16 @@ enum RCB_Packet_Type
     
     RCB_ROOM_INIT   = 3,
     RCB_ROOM_UPDATE = 4,
+
+    RCB_PACKET_RESULT = 255
 };
 
+struct RCB_Packet_Result_Payload
+{
+    union {
+        Player_Action_ID enqueued_action_id;
+    };
+};
 
 struct RCB_Packet_Header
 {
@@ -45,6 +53,16 @@ struct RCB_Packet_Header
             Tile *tiles;
             Walk_Map_Node *walk_map_nodes;
         } room_update;
+
+
+        struct {
+            RSB_Packet_Type rsb_packet_type;
+            u32             rsb_packet_id;
+            bool success;
+
+            RCB_Packet_Result_Payload payload;
+            
+        } packet_result;
     };
 };
 
@@ -134,6 +152,25 @@ bool read_RCB_Packet_Header(RCB_Packet_Header *_header, Network_Node *node)
 
             static_assert(sizeof(p.walk_map_nodes[0]) == 1);
             Data_Ptr(p.walk_map_nodes, room_size_x * room_size_y, node);
+        } break;
+
+
+
+            
+        case RCB_PACKET_RESULT: {
+            auto &p = _header->packet_result;
+
+            Read_To_Ptr(RSB_Packet_Type, &p.rsb_packet_type, node);
+            Read_To_Ptr(u32,             &p.rsb_packet_id,   node);
+            Read_To_Ptr(bool,            &p.success,         node);
+
+            auto *payload = &p.payload;
+            switch(p.rsb_packet_type) {
+                case RSB_PLAYER_ACTION: {
+                    Read_To_Ptr(Player_Action_ID, &payload->enqueued_action_id, node);
+                } break;
+            }
+
         } break;
     }
 
@@ -243,6 +280,35 @@ bool enqueue_RCB_ROOM_UPDATE_packet(Network_Node *node,
         }
     }
     end_outbound_packet(node);
+    return true;
+}
+
+
+
+
+
+bool enqueue_RCB_PACKET_RESULT_packet(Network_Node *node, RSB_Packet_Type rsb_packet_type, u32 rsb_packet_id, bool success,
+                                      Optional<RCB_Packet_Result_Payload> payload_ = {0})
+{
+    begin_outbound_packet(node);
+    defer(end_outbound_packet(node););
+
+    Write(RCB_Packet_Type, RCB_PACKET_RESULT, node);
+    //--
+
+    Write(RSB_Packet_Type, rsb_packet_type, node);
+    Write(u32,             rsb_packet_id,   node);
+    Write(bool,            success,         node);
+
+    switch(rsb_packet_type) {
+        case RSB_PLAYER_ACTION: {
+            RCB_Packet_Result_Payload payload;
+            if(!get(payload_, &payload)) { Assert(false); return false; }
+
+            Write(Player_Action_ID, payload.enqueued_action_id, node);
+        } break;
+    }
+
     return true;
 }
 

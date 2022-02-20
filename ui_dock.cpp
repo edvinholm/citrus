@@ -224,7 +224,6 @@ void ui_dock_section(UI_Context ctx, UI_Dock_Section *section, UI_Dock_Section *
         section->split_percentage =  clamp<int>(fraction_under_mouse * 100, 20, 80);
     }
 
-    return;
 }
 
 

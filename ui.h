@@ -109,6 +109,7 @@ struct UI_String
 enum UI_Element_Type
 {
     PANEL,
+    VIEWPORT,
     WINDOW,
     BUTTON,
     TEXTFIELD,
@@ -165,6 +166,14 @@ struct UI_Panel
     v4 color;
 };
 
+struct UI_Viewport
+{
+    Rect a;
+    u32 num_children; // A viewport's children should always (after end_window()) be right before the viewport in UI_Manager.elements_in_depth_order.
+
+    // TODO v2 offset;
+};
+
 struct UI_Window
 {
     Rect initial_a;
@@ -207,7 +216,8 @@ struct UI_Text
 
 enum UI_Image_Type
 {
-    UI_IMG_ITEM
+    UI_IMG_ITEM,
+    UI_IMG_TEXTURE
 };
 
 struct UI_Image
@@ -217,6 +227,7 @@ struct UI_Image
     UI_Image_Type type;
     union {
         Item_Type_ID item_type; // If UI_Image.type == UI_IMG_ITEM
+        Texture_ID   texture; // If UI_Image.type == UI_IMG_TEXTURE
     };
 };
 
@@ -225,6 +236,11 @@ enum UI_Button_Style
     UI_BUTTON_STYLE_DEFAULT = 0,
     UI_BUTTON_STYLE_INVISIBLE
 };
+enum UI_Button_Flag_ : u8 {
+    UI_BUTTON_DONT_ANIMATE = 0x1
+};
+typedef u8 UI_Button_Flags;
+static_assert(sizeof(UI_Button_Flags) == sizeof(UI_Button_Flag_));
 
 struct UI_Button
 {
@@ -241,6 +257,7 @@ struct UI_Button
     v4 color;
 
     Cursor_Icon cursor;
+    UI_Button_Flags flags;
 };
 
 struct UI_Graph
@@ -269,6 +286,15 @@ struct UI_Substance_Container
     Substance_Amount    capacity;
 
     v4 text_color; // NOTE: If we never use a custom text color, and always use the theme's color, we could just store the theme (pointer/id) here.
+
+    UI_Click_State icon_click_state;
+
+    // @Cleanup: Idk if this should be here...
+    bool action_menu_available;
+    v2 action_menu_p;
+    double action_menu_open_t;
+    double action_menu_close_t;
+    //---
 };
 
 struct UI_Inventory_Slot
@@ -298,10 +324,18 @@ struct UI_Scrollbar
     float value;
 };
 
+enum UI_Textfield_Flag_: u8
+{
+    UI_TEXTFIELD_MULTI_LINE = 0x01
+};
+typedef u8 UI_Textfield_Flags;
+
 struct UI_Textfield
 {
     Rect a;
     UI_String text;
+
+    UI_Textfield_Flags flags;
 
     UI_Click_State click_state;
     bool enabled;
@@ -403,6 +437,7 @@ struct UI_Element
 
     union {
         UI_Panel     panel;
+        UI_Viewport  viewport;
         UI_Window    window;
         UI_Text      text;
         UI_Image     image;
@@ -516,6 +551,15 @@ struct UI_Manager
 
 #define _WINDOW_(...) \
     _WINDOW___INTERNAL_(CONCAT(window_id_, __COUNTER__), __VA_ARGS__)
+
+
+#define _VIEWPORT___INTERNAL_(Ident, ...) \
+    UI_ID Ident; \
+    begin_viewport(&Ident, __VA_ARGS__); \
+    defer(end_viewport(Ident, ctx.manager);)
+
+#define _VIEWPORT_(...) \
+    _VIEWPORT___INTERNAL_(CONCAT(viewport_id_, __COUNTER__), __VA_ARGS__)
 
 
 #define _THEME_(ThemeID) \

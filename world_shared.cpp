@@ -10,9 +10,17 @@ v3s tile_from_p(v3 p) {
     return { (s32)floorf(p.x), (s32)floorf(p.y), (s32)floorf(p.z) };
 }
 
+bool outside_room(v3s tile)
+{
+    return ((tile.x < 0 && tile.x >= room_size_x) ||
+            (tile.y < 0 && tile.y >= room_size_y) ||
+            (tile.z < 0 && tile.z >= room_size_z));
+}
 
 s32 tile_index_from_tile(v3s tile)
 {
+    Assert(!outside_room(tile));
+    
     return tile.y * room_size_x + tile.x;
 }
 
@@ -67,14 +75,45 @@ bool hitbox_intersects_hitbox(Entity_Hitbox a, Entity_Hitbox b)
 
 Nugget_Type nugget_type_of_container(Substance_Container *c)
 {
-    Assert(c->amount == 0 || c->substance.form == SUBST_NUGGET);
-    return (c->amount == 0) ? NUGGET_NONE_OR_NUM : c->substance.nugget.type;
+    return (c->amount == 0 || c->substance.form != SUBST_NUGGET) ? NUGGET_NONE_OR_NUM : c->substance.nugget.type;
 }
 
 Liquid_Type liquid_type_of_container(Substance_Container *c)
 {
-    Assert(c->amount == 0 || c->substance.form == SUBST_LIQUID);
-    return (c->amount == 0) ? LQ_NONE_OR_NUM : c->substance.liquid.type;
+    return (c->amount == 0 || c->substance.form != SUBST_LIQUID) ? LQ_NONE_OR_NUM : c->substance.liquid.type;
+}
+
+bool can_hold_substance(Entity *e, Substance_Form form) {
+    if(e->type != ENTITY_ITEM) return false;
+    if(!(item_types[e->item_e.item.type].container_forms & form)) return false;
+    return true;
+}
+
+// IMPORTANT: expected_substance_form is for an Assert only!
+// IMPORTANT: If expected_substance_form == SUBST_NONE, this means we don't care.
+Substance_Container container_of_entity(Entity *e, Substance_Form expected_substance_form = SUBST_NONE)
+{
+    Assert(e->type == ENTITY_ITEM);
+    if(expected_substance_form != SUBST_NONE) {
+        Assert(can_hold_substance(e, expected_substance_form));
+    }
+    return e->item_e.item.container;
+}
+
+bool holds_nugget(Entity *e, Nugget_Type *_type)
+{
+    if(!can_hold_substance(e, SUBST_NUGGET)) return false;
+    auto *c = &e->item_e.item.container;
+    *_type = nugget_type_of_container(c);
+    return (*_type != NUGGET_NONE_OR_NUM);
+}
+
+bool holds_liquid(Entity *e, Liquid_Type *_type)
+{
+    if(!can_hold_substance(e, SUBST_LIQUID)) return false;
+    auto *c = &e->item_e.item.container;
+    *_type = liquid_type_of_container(c);
+    return (*_type != LQ_NONE_OR_NUM);
 }
 
 bool can_blend(Substance_Container *a, Substance_Container *b)
@@ -84,7 +123,6 @@ bool can_blend(Substance_Container *a, Substance_Container *b)
 
     auto form = a->substance.form;
     
-    // @Cleanup: Could probably combine cases.
     switch(form) {
         case SUBST_LIQUID: {            
             auto a_type = liquid_type_of_container(a);
@@ -146,16 +184,12 @@ Substance_Container blend(Substance_Container *a, Substance_Container *b)
     Zero(result);
     result.substance.form = form;
 
-    // @Cleanup: blend could probably be combined with lerp.
-    // @Cleanup: Could probably combine cases.
     switch(form) {
         case SUBST_LIQUID: {            
             auto a_type = liquid_type_of_container(a);
             auto b_type = liquid_type_of_container(b);
 
             if(a_type == LQ_NONE_OR_NUM && b_type == LQ_NONE_OR_NUM) return *a;
-    
-            result.amount = a->amount + b->amount;
 
             if(a_type == LQ_NONE_OR_NUM)      result.substance.liquid = b->substance.liquid;
             else if(b_type == LQ_NONE_OR_NUM) result.substance.liquid = a->substance.liquid;
@@ -173,12 +207,12 @@ Substance_Container blend(Substance_Container *a, Substance_Container *b)
 
             if(a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
 
-            result.amount = a->amount + b->amount;
-
             if(a_type == NUGGET_NONE_OR_NUM) result.substance.nugget = b->substance.nugget;
             else                             result.substance.nugget = a->substance.nugget;
         } break;
     }
+    
+    result.amount = a->amount + b->amount;
     
     return result;
 }
@@ -232,8 +266,7 @@ Substance_Container substance_container_lerp(Substance_Container *a, Substance_C
 
             if (a_type == NUGGET_NONE_OR_NUM && b_type == NUGGET_NONE_OR_NUM) return *a;
     
-            if(result.substance.nugget.type == NUGGET_NONE_OR_NUM)
-                result.substance.nugget = b->substance.nugget;
+            result.substance.nugget = b->substance.nugget;
             
         } break;
 
@@ -262,6 +295,8 @@ Substance_Amount substance_container_capacity(Item *item, Substance_Form form)
 
     switch(form) {
         case SUBST_NUGGET:
+            return vol.x * vol.y * vol.z * 100;
+            
         case SUBST_LIQUID:
         default:
             return vol.x * vol.y * vol.z * 10;
@@ -341,6 +376,11 @@ v3 volume_p_from_tp(v3 tp, v3s volume, Quat q)
     if(volume.y % 2 != 0) p += compabs(rotate_vector(V3_Y, q)) * 0.5f;
     
     return p;
+}
+
+v3 decor_entity_p_from_tp(v3 tp, Decor_Type_ID type, Quat q)
+{
+    return volume_p_from_tp(tp, decor_types[type].volume, q);
 }
 
 v3 item_entity_p_from_tp(v3 tp, Item *item, Quat q)
@@ -446,6 +486,12 @@ void get_entity_transform(ENTITY *e, double world_t, v3 *_p, Quat *_q, Room *roo
                 *_q = e->item_e.q;                
                 return;
             } break;
+
+            case ENTITY_DECOR: {
+                *_p = e->decor.p;
+                *_q = e->decor.q;                
+                return;
+            } break;
             
             case ENTITY_PLAYER:
             {
@@ -532,122 +578,195 @@ v3 entity_position(ENTITY *e, double world_t, Room *room = NULL)
 }
 
 
+template<typename ENTITY>
+Array<v3s, ALLOC_TMP> pick_up_or_put_down_action_positions(ENTITY *e, float hands_zoffs, double world_t, Room *room,
+                                                           Optional<v3> put_down_p, Optional<Quat> put_down_q)
+{
+    Assert(e->type == ENTITY_ITEM);
+    
+    Array<v3s, ALLOC_TMP> positions = {0};
+
+    Assert(put_down_p.present == put_down_q.present);
+    v3 p; Quat q;
+    if(put_down_p.present) {
+        p = put_down_p.value;
+        q = put_down_q.value;
+    } else {
+        get_entity_transform(e, world_t, &p, &q);
+    }
+
+    auto *item   = &e->item_e.item;
+
+    v3s volume = item_types[item->type].volume;
+
+    v3 forward = rotate_vector(V3_X, q);
+    v3 left    = rotate_vector(V3_Y, q);
+    v3 up      = rotate_vector(V3_Z, q);
+    
+    v3 tp0 = p;
+
+    tp0 -= forward * volume.x * 0.5f;
+    tp0 -= left    * volume.y * 0.5f;
+
+    int x0 = 0;
+    int z0 = -player_entity_hands_zoffs - 2;
+            
+    for(auto z = z0; z <= 0; z++) {
+        for(int y = 0; y <= volume.y; y++) {
+
+            for(int x = x0; x <= volume.x; x++) {
+                        
+                // @Speed: Continuing on most squares for big volumes.
+                if(x > 0 && x < volume.x && y > 0 && y < volume.y) continue;
+
+                const float offs = 1.0f;
+                            
+                v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * .01; // Rounding (flooring) errors seem to happen sometimes if we don't add a small number here (@HackMini).
+                            
+                if     (y == 0)        array_add(positions, tile_from_p(pp - left * offs));
+                else if(y == volume.y) array_add(positions, tile_from_p(pp + left * offs));
+                        
+                if     (x == 0)        array_add(positions, tile_from_p(pp - forward * offs));
+                else if(x == volume.x) array_add(positions, tile_from_p(pp + forward * offs));
+                            
+            }
+        }
+    }
+
+    return positions;
+}
+// @Incomplete: MOVE has different positions for the two steps.
+
 // NOTE: hands_zoffs is the z offset for the performer entity's hands from their origin.
 template<typename ENTITY>
 Array<v3s, ALLOC_TMP> entity_action_positions(ENTITY *e, Entity_Action *action, float hands_zoffs, double world_t, Room *room)
-{
+{   
+    if (action->type == ENTITY_ACT_PICK_UP ||
+        action->type == ENTITY_ACT_MOVE)
+    {
+        return pick_up_or_put_down_action_positions(e, hands_zoffs, world_t, room, {0}, {0});
+    }
+    
     Array<v3s, ALLOC_TMP> positions = {0};
     
     v3 p = entity_position(e, world_t, room);
-    
-    if(e->type != ENTITY_ITEM) {
+
+    if (e->type != ENTITY_ITEM) {
         Assert(false);
         array_add(positions, tile_from_p(p));
         return positions;
     }
     auto *item_e = &e->item_e;
-    auto *item   = &item_e->item;
+    auto *item = &item_e->item;
 
     v3s volume = item_types[item->type].volume;
 
     v3 forward = rotate_vector(V3_X, item_e->q);
-    v3 left    = rotate_vector(V3_Y, item_e->q);
-    v3 up      = rotate_vector(V3_Z, item_e->q);
+    v3 left = rotate_vector(V3_Y, item_e->q);
+    v3 up = rotate_vector(V3_Z, item_e->q);
 
-    // @Cleanup: action should not be optional. We have it here for PUT_DOWN.
-    if(action) {
-        
-        switch(action->type) {
+    switch (action->type) {
 
-            // @Norelease: Do the same for PUT_DOWN as we do for PICK_UP.
-            case ENTITY_ACT_SLEEP:
-            case ENTITY_ACT_PICK_UP: {
-                
-                v3 tp0 = p;
-                tp0 -= forward * volume.x * 0.5f;
-                tp0 -= left    * volume.y * 0.5f;
+        case ENTITY_ACT_MOVE:
+        case ENTITY_ACT_PICK_UP: Assert(false); break; // Handled above.
 
-                int x0 = 0;
-                int z0 = -player_entity_hands_zoffs - 2;
-                
-                if(action->type == ENTITY_ACT_SLEEP) {
-                    x0 = 1; // Can't enter bed from behind the headboard
-                    z0 = 0; // Must be on the same z as the bed.
-                }
-                
-                for(auto z = z0; z <= 0; z++) {
-                    for(int y = 0; y <= volume.y; y++) {
+        case ENTITY_ACT_PLANT:
+        case ENTITY_ACT_SLEEP: {
 
-                        for(int x = x0; x <= volume.x; x++) {
-                        
-                            // @Speed: Continuing on most squares for big volumes.
-                            if(x > 0 && x < volume.x && y > 0 && y < volume.y) continue;
+            v3 tp0 = p;
 
-                            const float offs = 1.0f;
-                            
-                            v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * .01; // Rounding (flooring) errors seem to happen sometimes if we don't add a small number here (@HackMini).
-                            
-                            if     (y == 0)        array_add(positions, tile_from_p(pp - left * offs));
-                            else if(y == volume.y) array_add(positions, tile_from_p(pp + left * offs));
-                        
-                            if     (x == 0)        array_add(positions, tile_from_p(pp - forward * offs));
-                            else if(x == volume.x) array_add(positions, tile_from_p(pp + forward * offs));
-                            
-                        }
+            // @Hack (Not really)
+            if (action->type == ENTITY_ACT_PLANT) {
+                tp0 = action->plant.tp;
+                Assert(nugget_type_of_container(&item->container) == NUGGET_SEEDS);
+                auto plant_type = plant_type_for_seed(item->container.substance.nugget.seed_type);
+                volume = item_types[plant_type].volume;
+            }
+
+            tp0 -= forward * volume.x * 0.5f;
+            tp0 -= left    * volume.y * 0.5f;
+
+            int x0 = 0;
+            int z0 = -player_entity_hands_zoffs - 2;
+
+            if (action->type == ENTITY_ACT_SLEEP) {
+                x0 = 1; // Can't enter bed from behind the headboard
+                z0 = 0; // Must be on the same z as the bed.
+            }
+
+            for (auto z = z0; z <= 0; z++) {
+                for (int y = 0; y <= volume.y; y++) {
+
+                    for (int x = x0; x <= volume.x; x++) {
+
+                        // @Speed: Continuing on most squares for big volumes.
+                        if (x > 0 && x < volume.x && y > 0 && y < volume.y) continue;
+
+                        const float offs = 1.0f;
+
+                        v3 pp = tp0 + (forward * x) + (left * y) + (up * z) + V3_ONE * .01; // Rounding (flooring) errors seem to happen sometimes if we don't add a small number here (@HackMini).
+
+                        if (y == 0)        array_add(positions, tile_from_p(pp - left * offs));
+                        else if (y == volume.y) array_add(positions, tile_from_p(pp + left * offs));
+
+                        if (x == 0)        array_add(positions, tile_from_p(pp - forward * offs));
+                        else if (x == volume.x) array_add(positions, tile_from_p(pp + forward * offs));
+
                     }
                 }
+            }
 
-            } break;
+        } break;
 
-            case ENTITY_ACT_USE_TOILET:
-            case ENTITY_ACT_SIT_OR_UNSIT: {
-                array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
-                array_add(positions, tile_from_p(p + left    * (volume.y * 0.5f + 1)));
-                array_add(positions, tile_from_p(p - left    * (volume.y * 0.5f + 1)));
-                array_add(positions, tile_from_p(p - forward * (volume.x * 0.5f + 1)));
-            } break;
+        case ENTITY_ACT_USE_TOILET:
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
+            array_add(positions, tile_from_p(p + left    * (volume.y * 0.5f + 1)));
+            array_add(positions, tile_from_p(p - left    * (volume.y * 0.5f + 1)));
+            array_add(positions, tile_from_p(p - forward * (volume.x * 0.5f + 1)));
+        } break;
 
-            case ENTITY_ACT_CHESS: {
-                auto *chess_action = &action->chess;
-            
-                Assert(item->type == ITEM_CHESS_BOARD);
-                auto *board = &item_e->chess_board;
-                
-                v3 white_p = p + left * (volume.y * 0.5f + 1);
-                v3 black_p = p - left * (volume.y * 0.5f + 1);
+        case ENTITY_ACT_CHESS: {
+            auto *chess_action = &action->chess;
 
-                white_p.z -= hands_zoffs;
-                black_p.z -= hands_zoffs;
+            Assert(item->type == ITEM_CHESS_BOARD);
+            auto *board = &item_e->chess_board;
 
-                switch(chess_action->type)
-                {
-                    case CHESS_ACT_MOVE: {       
-                        auto *move = &chess_action->move;
-                    
-                        Chess_Piece piece;
-                        bool found = get_chess_piece_at(move->from, board, &piece);
-                    
-                        if(!found) { Assert(false); break; }
-                    
-                        if(piece.is_black) array_add(positions, tile_from_p(black_p));
-                        else               array_add(positions, tile_from_p(white_p));
-                        
-                    } break;
+            v3 white_p = p + left * (volume.y * 0.5f + 1);
+            v3 black_p = p - left * (volume.y * 0.5f + 1);
 
-                    case CHESS_ACT_JOIN: {
-                        auto *join = &chess_action->join;
-                        
-                        // @Norelease: We must check if there is already a player on its way to join!
-                        
-                        if     (join->as_black) array_add(positions, tile_from_p(black_p)); // Join as black
-                        else                    array_add(positions, tile_from_p(white_p)); // Join as white
-                        
-                    } break;
-                }
-            } break;
-        }
+            white_p.z -= hands_zoffs;
+            black_p.z -= hands_zoffs;
+
+            switch (chess_action->type)
+            {
+                case CHESS_ACT_MOVE: {
+                    auto *move = &chess_action->move;
+
+                    Chess_Piece piece;
+                    bool found = get_chess_piece_at(move->from, board, &piece);
+
+                    if (!found) { Assert(false); break; }
+
+                    if (piece.is_black) array_add(positions, tile_from_p(black_p));
+                    else               array_add(positions, tile_from_p(white_p));
+
+                } break;
+
+                case CHESS_ACT_JOIN: {
+                    auto *join = &chess_action->join;
+
+                    // @Norelease: We must check if there is already a player on its way to join!
+
+                    if (join->as_black) array_add(positions, tile_from_p(black_p)); // Join as black
+                    else                    array_add(positions, tile_from_p(white_p)); // Join as white
+
+                } break;
+            }
+        } break;
     }
-        
+
+           
     if(positions.n == 0) {
         array_add(positions, tile_from_p(p + forward * (volume.x * 0.5f + 1)));
     }
@@ -749,6 +868,18 @@ Entity_Hitbox entity_hitbox(ENTITY *e, v3 p, Quat q)
 
             // @Hack for raycasting
             hb.base.s *= 0.8f;
+        } break;
+
+        case ENTITY_DECOR: {
+            auto *dec = &e->decor;
+
+            auto *type = &decor_types[dec->type];
+            auto vol = type->volume;
+            
+            v3 p0 = p - (forward * vol.x * 0.5f) - (left * vol.y * 0.5f);
+
+            hb.base.p = p0;
+            hb.base.s = (forward * vol.x) + (left * vol.y) + (up * vol.z);
         } break;
 
         default: Assert(false); break;
@@ -1173,7 +1304,7 @@ bool is_supported_by(Entity_ID supported_entity, v3 *support_points, int num_sup
             /*
               Exclusive surfaces only support if all support points
               are satisfied by it.
-             */
+            */
 
             if(!any_point_satisfied_by_this_surface) continue;
 
@@ -1457,6 +1588,8 @@ bool item_entity_can_be_moved(Entity *e, double world_t, Room *room)
             
     auto *item_e = &e->item_e;
     auto *item   = &item_e->item;
+
+    if(is_plant(e)) return false;
     
     if(item_e->locked_by != NO_ENTITY) return false;
 
@@ -1482,6 +1615,98 @@ bool item_entity_can_be_moved(Entity *e, double world_t, Room *room)
 
 
 
+// @BadName
+struct Action_Prediction_Info
+{
+    union {
+        struct {
+            Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters;
+        } put_down;
+
+        struct {
+            Substance_Amount consumed_water;
+            float added_grow_progress;
+        } water;
+
+        struct {
+            bool impact_bladder;
+            bool impact_bowel;
+        } use_toilet;
+
+        struct {
+            Item_Type_ID     plant_type;
+            Substance_Amount seeds_to_consume;
+        } plant;
+    };
+};
+
+
+double pick_up_action_duration()
+{
+    return 0;
+}
+
+bool pick_up_predicted_possible(Entity *e, double world_t, Player_State *state, Room *room)
+{
+    Assert(e->type == ENTITY_ITEM);
+    auto *item = &e->item_e.item;
+    
+    if(state->held_item.type != ITEM_NONE_OR_NUM) return false;
+    if(item->owner != state->user_id) return false;
+    if(!item_entity_can_be_moved(e, world_t, room)) return false;
+
+    return true;
+}
+
+void apply_pick_up_to_player_state(Entity *e, Player_State *state)
+{
+    Assert(state->held_item.type == ITEM_NONE_OR_NUM);
+    state->held_item = e->item_e.item;
+}
+
+
+double put_down_action_duration()
+{
+    return 0;
+}
+
+bool put_down_predicted_possible(v3 p, Quat q, double world_t, Player_State *state, Room *room,
+                                 Action_Prediction_Info *_info = NULL, Array<v3s, ALLOC_TMP> *_possible_p1s = NULL)
+{
+    if(state->held_item.type == ITEM_NONE_OR_NUM) return false;
+            
+    S__Entity held_entity_replica = create_item_entity(&state->held_item, p, q, world_t);
+            
+    // @Norelease: Check that the put down entity won't collide with anything.
+
+    // If we just do can_place_item_at(), these statements are true:
+    // @Norelease: We will collide with ourselves here if the pick-up has not yet happened.
+    // @Norelease: We will collide with other entities even if there is a pick-up of them earlier in the queue.
+    // @Norelease: We will NOT collide with other entities' put-down volumes, even if their put-downs happens earlier than this one.
+    //             So it is possible to put down two entities in the same spot right now.
+
+    // This is @Temporary (See comments above).
+
+    Static_Array<Entity *, MAX_SUPPORT_POINTS> *supporters_dest = NULL;
+    if(_info) supporters_dest = &_info->put_down.supporters;
+    
+    if(!entity_can_be_at(&held_entity_replica, p, q, world_t, room, supporters_dest))
+        return false;
+
+    if(_possible_p1s) {
+        *_possible_p1s = pick_up_or_put_down_action_positions(&held_entity_replica, player_entity_hands_zoffs, world_t, room, opt(p), opt(q));
+    }
+
+    return true;
+}
+
+
+void apply_put_down_to_player_state(Player_State *state)
+{
+    Assert(state->held_item.type != ITEM_NONE_OR_NUM);
+    state->held_item.type = ITEM_NONE_OR_NUM;
+}
+
 // NOTE: user can be null, when we for example do this on the Room Server.
 //       The room server don't know much about the user. So (IMPORTANT) it will not check
 //       stuff that is in the User struct. But it should then in some way ask the User
@@ -1496,7 +1721,7 @@ bool item_entity_can_be_moved(Entity *e, double world_t, Room *room)
 // NOTE: @Norelease: We can't yet pass another world_t than the room's t. If we want
 //                   to do that, we need to simulate the room up to that t (temporarily)
 //                   before we check the state of entities!
-bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_State *player_state, double world_t, Room *room, bool *_sitting_allowed, S__User *user = NULL)
+bool entity_action_predicted_possible(Entity_Action action, u8 step, Entity *e, Player_State *player_state, double world_t, Room *room, bool *_sitting_allowed, S__User *user = NULL, Action_Prediction_Info *_prediction_info = NULL)
 {
     Function_Profile();
     
@@ -1520,25 +1745,34 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
     auto *item   = &item_e->item;
     
     switch(action.type) {
+        
         case ENTITY_ACT_PICK_UP: {
-            Scoped_Profile("ENTITY_ACT_PICK_UP");
+            return pick_up_predicted_possible(e, world_t, player_state, room);
+        } break;
 
-            if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
-            
-            if(item->owner != player_state->user_id) return false;
+        case ENTITY_ACT_MOVE: {
+            auto *move = &action.move;
 
-            if(!item_entity_can_be_moved(e, world_t, room)) return false;
-            
+            // IMPORTANT that we copy the state here.
+            auto state_copy = *player_state;
+            if (step <= 0) {
+                if (!pick_up_predicted_possible(e, world_t, &state_copy, room)) return false;
+                apply_pick_up_to_player_state(e, &state_copy);
+            }
+
+            if(step <= 1) {
+                if(!put_down_predicted_possible(move->p, move->q, world_t, &state_copy, room)) return false;
+            }
+            Assert(step < 2);
+
             return true;
-            
+               
         } break;
         
         case ENTITY_ACT_PLACE_IN_INVENTORY: {
 
             if(item->owner != player_state->user_id) return false;
-
             if(!item_entity_can_be_moved(e, world_t, room)) return false;
-    
             if(user) {
                 if(!inventory_has_available_space_for_item_type(item->type, user)) return false;
             }
@@ -1549,11 +1783,9 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_HARVEST: {
 
             if(!is_plant(e)) return false;
-            
-            if(item->plant.grow_progress < 0.75f) return false;
-
+            if(item->plant.grow_progress < 1.0f) return false;
             if(player_state->held_item.type != ITEM_NONE_OR_NUM) return false;
-
+            
             return true;
             
         } break;
@@ -1561,7 +1793,7 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
 
-            if(item->type != ITEM_MACHINE) return false;            
+            if(item->type != ITEM_MACHINE) return false;
 
             auto *machine_e = &e->item_e.machine;
             if(x->set_to_on) {
@@ -1575,20 +1807,24 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         };
 
         case ENTITY_ACT_WATER: {
-            auto *x = &action.set_power_mode;
+            if(!is_plant(e)) return false;
 
-            if(item->type != ITEM_APPLE_TREE &&
-               item->type != ITEM_WHEAT) return false;
-
-            auto *plant_e = &e->item_e.plant;
+            auto *plant_item = &e->item_e.item.plant;
 
             if(!(item_types[player_state->held_item.type].container_forms & SUBST_LIQUID)) return false;
             auto *c = &player_state->held_item.container;
 
-            if(c->substance.form        != SUBST_LIQUID) return false;
-            if(c->substance.liquid.type != LQ_WATER)     return false;
-            if(c->amount < 2) return false; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+            if(liquid_type_of_container(c) != LQ_WATER) return false;
 
+            Substance_Amount water_to_consume = 2;
+            if(c->amount < water_to_consume) return false;
+
+            if(_prediction_info) {
+                auto *info = &_prediction_info->water;
+                info->consumed_water = water_to_consume;
+                info->added_grow_progress = min(0.05f, 1.0f - plant_item->grow_progress);
+            }
+            
             return true;
         } break;
 
@@ -1629,16 +1865,27 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
         case ENTITY_ACT_USE_TOILET: {
 
             switch(action.type) {
-                case ENTITY_ACT_SLEEP:
+                case ENTITY_ACT_SLEEP: {
                     if(item->type != ITEM_BED) return false;
                     if(player_state->needs.values[NEED_SLEEP] > need_limits[NEED_SLEEP]) return false;
-                    break;
+                    
+                } break;
 
-                case ENTITY_ACT_USE_TOILET:
+                case ENTITY_ACT_USE_TOILET: {
                     if(item->type != ITEM_TOILET) return false;
-                    if(player_state->needs.values[NEED_BLADDER] > need_limits[NEED_BLADDER] &&
-                       player_state->needs.values[NEED_BOWEL]   > need_limits[NEED_BOWEL]) return false;
-                    break;
+
+                    bool impact_bladder = player_state->needs.values[NEED_BLADDER] <= need_limits[NEED_BLADDER];
+                    bool impact_bowel   = player_state->needs.values[NEED_BOWEL]   <= need_limits[NEED_BOWEL];
+                    
+                    if(!impact_bladder && !impact_bowel) return false;
+                    
+                    if(_prediction_info) {
+                        auto *info = &_prediction_info->use_toilet;
+                        info->impact_bladder = impact_bladder;
+                        info->impact_bowel   = impact_bowel;
+                    }
+                    
+                } break;
 
                 default: Assert(false); break;
             }
@@ -1651,6 +1898,36 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
             return true;
         } break;
 
+        case ENTITY_ACT_PLANT: {
+            auto *x = &action.plant;
+
+            auto *held_item = &player_state->held_item;
+            
+            if(held_item->type == ITEM_NONE_OR_NUM) return false;
+            if(held_item->id   != item->id)         return false;
+
+            auto *type = &item_types[held_item->type];
+            if(!(type->container_forms & SUBST_NUGGET)) return false;
+
+            Substance_Amount seeds_to_consume = 1;
+            
+            if(nugget_type_of_container(&held_item->container) != NUGGET_SEEDS) return false;
+            if(held_item->container.amount < seeds_to_consume) return false;
+            
+            Item_Type_ID plant_type = plant_type_for_seed(held_item->container.substance.nugget.seed_type);
+            Item plant_item = {0};
+            plant_item.type = plant_type; // @Robustness: Do we fill in all necessary fields here? @Norelease
+            if(!can_place_item_entity_at_tp(&plant_item, x->tp, Q_IDENTITY, world_t, room)) return false;
+
+            if(_prediction_info) {
+                auto *info = &_prediction_info->plant;
+                info->plant_type       = plant_type;
+                info->seeds_to_consume = seeds_to_consume;
+            }
+            
+            return true;
+        } break;
+
         default: Assert(false); return false;
     }
     
@@ -1659,19 +1936,13 @@ bool entity_action_predicted_possible(Entity_Action action, Entity *e, Player_St
 }
 
 
-// @BadName
-struct Player_Action_Prediction_Info
-{
-    union {
-        struct {
-            Static_Array<Entity *, MAX_SUPPORT_POINTS> supporters;
-        } put_down;
-    };
-};
 
 // NOTE: See notes for entity_action_predicted_possible().
+// NOTE: If an action has multiple steps, this procedure should return true if
+//       all steps from action->step to its last step are possible, and ignore
+//       steps that are already completed.
 // IMPORTANT: You can't pass _found_path_duration without passing _found_path.
-bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, Room *room, Optional<Player_Action> *_action_needed_before = NULL, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, Player_Action_Prediction_Info *_info = NULL, S__User *user = NULL)
+bool player_action_predicted_possible(Player_Action *action, Player_State *player_state, double world_t, Room *room, Optional<Player_Action> *_action_needed_before = NULL, Array<v3, ALLOC_TMP> *_found_path = NULL, double *_found_path_duration = NULL, Action_Prediction_Info *_info = NULL, S__User *user = NULL)
 {
     Function_Profile();
 
@@ -1701,9 +1972,12 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
             Entity *e = find_entity(entity_act->target, room);
             if(!e) return false;
 
-            if(!entity_action_predicted_possible(entity_act->action, e, player_state, world_t, room, &sitting_allowed, user)) return false;
+            if(!entity_action_predicted_possible(entity_act->action, action->step, e, player_state, world_t, room, &sitting_allowed, user, _info)) return false;
                         
-            if(e->held_by == NO_ENTITY) {
+            if(e->held_by == NO_ENTITY ||
+               entity_act->action.type == ENTITY_ACT_PLANT ||
+               entity_act->action.type == ENTITY_ACT_MOVE)
+            {
                 possible_p1s = entity_action_positions(e, &entity_act->action, player_entity_hands_zoffs, world_t, room);
 
                 if(entity_act->action.type == ENTITY_ACT_SIT_OR_UNSIT &&
@@ -1725,31 +1999,11 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
 
         case PLAYER_ACT_PUT_DOWN: {
             Scoped_Profile("PLAYER_ACT_PUT_DOWN");
-            
+
             auto *put_down = &action->put_down;
 
-            if(player_state->held_item.type == ITEM_NONE_OR_NUM) return false;
+            if(!put_down_predicted_possible(put_down->p, put_down->q, world_t, player_state, room, _info, &possible_p1s)) return false;
             
-            S__Entity held_entity_replica = create_item_entity(&player_state->held_item, put_down->p, put_down->q, world_t);
-            
-            // @Norelease: Check that the put down entity won't collide with anything.
-
-            // If we just do can_place_item_at(), these statements are true:
-            // @Norelease: We will collide with ourselves here if the pick-up has not yet happened.
-            // @Norelease: We will collide with other entities even if there is a pick-up of them earlier in the queue.
-            // @Norelease: We will NOT collide with other entities' put-down volumes, even if their put-downs happens earlier than this one.
-            //             So it is possible to put down two entities in the same spot right now.
-
-            // This is @Temporary (See comments above).
-            if(!entity_can_be_at(&held_entity_replica, put_down->p, put_down->q, world_t, room, &_info->put_down.supporters))
-                return false;
-
-            // @Cleanup @Hack !!!
-            Entity_Action dummy_action = {0};
-            dummy_action.type = ENTITY_ACT_PICK_UP;
-            
-            // @Cleanup: action parameter should not be optional. PUT_DOWN should work differently... Should probably be an entity action.
-            possible_p1s = entity_action_positions(&held_entity_replica, &dummy_action, player_entity_hands_zoffs, world_t, room);
             transport_needed = WALK;
         } break;
             
@@ -1806,6 +2060,8 @@ bool player_action_predicted_possible(Player_Action *action, Player_State *playe
                 bool no_walkable_p1s = true;
                 for(int i = 0; i < possible_p1s.n; i++) {
                     v3s tile = possible_p1s[i];
+                    if(outside_room(tile)) continue;
+                    
                     s32 tile_ix = tile_index_from_tile(tile);
                         
                     if(!(room->walk_map.nodes[tile_ix].flags & UNWALKABLE)) {
@@ -1897,7 +2153,7 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
 
         bool possible = true;
 
-        Player_Action_Prediction_Info prediction_info = {0};
+        Action_Prediction_Info prediction_info = {0};
         
         Array<v3, ALLOC_TMP> path = {0}; // @Speed: We should send this in, and player_action should set .n = 0. Instead of allocating new memory every time
         Optional<Player_Action> action_needed_before;
@@ -1935,7 +2191,13 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                 switch(entity_act->action.type)
                 {
                     case ENTITY_ACT_PICK_UP: {
-                        state->held_item = e->item_e.item;
+                        apply_pick_up_to_player_state(e, state);
+                    } break;
+
+                    case ENTITY_ACT_MOVE: {
+                        if(act->step <= 0) apply_pick_up_to_player_state(e, state);
+                        if(act->step <= 1) apply_put_down_to_player_state(state);
+                        Assert(act->step < 2);
                     } break;
 
                     case ENTITY_ACT_HARVEST: {
@@ -1964,16 +2226,12 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                     } break;
 
                     case ENTITY_ACT_WATER: {
+                        auto *info = &prediction_info.water;
+                            
                         Assert(item_types[state->held_item.type].container_forms & SUBST_LIQUID); // player_action_predicted_possible() should have checked this.
                         auto *c = &state->held_item.container;
 
-                        // player_action_predicted_possible() should have checked this.
-                        Assert(c->substance.form == SUBST_LIQUID);
-                        Assert(c->substance.liquid.type == LQ_WATER);
-                        Assert(c->amount >= 2);
-                        
-                        // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
-                        c->amount -= 2; // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
+                        c->amount -= info->consumed_water;
 
                     } break;
 
@@ -1988,12 +2246,26 @@ bool apply_actions_to_player_state(Player_State *state, Player_Action *actions, 
                             state->p          = entity_position(e, world_t, room); // @Speed
                         }
                     } break;
+
+                    case ENTITY_ACT_PLANT: {
+                        auto *info = &prediction_info.plant;
+                        
+                        Assert(item_types[state->held_item.type].container_forms & SUBST_NUGGET); // player_action_predicted_possible() should have checked this.
+                        auto *c = &state->held_item.container;
+
+                        // player_action_predicted_possible() should have checked this.
+                        Assert(nugget_type_of_container(c) == NUGGET_SEEDS);
+                        Assert(c->amount >= info->seeds_to_consume);
+
+                        // @Volatile: We do this in two places. Can't we do affect_held_item(action) or something?
+                        c->amount -= info->seeds_to_consume;
+                    } break;
                 }
             }
             break;
 
             case PLAYER_ACT_PUT_DOWN: {
-                state->held_item.type = ITEM_NONE_OR_NUM;
+                apply_put_down_to_player_state(state);
             } break;
         }
         

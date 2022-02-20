@@ -2246,6 +2246,7 @@ static int stbtt__GetGlyphInfoT2(const stbtt_fontinfo *info, int glyph_index, in
    return r ? c.num_vertices : 0;
 }
 
+
 STBTT_DEF int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
 {
    if (!info->cff.size)

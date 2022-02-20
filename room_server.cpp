@@ -86,6 +86,18 @@ void create_dummy_entities(Room *room, Room_Server *server)
 
         pp.x += item_type->volume.x + 4;
     }
+
+#if 0
+    Entity e = {0};
+    e.type = ENTITY_DECOR;
+    e.decor.type = DECOR_FENCE;
+    e.decor.p = { room_size_x/2 + 8 + .5f, room_size_y/2 - 8, 0 };
+    e.decor.q = Q_IDENTITY;
+    e.id = 1 + room->next_entity_id_minus_one++;
+
+    Assert(room->num_entities < ARRLEN(room->entities));
+    room->entities[room->num_entities++] = { e };
+#endif
 }
 
 void create_dummy_rooms(Room_Server *server)
@@ -97,7 +109,8 @@ void create_dummy_rooms(Room_Server *server)
     const int map_pixel_components = 3;
     
     int map_sx, map_sy, unused;
-    auto *map = stbi_load("res/maps/default_01.bmp", &map_sx, &map_sy, &unused, 3);
+// auto *map = stbi_load("res/maps/default_01.bmp", &map_sx, &map_sy, &unused, 3);
+    auto *map = stbi_load("res/maps/street_test_01.bmp", &map_sx, &map_sy, &unused, 3);
     defer(free(map););
 
     Assert(map_sx == room_size_x && map_sy == room_size_y);
@@ -120,16 +133,30 @@ void create_dummy_rooms(Room_Server *server)
             auto g = *map_at++;
             auto b = *map_at++;
 
-            if(r == 255 && g == 255 && b == 255) {
-                *tile = TILE_WALL;
-            } else if(r == 128 && g == 128 && b == 128) {
-                // Sidewalk (@Norelease)
-                *tile = TILE_SAND;
-            } else if(r == 0 && g == 128 && b == 0) {
-                *tile = TILE_GRASS;
-            } else if(r == 128 && g == 64 && b == 0) {
-                // Wooden floor or something. (@Norelease)
-                *tile = TILE_SAND;
+            if(r == 255) {
+                if(g == 255) {
+                    if(b == 255) *tile = TILE_WALL;
+                }
+                if(g == 0) {
+                    if(b == 255) *tile = TILE_NONE_OR_NUM;
+                }
+            }
+            if(r == 128) {
+                if(g == 128) {
+                    if(b == 128) *tile = TILE_CONCRETE_TILES_2X2;
+                }
+                if(g == 64) {
+                    if(b == 0) *tile = TILE_SAND; // Wooden floor or something. (@Norelease)
+                }
+            }
+            if(r == 0) {
+                if(g == 128) {
+                    if(b == 0) *tile = TILE_GRASS;
+                }
+                if(g == 0) {
+                    if(b == 0)   *tile = TILE_ASPHALT;
+                    if(b == 255) *tile = TILE_WATER;
+                }
             }
         }
         
@@ -170,43 +197,6 @@ void create_dummy_rooms(Room_Server *server)
         array_add(server->clients, empty_client_array);
     }
 
-}
-
-inline
-Tile random_tile(int x)
-{
-    Tile t = (Tile)random_int(0, TILE_NONE_OR_NUM-1);
-    switch(x) {
-        case 2: if(t == TILE_GRASS) t = TILE_WATER; break;
-        case 4: if(t == TILE_STONE) t = TILE_GRASS; break;
-        case 6: if(t == TILE_GRASS || t == TILE_STONE) t = TILE_WATER; break;
-        case 8: if(t == TILE_WATER || t == TILE_SAND)  t = TILE_GRASS; break;
-        default: break;
-    }
-
-    return t;
-}
-
-void randomize_tiles(Tile *tiles, u64 num_tiles, int x) {
-    Tile *at = tiles;
-    Tile *end = tiles + num_tiles;
-
-    while(end-at >= 8) {
-        at[0] = random_tile(x);
-        at[1] = random_tile(x);
-        at[2] = random_tile(x);
-        at[3] = random_tile(x);
-        at[4] = random_tile(x);
-        at[5] = random_tile(x);
-        at[6] = random_tile(x);
-        at[7] = random_tile(x);
-        at += 8;
-    }
-
-    while(at < end) {
-        *at = random_tile(x);
-        at++;
-    }
 }
 
 
@@ -483,7 +473,7 @@ void add_new_room_clients(Room_Server *server)
                 e.type   = ENTITY_PLAYER;
                 
                 v3s p;
-                do    p = { random_int(1, room_size_x-1), random_int(1, room_size_y-1), 0 };
+                do    p = { (s32)random_int(1, room_size_x-1), (s32)random_int(1, room_size_y-1), 0 };
                 while(room->walk_map.nodes[p.y * room_size_x + p.x].flags & UNWALKABLE);
 
                 auto *player_e = &e.player_e;
@@ -719,12 +709,31 @@ bool player_walk_to(v3s p1, Entity *e, Room *room, double *_dur = NULL, v3 *_p0 
 }
 
 
-// NOTE: Walk duration not included!
+// NOTE: Reach duration not included!
 double player_action_duration(Player_Action *act, double start_t, Entity *player)
 {
+    // @Incomplete PLAYER_ACT_MOVE
+
+    if (act->type == PLAYER_ACT_PUT_DOWN)
+        return put_down_action_duration();
+    
     if(act->type != PLAYER_ACT_ENTITY) return 0;
 
     switch(act->entity.action.type) {
+
+        case ENTITY_ACT_PICK_UP: {
+            return pick_up_action_duration();
+        } break;
+
+        case ENTITY_ACT_MOVE: {
+            // We don't know the path duration here because the path might be different at the time when the pickup has been done.
+            // We should maybe not have a player_action_duration() function? Update could update end_t however it wants instead? @Incomplete....
+            
+            // @Incomplete!!
+            double path_duration = 0;
+            return pick_up_action_duration() + path_duration + put_down_action_duration();
+        } break;
+
         case ENTITY_ACT_SLEEP: {
             double change_speed = sleep_action_sleep_need_speed_change + default_need_speeds[NEED_SLEEP];
             Assert(change_speed > 0);
@@ -796,8 +805,9 @@ void update_walk_map_and_paths(Room *room, Room_Server *server)
                 if(room->t < first_action->reach_t) {
                     auto new_reach_t = room->t + dur;
                     auto delta = new_reach_t - first_action->reach_t;
-                    first_action->reach_t += delta;
-                    first_action->end_t   = first_action->reach_t + player_action_duration(first_action, first_action->reach_t, e);
+                    first_action->reach_t  += delta;
+                    first_action->update_t += delta;
+                    first_action->end_t     = first_action->reach_t + player_action_duration(first_action, first_action->reach_t, e);
                 }
             }
         }
@@ -952,6 +962,9 @@ Entity *add_entity(Entity *entity, Room *room)
     auto *dest = room->entities + (room->num_entities++);
     *dest = *entity;
     dest->id = 1 + room->next_entity_id_minus_one++;
+
+    room->did_change = true;
+    
     return dest;
 }
 
@@ -1057,287 +1070,28 @@ void impact_need(Need need, float speed_change, Entity *player, Room *room)
     room->did_change = true;
 }
 
-
-// @Cleanup @BadName: This is actually "start or perform action". For some actions we do stuff in "end action" as well.
-bool perform_player_action_if_possible(Player_Action *action, User_ID as_user, Room *room, Room_Server *server)
+void set_entity_container(Entity *e, Substance_Container new_container, double world_t)
 {
-    Assert(as_user != NO_USER);
+    Assert(e->type == ENTITY_ITEM);
+    Assert(new_container.amount == 0 || item_types[e->item_e.item.type].container_forms & new_container.substance.form);
+
+    e->item_e.container.t0 = world_t;
+    e->item_e.container.t1 = world_t;
     
-    Entity      *player = find_player_entity(as_user, room);
-    if(player == NULL) return false;
-    Assert(player->type == ENTITY_PLAYER);
-
-    Player_Action_Prediction_Info prediction_info = {0};
-
-    // @Robustness: Should we tell player_action_predicted_possible to only return true here if transport_needed == NONE? (This is a variable inside predicted_possible)  -EH, 2021-03-03
-    Player_State player_state = player_state_of(player, room->t, room);
-    if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL, NULL, NULL, &prediction_info)) return false;
-    
-    switch(action->type) { // @Jai: #complete
-        
-        case PLAYER_ACT_ENTITY: {
-            auto *entity_action = &action->entity.action;
-
-            auto *target = find_entity(action->entity.target, room);
-            if (!target) return true; // This is OK, the entity might have been destroyed. (We should probably stop walking then, but keep this check anyway.)
-    
-            switch(entity_action->type) { // @Jai: #complete
-
-                case ENTITY_ACT_PICK_UP: {
-                    Assert(as_user != NO_USER);
-                    Assert(target->type == ENTITY_ITEM);
-
-                    Assert(player);
-            
-                    pick_up_item_entity(target, player, room, server);
-                    RS_Log("User %llu picked up entity %llu (Item %llu:%llu).\n", as_user, target->id, target->item_e.item.id.origin, target->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
-                    return true;
-            
-                } break;
-        
-                case ENTITY_ACT_PLACE_IN_INVENTORY: {
-                    Assert(as_user != NO_USER);
-                    Assert(target->type == ENTITY_ITEM);
-            
-                    bool action_performed = place_item_entity_in_inventory(as_user, target, room, server);
-                    // REMEMBER: e is invalid after this.
-            
-                    if(action_performed) {   
-                        RS_Log("User %llu placed item %llu:%llu (entity %llu) in inventory.\n", as_user, target->item_e.item.id.origin, target->item_e.item.id.number, target->id); // @Jai: Print function for Item_ID struct.
-                        return true;
-                    }
-                    return false;
-                } break;
-
-                case ENTITY_ACT_HARVEST: {
-                    Assert(as_user != NO_USER);
-                    Assert(target->type == ENTITY_ITEM);
-
-                    update_entity_item(target, room->t);
-
-                    Item_Type_ID crop_type = crop_type_for_plant(target);
-                    
-                    Entity crop_entity = {0};
-
-                    if(crop_type == ITEM_NONE_OR_NUM) {
-                        Item crop = create_item(target->item_e.item.type, as_user, server);
-                        auto id = crop.id;
-                        crop = target->item_e.item; // @Hack: Maybe shouldn't call create_item, but only create_id() or whatever we called it.
-                        crop.id = id;
-                        *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
-
-                        target->item_e.plant.grow_progress_on_plant = 0;
-                        target->item_e.plant.t_on_plant = room->t;
-                    }
-                    else {
-                        Item crop = create_item(ITEM_FRUIT, as_user, server);
-                        *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
-                    }
-
-                    Assert(player);
-                    
-                    Entity *crop_added = add_entity(&crop_entity, room);
-                    set_held(crop_added, player, true);
-                    
-                    RS_Log("User %llu Harvested entity %llu (Item %llu:%llu), creating held entity %llu (Item %llu:%llu)\n", as_user,
-                           target->id, target->item_e.item.id.origin, target->item_e.item.id.number,
-                           crop_added->id, crop_added->item_e.item.id.origin, crop_added->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
-                    return true; 
-                } break;
-            
-                case ENTITY_ACT_WATER: {
-                    Assert(as_user != NO_USER);
-                    Assert(target->type == ENTITY_ITEM);
-                    auto *item_e = &target->item_e;
-
-                    Assert(target->item_e.item.type == ITEM_APPLE_TREE ||
-                           target->item_e.item.type == ITEM_WHEAT);
-                    auto *plant_e = &target->item_e.plant;
-
-                    Assert(player);
-                    Assert(player->holding != NO_ENTITY);
-            
-                    auto *water_container = find_entity(player->holding, room);
-                    Assert(water_container);
-                    Assert(water_container->type == ENTITY_ITEM);
-                    
-                    Assert(item_types[water_container->item_e.item.type].container_forms & SUBST_LIQUID);
-                    auto *c = &water_container->item_e.item.container;
-
-                    Assert(c->amount == 0 || c->substance.form == SUBST_LIQUID);
-
-                    auto *water_level = &c->amount;
-                    if(c->substance.liquid.type == LQ_WATER && *water_level >= 2) // @Norelease @Volatile: define constant somewhere. We have it in entity_action_predicted_possible and perform_entity_action_if_possible.
-                    {
-                        plant_e->grow_progress_on_plant += 0.05f;
-                        *water_level -= 2;
-
-                        room->did_change = true;
-                        return true;
-                    }
-                    return false;
-            
-                } break;
-
-                case ENTITY_ACT_SET_POWER_MODE: {
-                    Assert(target->type == ENTITY_ITEM);
-            
-                    Assert(target->item_e.item.type == ITEM_MACHINE);
-                    auto *machine = &target->item_e.machine;
-            
-                    if(entity_action->set_power_mode.set_to_on) {
-                        Assert(machine->stop_t >= machine->start_t);
-                        machine->start_t = room->t;
-                    } else {
-                        Assert(machine->start_t > machine->stop_t);
-                        machine->stop_t = room->t;
-                    }
-
-                    room->did_change = true;
-                    return true;
-                } break;
-
-                case ENTITY_ACT_CHESS: {
-                    auto *chess_action = &entity_action->chess;
-            
-                    Assert(target->type == ENTITY_ITEM);
-                    Assert(target->item_e.item.type == ITEM_CHESS_BOARD);
-                    auto *board = &target->item_e.chess_board;
-
-                    if(perform_chess_action_if_possible(chess_action, player_state.user_id, board)) {    
-                        room->did_change = true;
-                        return true;
-                    }
-                    return false;
-                } break;
-
-                case ENTITY_ACT_SIT_OR_UNSIT: {
-                    auto *sit = &entity_action->sit_or_unsit;
-                    
-                    Assert(target->type == ENTITY_ITEM);
-                    Assert(target->item_e.item.type == ITEM_CHAIR);
-
-                    if(sit->unsit) {
-                        Assert(player->player_e.is_on == target->id &&
-                               !player->player_e.laying_down_instead_of_sitting);
-                        unlock_item_entity(target, player->id, room);
-                        player->player_e.is_on = NO_ENTITY;                        
-                    } else {
-                        Assert(player->player_e.is_on != target->id);
-                        lock_item_entity(target, player->id);
-                        
-                        player->player_e.is_on = target->id;
-                        player->player_e.laying_down_instead_of_sitting = false;
-                    }
-
-                    room->did_change = true;                    
-                    return true;
-
-                } break;
-
-                case ENTITY_ACT_SLEEP: {
-                    
-                    Assert(target->type == ENTITY_ITEM);
-                    Assert(target->item_e.item.type == ITEM_BED);
-
-                    Assert(player->player_e.is_on != target->id);
-                    lock_item_entity(target, player->id);
-
-                    player->player_e.is_on = target->id;
-                    player->player_e.laying_down_instead_of_sitting = true;
-
-                    impact_need(NEED_SLEEP, sleep_action_sleep_need_speed_change, player, room);
-
-                    return true;
-
-                } break;
-                    
-                case ENTITY_ACT_USE_TOILET: {
-                    
-                    Assert(target->type == ENTITY_ITEM);
-                    Assert(target->item_e.item.type == ITEM_TOILET);
-
-                    Assert(player->player_e.is_on != target->id);
-                    lock_item_entity(target, player->id);
-
-                    player->player_e.is_on = target->id;
-                    player->player_e.laying_down_instead_of_sitting = false;
-
-                    float bladder = need_at_time_for_player(NEED_BLADDER, room->t, player);
-                    float bowel   = need_at_time_for_player(NEED_BOWEL,   room->t, player);
-                    
-                    if(bladder <= need_limits[NEED_BLADDER]) {
-                        impact_need(NEED_BLADDER, use_toilet_action_bladder_need_speed_change, player, room);
-                        action->entity.action.use_toilet.impacting_bladder = true;
-                    } else {
-                        action->entity.action.use_toilet.impacting_bladder = false;
-                    }
-                    
-                    if(bowel <= need_limits[NEED_BOWEL]) {
-                        impact_need(NEED_BOWEL, use_toilet_action_bowel_need_speed_change, player, room);
-                        action->entity.action.use_toilet.impacting_bowel = true;
-                    } else {
-                        action->entity.action.use_toilet.impacting_bowel = false;
-                    }
-
-                    return true;
-
-                } break;
-    
-                default: Assert(false); return false;
-            }
-    
-        } break;
-
-        case PLAYER_ACT_WALK: {
-            return true;
-        } break;
-
-        case PLAYER_ACT_PUT_DOWN: {
-            auto *x = &action->put_down;
-            
-            auto *held = find_entity(player->holding, room);
-            if(!held) {
-                Assert(false); // This should not happen. Holding relations should be removed when the held entity is removed.
-                player->holding = NO_ENTITY;
-                return true;
-            }
-            
-            Assert(held->held_by == player->id);
-            Assert(held->type == ENTITY_ITEM);
-
-            Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
-            v3   p = x->p; // @Norelease: @Security: Check that this is a valid position (snap to grid? Center on surface? etc)
-            Assert(entity_can_be_at(held, p, q, room->t, room));
-            
-            //--
-            
-            auto &new_supporters = prediction_info.put_down.supporters;
-            
-            held->item_e.p = p;
-            held->item_e.q = q;
-            set_held(held, player, false);
-
-            post_item_entity_move(held, NULL, 0, new_supporters.e, new_supporters.n, room, server);
-                
-            return true;
-            
-        } break;
-
-        default: Assert(false); return true;
-    }
-
-    return false;
+    e->item_e.container.c0 = new_container;
+    e->item_e.container.c1 = new_container;
 }
+
+
 
 // IMPORTANT: This is called both when action->end_t (or action->end_retry_t) is reached,
 //            and when the player wants to cancel it.
 //            But(!!!) not before reach_t is reached.
 bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *room, bool is_retry)
 {
+    auto *player_e = &player->player_e;
+    
     if(action->type != PLAYER_ACT_ENTITY) return true;
-
-    Assert(room->t >= action->reach_t);
 
     // @Cleanup: Move PLACE_IN_INVENTORY entity destruction to end_player_action_if_possible().
     auto *target = find_entity(action->entity.target, room);
@@ -1385,9 +1139,9 @@ bool end_player_action_if_possible(Player_Action *action, Entity *player, Room *
         case ENTITY_ACT_SLEEP:
         case ENTITY_ACT_USE_TOILET: {
             
-            Assert(player->player_e.is_on == target->id);
+            Assert(player_e->is_on == target->id);
             unlock_item_entity(target, player->id, room);
-            player->player_e.is_on = NO_ENTITY;
+            player_e->is_on = NO_ENTITY;
 
             room->did_change = true;
         } break;
@@ -1441,21 +1195,293 @@ bool update_player_action(Player_Action *action, Entity *player, Room *room, Roo
     Assert(player->type == ENTITY_PLAYER);
     auto *player_e = &player->player_e;
 
-    Assert(action->reach_t <= action->end_t);
+    Assert(action->update_t <= action->end_t);
+
+    auto user_id = player->player_e.user_id;
+    Assert(user_id != NO_USER);
         
-    if(doubles_equal(action->reach_t, room->t))
+    if(doubles_equal(action->update_t, room->t))
     {
-        if(!perform_player_action_if_possible(action, player_e->user_id, room, server)) {
+        bool failed = false;
+        //--
+        
+        Action_Prediction_Info prediction_info = {0};
+    
+        // @Robustness: Should we tell player_action_predicted_possible to only return true here if transport_needed == NONE? (This is a variable inside predicted_possible)  -EH, 2021-03-03
+        Player_State player_state = player_state_of(player, room->t, room);
+        if(!player_action_predicted_possible(action, &player_state, room->t, room, NULL, NULL, NULL, &prediction_info)) return false;
+
+        defer(Assert(action->end_t >= action->update_t););
+    
+        switch(action->type) { // @Jai: #complete
+        
+            case PLAYER_ACT_ENTITY: {
+                auto *entity_action = &action->entity.action;
+
+                auto *target = find_entity(action->entity.target, room);
+                if (!target) { failed = true; break; } // This is OK, the entity might have been destroyed. (We should probably stop walking then, but keep this check anyway.)
+                Assert(target->type == ENTITY_ITEM);
+            
+                update_entity_item(target, room->t);
+    
+                switch(entity_action->type) { // @Jai: #complete
+
+                    case ENTITY_ACT_MOVE:
+                    case ENTITY_ACT_PICK_UP: {
+                        switch(action->step) {
+                            case 0: {
+                                pick_up_item_entity(target, player, room, server);
+
+                                // @Continue: Walk to put down location.
+                                //            I think the action update code should be the same as the begin code...
+                                //            Like, begin is just the first update.
+
+                                double path_duration;
+                                if(!player_walk_to({0, 0, 0}, player, room, &path_duration)) { failed = true; break; }
+                                action->update_t = room->t + path_duration; // NOTE: path_duration can be zero here.
+                            } break;
+
+                            case 1: {
+                                place_item_entity_in_inventory(user_id, target, room, server); // @Incomplete
+                                action->end_t = room->t + 1;
+                            } break;
+                        }
+                        action->step++;
+                    
+                    } break;
+        
+                    case ENTITY_ACT_PLACE_IN_INVENTORY: {
+                        bool action_performed = place_item_entity_in_inventory(user_id, target, room, server);
+                        // REMEMBER: e is invalid after this.
+            
+                        if(action_performed) {   
+                            RS_Log("User %llu placed item %llu:%llu (entity %llu) in inventory.\n", user_id, target->item_e.item.id.origin, target->item_e.item.id.number, target->id); // @Jai: Print function for Item_ID struct.
+                        }
+                        else {
+                            failed = true;
+                        }
+                    
+                    } break;
+
+                    case ENTITY_ACT_HARVEST: {
+                        Item_Type_ID crop_type = crop_type_for_plant(target);
+                    
+                        Entity crop_entity = {0};
+
+                        if(crop_type == ITEM_NONE_OR_NUM) {
+                            Item crop = create_item(target->item_e.item.type, user_id, server);
+                            auto id = crop.id;
+                            crop = target->item_e.item; // @Hack: Maybe shouldn't call create_item, but only create_id() or whatever we called it.
+                            crop.id = id;
+                            *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
+
+                            target->item_e.plant.grow_progress_on_plant = 0;
+                            target->item_e.plant.t_on_plant             = room->t;
+                        }
+                        else {
+                            Item crop = create_item(ITEM_FRUIT, user_id, server);
+                            *static_cast<S__Entity *>(&crop_entity) = create_item_entity(&crop, V3_ZERO, Q_IDENTITY, room->t);
+                        }
+                    
+                        Entity *crop_added = add_entity(&crop_entity, room);
+                        set_held(crop_added, player, true);
+                    
+                        RS_Log("User %llu Harvested entity %llu (Item %llu:%llu), creating held entity %llu (Item %llu:%llu)\n", user_id,
+                               target->id, target->item_e.item.id.origin, target->item_e.item.id.number,
+                               crop_added->id, crop_added->item_e.item.id.origin, crop_added->item_e.item.id.number); // @Jai: Print function for Item_ID struct.
+                    } break;
+            
+                    case ENTITY_ACT_WATER: {
+                        auto *info = &prediction_info.water;
+                    
+                        Assert(player->holding != NO_ENTITY);
+
+                        auto *water_container_entity = find_entity(player->holding, room);
+                        update_entity_item(water_container_entity, room->t);
+                    
+                        Assert(can_hold_substance(water_container_entity, SUBST_LIQUID));
+                        auto water_container = container_of_entity(water_container_entity, SUBST_LIQUID);
+
+                        water_container.amount                      -= info->consumed_water;
+                        target->item_e.plant.grow_progress_on_plant += info->added_grow_progress;
+                    
+                        set_entity_container(water_container_entity, water_container, room->t);
+
+                        room->did_change = true;
+                    
+                    } break;
+
+                    case ENTITY_ACT_SET_POWER_MODE: {
+                        auto *machine = &target->item_e.machine;
+            
+                        if(entity_action->set_power_mode.set_to_on) machine->start_t = room->t;
+                        else                                        machine->stop_t  = room->t;
+
+                        room->did_change = true;
+                    
+                    } break;
+
+                    case ENTITY_ACT_CHESS: {
+                        auto *chess_action = &entity_action->chess;
+            
+                        Assert(target->type == ENTITY_ITEM);
+                        Assert(target->item_e.item.type == ITEM_CHESS_BOARD);
+                        auto *board = &target->item_e.chess_board;
+
+                        // @Speed: Checking possibility twice, once here and once in entity_action_predicted_possible.
+                        if(perform_chess_action_if_possible(chess_action, player_state.user_id, board)) {    
+                            room->did_change = true;
+                        }
+                        else failed = true;
+                    } break;
+
+                    case ENTITY_ACT_SIT_OR_UNSIT: {
+                        auto *sit = &entity_action->sit_or_unsit;
+
+                        if(sit->unsit) {
+                            Assert(player_e->is_on == target->id &&
+                                   !player_e->laying_down_instead_of_sitting);
+                            unlock_item_entity(target, player->id, room);
+                            player_e->is_on = NO_ENTITY;                        
+                        } else {
+                            Assert(player_e->is_on != target->id);
+                            lock_item_entity(target, player->id);
+                        
+                            player_e->is_on = target->id;
+                            player_e->laying_down_instead_of_sitting = false;
+                        }
+
+                        room->did_change = true;                    
+
+                    } break;
+
+                    case ENTITY_ACT_SLEEP: {
+                        Assert(player_e->is_on != target->id);
+                        lock_item_entity(target, player->id);
+
+                        player_e->is_on = target->id;
+                        player_e->laying_down_instead_of_sitting = true;
+
+                        impact_need(NEED_SLEEP, sleep_action_sleep_need_speed_change, player, room);
+
+                    } break;
+                    
+                    case ENTITY_ACT_USE_TOILET: {
+                        auto *info = &prediction_info.use_toilet;
+
+                        Assert(player_e->is_on != target->id);
+                        lock_item_entity(target, player->id);
+
+                        player_e->is_on = target->id;
+                        player_e->laying_down_instead_of_sitting = false;
+
+                        float bladder = need_at_time_for_player(NEED_BLADDER, room->t, player);
+                        float bowel   = need_at_time_for_player(NEED_BOWEL,   room->t, player);
+
+                        auto *use_toilet = &action->entity.action.use_toilet;
+                        use_toilet->impacting_bladder = info->impact_bladder;
+                        use_toilet->impacting_bowel   = info->impact_bowel;
+
+                        if(use_toilet->impacting_bladder) impact_need(NEED_BLADDER, use_toilet_action_bladder_need_speed_change, player, room);
+                        if(use_toilet->impacting_bowel)   impact_need(NEED_BOWEL,   use_toilet_action_bowel_need_speed_change,   player, room);
+
+                    } break;
+
+                    case ENTITY_ACT_PLANT:
+                    {
+                        auto *x    = &entity_action->plant;
+                        auto *info = &prediction_info.plant;
+            
+                        auto *held = find_entity(player->holding, room);
+                        if(!held) {
+                            Assert(false); // This should not happen. Holding relations should be removed when the held entity is removed.
+                            player->holding = NO_ENTITY;
+                            break;
+                        }
+            
+                        Assert(held->held_by == player->id);
+                        Assert(held->type    == ENTITY_ITEM);
+
+                        auto *item_e = &held->item_e;
+                        auto *item   = &item_e->item;
+                        update_entity_item(held, room->t);
+                    
+                        Assert(item_types[item->type].container_forms & SUBST_NUGGET);
+
+                        auto *container = &item->container;
+
+                        Item plant = create_item(info->plant_type, item->owner, server);
+
+                        Quat q = Q_IDENTITY; // @Norelease: @Security: Snap to 90 degrees
+                        v3   p = x->tp;      // @Norelease: @Security: Check that this is a valid position (snap to grid? Center on surface? etc)
+                    
+                        do_create_item_entity_at_tp(&plant, p, q, NULL, 0, room, server);
+                    
+                        auto new_container = *container;
+                        Assert(new_container.amount > 0);
+                        new_container.amount -= 1;
+                        set_entity_container(held, new_container, room->t);
+
+                        room->did_change = true;
+                    
+                    } break;
+                    
+    
+                    default: Assert(false); failed = true; break;
+                }
+    
+            } break;
+
+            case PLAYER_ACT_WALK: {
+            } break;
+
+            case PLAYER_ACT_PUT_DOWN: {
+                auto *x = &action->put_down;
+
+                auto *info = &prediction_info.put_down;
+            
+                auto *held = find_entity(player->holding, room);
+                if(!held) {
+                    Assert(false); // This should not happen. Holding relations should be removed when the held entity is removed.
+                    player->holding = NO_ENTITY;
+                    break;
+                }
+
+                Assert(held->held_by == player->id);
+                Assert(held->type    == ENTITY_ITEM);
+
+                Quat q = x->q; // @Norelease: @Security: Snap to 90 degrees
+                v3   p = x->p; // @Norelease: @Security: Check that this is a valid position (snap to grid? Center on surface? etc)
+                Assert(entity_can_be_at(held, p, q, room->t, room));
+            
+                //--
+            
+                auto &new_supporters = info->supporters;
+            
+                held->item_e.p = p;
+                held->item_e.q = q;
+                set_held(held, player, false);
+
+                post_item_entity_move(held, NULL, 0, new_supporters.e, new_supporters.n, room, server);
+            } break;
+
+            default: Assert(false); break;
+        }
+
+        // ------------------------
+        if(failed) {
             return true;
         }
     }
 
-	bool time_for_first_end_try = false;
-	bool time_for_end_retry     = false;
-	if (room->t >= action->end_t) {
-		if(action->end_retry_t <= 0) time_for_first_end_try        = true;
-		else if(room->t >= action->end_retry_t) time_for_end_retry = true;
-	}
+    if(action->end_t < action->update_t) return false;
+
+    bool time_for_first_end_try = false;
+    bool time_for_end_retry     = false;
+    if (room->t >= action->end_t) {
+        if(action->end_retry_t <= 0) time_for_first_end_try        = true;
+        else if(room->t >= action->end_retry_t) time_for_end_retry = true;
+    }
     
     if(time_for_first_end_try || time_for_end_retry) {
         if(!end_player_action_if_possible(action, player, room, time_for_end_retry)) {
@@ -1471,7 +1497,7 @@ bool update_player_action(Player_Action *action, Entity *player, Room *room, Roo
     }
 
     double next_update_t;
-    if (room->t < action->reach_t)    next_update_t = action->reach_t;
+    if(room->t < action->update_t)    next_update_t = action->update_t;
     else if (room->t < action->end_t) next_update_t = action->end_t;
     else                              next_update_t = action->end_retry_t;
     
@@ -1506,29 +1532,36 @@ bool begin_performing_first_player_action(Entity *e, Room *room, Room_Server *se
     if (path.n == 0) player_stop_walking(e, room);
     else             player_set_walk_path(path.e, path.n, e, room);
 
-    action->reach_t = room->t + path_duration; // NOTE: path_duration can be zero here.
+    action->reach_t  = room->t + path_duration; // NOTE: path_duration can be zero here.
+    action->update_t = action->reach_t;
     double action_duration = player_action_duration(action, action->reach_t, e);
     action->end_t   = action->reach_t + action_duration;
 
-    if(action->reach_t < room->t) {
+    if(action->update_t < room->t) {
         Assert(false);
         return false;
     }
     
-    if(doubles_equal(action->reach_t, room->t))
-    {
-        if(update_player_action(action, e, room, server)) {
-            Assert(player_e->action_queue_length > 0);
-            dequeue_player_action(0, e, room, server);
-        }
-    
-        if(action->reach_t < room->t) {
-            Assert(false);
-            return false;
-        }
+    if(update_player_action(action, e, room, server)) {
+        Assert(player_e->action_queue_length > 0);
+        dequeue_player_action(0, e, room, server);
+    }
+    else if(action->update_t < room->t) {
+        Assert(false);
+        return false;
     }
 
     return true;
+}
+
+void begin_or_dequeue_first_player_action(Entity *e, Room *room, Room_Server *server)
+{
+    if(!begin_performing_first_player_action(e, room, server))
+    {
+        // Recursive. We want to continue dequeueing until an action is successfully
+        // started, or the queue is empty.
+        dequeue_player_action(0, e, room, server);
+    }
 }
 
 void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server)
@@ -1540,27 +1573,32 @@ void dequeue_player_action(int index, Entity *e, Room *room, Room_Server *server
     Assert(index < player_e->action_queue_length);
 
     for(int i = index; i < player_e->action_queue_length-1; i++)
-        player_e->action_queue[i] = player_e->action_queue[i+1];    
+        player_e->action_queue[i] = player_e->action_queue[i+1];
     for(int i = index; i < player_e->action_queue_length-1; i++)
         player_e->action_ids[i] = player_e->action_ids[i+1];
+    
+    for(int i = index+1; i < player_e->action_queue_length+1; i++) {
+        if(player_e->action_queue_pauses[i]) {
+            player_e->action_queue_pauses[i-1] = true;
+            player_e->action_queue_pauses[i] = false;
+        }
+    }
+    
     player_e->action_queue_length--;
 
     if(index == 0 && player_e->action_queue_length > 0)
     {
-        // If we dequeued the first action, we need to start the new first one.
-        if(!begin_performing_first_player_action(e, room, server))
-        {
-            // Recursive. We want to continue dequeueing until an action is successfully
-            // started, or the queue is empty.
-            dequeue_player_action(0, e, room, server);
+        if(!player_e->action_queue_pauses[0]) {
+            // If we dequeued the first action, we need to start the new first one.
+            begin_or_dequeue_first_player_action(e, room, server);
         }
     }
     
     room->did_change = true;
 }
 
-// NOTE: Will apply the action to player_state. ((Is this true??))
-bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server, int depth = 0)
+// NOTE: *_id is only valid if function returns true.
+bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *player_state, Room *room, Room_Server *server, Player_Action_ID *_id, int depth = 0)
 {
     Assert(e->type == ENTITY_PLAYER);
     auto *player_e = &e->player_e;
@@ -1570,33 +1608,65 @@ bool enqueue_player_action_(Entity *e, Player_Action *action, Player_State *play
     {
         Player_Action act;
         if(!get(action_needed_before, &act)) return false;
-        
-        if(!enqueue_player_action_(e, &act, player_state, room, server, depth + 1)) return false;    
+
+        Player_Action_ID _unused_;
+        if(!enqueue_player_action_(e, &act, player_state, room, server, &_unused_, depth + 1)) return false;    
     }
+
+    auto &queue        = player_e->action_queue;
+    auto &queue_length = player_e->action_queue_length;
     
-    if(player_e->action_queue_length >= ARRLEN(player_e->action_queue) - depth)
-        return false;
+    if(queue_length >= ARRLEN(queue) - depth) return false;
 
-    bool first_in_queue = (player_e->action_queue_length == 0);
+    bool do_enqueue = true;
 
-    auto ix = player_e->action_queue_length++;
-    player_e->action_queue[ix] = *action;
-    player_e->action_ids  [ix] = room->next_player_action_id++;
-    room->did_change = true;
+    if(queue_length > 0 && action->type == PLAYER_ACT_PUT_DOWN) {
+        auto *last = &queue[queue_length-1];
+        if(last->type == PLAYER_ACT_ENTITY && last->entity.action.type == ENTITY_ACT_PICK_UP) {
+            // Merge PICK_UP+PUT_DOWN = MOVE
+            last->entity.action.type   = ENTITY_ACT_MOVE;
+            Zero(last->entity.action.move);
+            last->entity.action.move.p = action->put_down.p;
+            last->entity.action.move.q = action->put_down.q;
 
-    if(first_in_queue) {
-        if(!begin_performing_first_player_action(e, room, server)) {
-            dequeue_player_action(0, e, room, server);
-            return false;
+            do_enqueue = false;
+            *_id = player_e->action_ids[queue_length-1];
         }
     }
 
+    if(do_enqueue) {
+        bool first_in_queue = (queue_length == 0);
+    
+        auto id = (room->next_player_action_id_minus_one++) + 1;
+    
+        auto ix = queue_length++;
+        player_e->action_queue[ix] = *action;
+        player_e->action_ids  [ix] = id;
+        player_e->action_queue_pauses[ix+1] = false;
+        room->did_change = true;
+
+        if(first_in_queue) {
+            if(!player_e->action_queue_pauses[0]) {
+                if(!begin_performing_first_player_action(e, room, server)) {
+                    dequeue_player_action(0, e, room, server);
+                    return false;
+                }
+            }
+        }
+        
+        *_id = id;
+    }
+
+    // For when we merge with the previous action, for example PICK_UP+PUT_DOWN = MOVE,
+    // we assume here that applying the new (PUT_DOWN) action to the player_state
+    // is the same thing as undoing the already queued action (PICK_UP) and then applying
+    // the merged aciton (MOVE).
     apply_actions_to_player_state(player_state, action, 1, room->t, room, NULL);
 
     return true;
 }
 
-bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Server *server)
+bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Server *server, Player_Action_ID *_id)
 {
     Assert(e->type == ENTITY_PLAYER);
     auto *player_e = &e->player_e;
@@ -1605,7 +1675,7 @@ bool enqueue_player_action(Entity *e, Player_Action *action, Room *room, Room_Se
     Player_State player_state = player_state_of(e, room->t, room);
     apply_actions_to_player_state(&player_state, player_e->action_queue, player_e->action_queue_length, room->t, room, NULL);
     
-    return enqueue_player_action_(e, action, &player_state, room, server);
+    return enqueue_player_action_(e, action, &player_state, room, server, _id);
 }
 
 
@@ -1650,6 +1720,7 @@ void update_entity(Entity *e, Room *room, Room_Server *server)
             auto *player_e = &e->player_e;
 
             if(player_e->action_queue_length == 0) break;
+            if(player_e->action_queue_pauses[0]) break;
             auto *action = &player_e->action_queue[0];
 
             if(update_player_action(action, e, room, server)) {
@@ -1696,6 +1767,8 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
             auto *player_e = &e->player_e;
 
             if(player_e->action_queue_length == 0) break;
+            if(player_e->action_queue_pauses[0]) break;
+            
             auto *action = &player_e->action_queue[0];
 
             if(action->end_t <= room->t && action->end_retry_t <= room->t) {
@@ -1706,9 +1779,9 @@ double max_update_step_delta_time_for_entity(Entity *e, Room *room)
 
 
             double next_update_t;
-            if (room->t < action->reach_t)    next_update_t = action->reach_t;
-            else if (room->t < action->end_t) next_update_t = action->end_t;
-            else                              next_update_t = action->end_retry_t;
+            if      (room->t < action->update_t) next_update_t = action->update_t;
+            else if (room->t < action->end_t)    next_update_t = action->end_t;
+            else                                 next_update_t = action->end_retry_t;
 
             result = min(next_update_t - room->t, result);
             
@@ -1732,7 +1805,7 @@ double max_update_step_delta_time_for_room(Room *room)
         auto max_dt = max_update_step_delta_time_for_entity(&room->entities[i], room);
         
         if(max_dt > 0 && !doubles_equal(max_dt, 0)) {
-            if(max_dt < result) result = max_dt;
+            if(max_dt < result) result = max_dt;
         }
     }
 
@@ -1809,6 +1882,9 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 {
     // NOTE: RSB_HELLO and RSB_GOODBYE is handled somewhere else.
 
+    if(header.id != 0)
+        Debug_Print("Handling RSB with ID = %u.\n", header.id);
+
     auto *node = &client->node;
     
     switch(header.type) {
@@ -1832,7 +1908,8 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     action.type = PLAYER_ACT_WALK;
                     action.walk.p1 = p1;
 
-                    if(enqueue_player_action(e, &action, room, server)) {
+                    Player_Action_ID _unused_;
+                    if(enqueue_player_action(e, &action, room, server, &_unused_)) {
 
                     }
                 }
@@ -1848,6 +1925,8 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             // @Hack: We don't want to enqueue PLACE_FROM_INVENTORY. It's an instant action.
             if(player_action->type == PLAYER_ACT_PLACE_FROM_INVENTORY)
             {
+                bool action_success = false;
+                
                 auto *x = &player_action->place_from_inventory;
 
                 Item_ID item_id = x->item;
@@ -1887,6 +1966,7 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
 
                         do_create_item_entity(&item, p, q, supporters.e, supporters.n, room, server);
                         
+                        action_success = true;
                     }
                     else {
                         // Do abort //
@@ -1898,6 +1978,9 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
                     }
                     
                 }
+
+                RCB_Packet_Result_Payload payload = { 0 };
+                RCB_Packet(client, PACKET_RESULT, header.type, header.id, action_success, opt(payload));
                 
                 break;
             }
@@ -1912,10 +1995,17 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             Assert(player);
             
             auto *player_e = &player->player_e;
-            
-            if(enqueue_player_action(player, player_action, room, server)) {
-                
+
+            Player_Action_ID action_id;
+            bool enqueue_success = enqueue_player_action(player, player_action, room, server, &action_id);
+
+            RCB_Packet_Result_Payload payload = {0};
+            if(enqueue_success) {
+                payload.enqueued_action_id = action_id;
             }
+            RCB_Packet(client, PACKET_RESULT, header.type, header.id, enqueue_success, opt(payload));
+            
+            return (client != NULL);
             
         } break;
 
@@ -1962,6 +2052,70 @@ bool read_and_handle_rsb_packet(RS_Client *client, RSB_Packet_Header header, Roo
             request_player_action_dequeue(ix, player, room, server);
             
         } break;
+
+        case RSB_PLAYER_ACTION_QUEUE_PAUSE: {
+            auto *p = &header.player_action_queue_pause;
+
+            Fail_If_True(client->user == NO_USER);
+
+            Entity *player = find_player_entity(client->user, room);
+            Fail_If_True(!player);
+            
+            auto *player_e = &player->player_e;
+
+            
+            int ix = -1;
+            if(p->action_after == 0) {
+                ix = player_e->action_queue_length;
+            }
+            else {    
+                for(int i = 0; i < ARRLEN(player_e->action_ids); i++) {
+                    if(player_e->action_ids[i] == p->action_after) {
+                        ix = i;
+                        break;
+                    }
+                }
+            }
+
+            if(ix == -1) {
+                // This is totally fine, the action might have been removed since the player sent the request.
+                RS_Log("Tried to add a pause before action with ID = %d, but that action does not exist.\n", p->action_after);
+                return true;
+            }
+
+            Assert(ix >= 0 && ix < ARRLEN(player_e->action_queue_pauses));
+            if(player_e->action_queue_pauses[ix] == !p->remove) return true;
+
+            player_e->action_queue_pauses[ix] = !p->remove;
+            room->did_change = true;
+
+            if(p->remove && ix == 0 && player_e->action_queue_length > 0) {
+                begin_or_dequeue_first_player_action(player, room, server);
+            }
+
+            return true;
+            
+        } break;
+
+
+            // @Norelease @Security! Check that the client is a developer.
+        case RSB_DEVELOPER: {
+            auto *p = &header.developer;
+            switch(p->type) {
+                case RSB_DEV_ADD_ENTITY: {
+                    auto *x = &p->add_entity;
+                    Entity e = {0};
+                    *static_cast<S__Entity *>(&e) = x->entity;
+                    add_entity(&e, room);
+                    update_walk_map_and_paths(room, server);
+                } break;
+
+                default: Assert(false); break;
+            }
+
+            return true;
+        } break;
+            
             
         default: {
             RS_Log("Client (socket = %lld) sent invalid RSB packet type (%u).\n", client->node.socket.handle, header.type);

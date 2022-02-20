@@ -18,17 +18,17 @@
     _VERTEX_OBJECT_(VD_WORLD_TRANSLUCENT, &gfx->world_render_buffer.translucent, Transform_Matrix, Screen_Z)
 
 // UI
-#define _OPAQUE_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z)                 \
-    _VERTEX_OBJECT_(VD_UI_OPAQUE, &gfx->ui_render_buffer.opaque, Transform_Matrix, 0)
+#define _OPAQUE_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z, Scissor)          \
+    _VERTEX_OBJECT_(VD_UI_OPAQUE, &gfx->ui_render_buffer.opaque, Transform_Matrix, 0, C_WHITE, Scissor)
 
-#define _TRANSLUCENT_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z) \
-    _VERTEX_OBJECT_(VD_UI_TRANSLUCENT, &gfx->ui_render_buffer.translucent, Transform_Matrix, Screen_Z)
+#define _TRANSLUCENT_UI_VERTEX_OBJECT_(Transform_Matrix, Screen_Z, Scissor)     \
+    _VERTEX_OBJECT_(VD_UI_TRANSLUCENT, &gfx->ui_render_buffer.translucent, Transform_Matrix, Screen_Z, C_WHITE, Scissor)
 
 #define _OPAQUE_UI_() \
-    _OPAQUE_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d)
+    _OPAQUE_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d, (gfx->scissor.size > 0) ? opt(current(gfx->scissor)) : opt_empty<Rect>())
 
 #define _TRANSLUCENT_UI_() \
-    _TRANSLUCENT_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d)
+    _TRANSLUCENT_UI_VERTEX_OBJECT_(M_IDENTITY, gfx->z_for_2d, (gfx->scissor.size > 0) ? opt(current(gfx->scissor)) : opt_empty<Rect>())
 
 
 
@@ -63,7 +63,7 @@ void pop_vertex_destination(Graphics *gfx)
 }
 
 
-void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, float screen_z = 0, v4 color = C_WHITE)
+void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, float screen_z = 0, v4 color = C_WHITE, Optional<Rect> scissor = {0})
 {
     Assert(!buffer->current_vertex_object_began);
 
@@ -76,9 +76,11 @@ void begin_vertex_render_object(Render_Object_Buffer *buffer, m4x4 transform, fl
     
     obj.transform = transform;
     obj.color     = color;
+
+    obj.scissor = scissor;
     
     obj.vertex0   = buffer->vertices.n;
-    
+
     buffer->current_vertex_object_began = true;
 }
 
@@ -104,7 +106,7 @@ void draw_vertex_buffer(Vertex_Buffer<A> *buffer, bool do_dynamic_draw_now, GPU_
 {
     vertex1 = min(buffer->n, vertex1);
     Assert(vertex0 < vertex1);
-
+    
     triangles_now(buffer->p       + vertex0,
                   buffer->uv      + vertex0,
                   buffer->c       + vertex0,
@@ -134,11 +136,19 @@ void draw_vao(VAO *vao, Graphics *gfx)
     unbind_vao(gfx);
 }
 
-void set_gpu_uniforms_for_render_object(Render_Object *obj, Graphics *gfx)
+void set_gpu_properties_for_render_object(Render_Object *obj, Graphics *gfx)
 {
+    if(obj->scissor.present) {
+        auto sc = obj->scissor.value;
+        gpu_set_scissor(sc.x, sc.y, sc.w, sc.h);
+    } else {
+        gpu_disable_scissor();
+    }
+    
     auto *vs = &gfx->vertex_shader;
-    gpu_set_uniform_m4x4(vs->transform_uniform,        obj->transform);
-    gpu_set_uniform_v4  (vs->color_multiplier_uniform, obj->color);
+    gpu_set_uniform_m4x4 (vs->transform_uniform,        obj->transform);
+    gpu_set_uniform_v4   (vs->color_multiplier_uniform, obj->color);
+    gpu_set_uniform_float(vs->desaturation_uniform,     obj->desaturation);
 
     auto *fs = &gfx->fragment_shader;
     gpu_set_uniform_v3(fs->lightbox_center_uniform,   obj->lightbox_center);
@@ -152,7 +162,7 @@ void draw_vertex_render_object(Render_Object *obj, Vertex_Buffer<A> *vertex_buff
 {
     Assert(obj->type == VERTEX_OBJECT);
 
-    set_gpu_uniforms_for_render_object(obj, gfx);
+    set_gpu_properties_for_render_object(obj, gfx);
     
     auto vertex0 = obj->vertex0;
     auto num_vertices = (obj->vertex1 - vertex0);
@@ -175,7 +185,7 @@ void draw_render_object(Render_Object *obj, Render_Object_Buffer *object_buffer,
         } break;
 
         case MESH_OBJECT: {
-            set_gpu_uniforms_for_render_object(obj, gfx);
+            set_gpu_properties_for_render_object(obj, gfx);
             draw_vao(obj->mesh_vao, gfx);            
         } break;
 
@@ -190,11 +200,14 @@ void reset_render_object_buffer(Render_Object_Buffer *buffer)
     buffer->objects.n = 0;
 }
 
-bool render_object_uniforms_equal(Render_Object *a, Render_Object *b)
+bool render_object_properties_equal(Render_Object *a, Render_Object *b)
 {
     // @Speed.....
-    if(a->transform       != b->transform) return false;
-    if(a->color           != b->color)     return false;
+    if(a->transform != b->transform) return false;
+    if(a->color     != b->color)     return false;
+    if(a->scissor   != b->scissor)   return false;
+    
+    if(!floats_equal(a->desaturation, b->desaturation)) return false;
     
     if(a->lightbox_center   != b->lightbox_center)   return false;
     if(a->lightbox_radiuses != b->lightbox_radiuses) return false;
@@ -295,7 +308,7 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
 
                     if(obj->type != VERTEX_OBJECT) break;                
                     if(obj_ix > first_ix) {
-                        if(!render_object_uniforms_equal(obj, &temporary_object)) break;
+                        if(!render_object_properties_equal(obj, &temporary_object)) break;
                     }
                
                     auto v0 = obj->vertex0;
@@ -336,7 +349,7 @@ void draw_render_object_buffer(Render_Object_Buffer *buffer, bool do_sort, Graph
                     if(obj->type != VERTEX_OBJECT) break;
                     if(obj_ix > first_ix) {
                         if(obj->vertex0 != temporary_object.vertex1) break;
-                        if(!render_object_uniforms_equal(obj, &temporary_object)) break;
+                        if(!render_object_properties_equal(obj, &temporary_object)) break;
                     }
 
                     temporary_object.vertex1 = obj->vertex1;

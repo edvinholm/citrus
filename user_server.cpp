@@ -115,6 +115,11 @@ void create_dummy_users(User_Server *server, Allocator_ID allocator)
                     
                     slot.item.container.substance.nugget.type = (Nugget_Type)random_int(0, NUGGET_NONE_OR_NUM);
                     if(slot.item.container.substance.nugget.type != NUGGET_NONE_OR_NUM) {
+
+                        if(slot.item.container.substance.nugget.type == NUGGET_SEEDS) {
+                            slot.item.container.substance.nugget.seed_type = (Seed_Type)random_int(0, SEED_NONE_OR_NUM-1);
+                        }
+                        
                         float r = random_float();
                         if(r < .25) {
                             slot.item.container.amount = 0;

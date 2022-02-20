@@ -45,19 +45,32 @@ struct Item_UI
 struct Client_UI
 {
     bool room_window_open;
+    bool tools_window_open;
     bool user_window_open;
     bool market_window_open;
     bool needs_window_open;
 
     Market_UI market;
     Item_UI   item;
+
+    // TOOLS //
+    Tool_ID current_tool;
+    Tool_ID last_tool;
+    double tool_switch_t;
+    Entity_Menu   entity_menu;
+    Planting_Tool planting_tool;
+
+#if DEVELOPER
+    Room_Editor   room_editor;
+#endif
+    // ///// //
     
 #if DEVELOPER
     Developer_UI dev;
 #endif
 
     Bottom_Panel_Tab open_bottom_panel_tab;
-
+    
     UI_Dock dock;
 };
 
@@ -118,3 +131,11 @@ struct Client
 User_ID current_user_id(Client *client);
 User *current_user(Client *client);
 Entity *find_current_player_entity(Client *client);
+
+
+bool predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client, Action_Prediction_Info *_prediction_info = NULL);
+bool request_if_predicted_possible(Player_Action *action, double world_t, Player_State player_state, Client *client);
+Pending_Player_Action *request(Entity_Action *action, Entity_ID target, Client *client);
+bool predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Player_State player_state, Client *client);
+bool request_if_predicted_possible(Entity_Action *action, Entity_ID target, double world_t, Player_State player_state, Client *client);
+

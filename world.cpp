@@ -85,23 +85,51 @@ double world_time_for_room(Room *room, double system_time)
 }
 
 
-Mesh_ID mesh_for_entity(Entity *e)
+Mesh_ID mesh_for_entity(Entity *e, double world_t)
 {
-    if(e->type != ENTITY_ITEM) return MESH_NONE_OR_NUM;
+    if(e->type == ENTITY_ITEM) {
+        switch(e->item_e.item.type) {
+            case ITEM_BED:          return MESH_BED;
+            case ITEM_CHAIR:        return MESH_CHAIR;
+            case ITEM_BLENDER:      return MESH_BLENDER;
+            case ITEM_TABLE:        return MESH_TABLE;
+            case ITEM_BARREL:       return MESH_BARREL;
+            case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
+            case ITEM_STOVE:        return MESH_STOVE;
+            case ITEM_GRINDER:      return MESH_GRINDER;
+            case ITEM_TOILET:       return MESH_TOILET;
 
-    switch(e->item_e.item.type) {
-        case ITEM_BED:          return MESH_BED;
-        case ITEM_CHAIR:        return MESH_CHAIR;
-        case ITEM_BLENDER:      return MESH_BLENDER;
-        case ITEM_TABLE:        return MESH_TABLE;
-        case ITEM_BARREL:       return MESH_BARREL;
-        case ITEM_FILTER_PRESS: return MESH_FILTER_PRESS;
-        case ITEM_STOVE:        return MESH_STOVE;
-        case ITEM_GRINDER:      return MESH_GRINDER;
-        case ITEM_TOILET:       return MESH_TOILET;
+            case ITEM_APPLE_TREE: {
+                update_entity_item(e, world_t);
+                auto g = e->item_e.item.plant.grow_progress;
+                if     (g >= 1.0f) return MESH_APPLE_TREE_100;
+                else if(g >= .75f) return MESH_APPLE_TREE_75;
+                else if(g >= .50f) return MESH_APPLE_TREE_50;
+                else if(g >= .25f) return MESH_APPLE_TREE_25;
+                else if(g >= .10f) return MESH_APPLE_TREE_10;
+                else return MESH_NONE_OR_NUM;
+            } break;
 
-        default: return MESH_NONE_OR_NUM;
+            default: return MESH_NONE_OR_NUM;
+        }
     }
+    else if(e->type == ENTITY_DECOR) {
+        switch(e->decor.type) {
+            case DECOR_FENCE:        return MESH_FENCE;
+            case DECOR_STREET_LIGHT: return MESH_STREET_LIGHT;
+            case DECOR_AWNING:       return MESH_AWNING;
+            case DECOR_FOUNTAIN:     return MESH_FOUNTAIN;
+            case DECOR_DOOR:         return MESH_DOOR;
+            case DECOR_WINDOW:       return MESH_WINDOW;
+            case DECOR_FLOWER_BOX_WALL: return MESH_FLOWER_BOX_WALL;
+                
+            case DECOR_SIGN_CHESS: return MESH_SIGN_CHESS;
+                
+            default: return MESH_NONE_OR_NUM;
+        }
+    }
+
+    return MESH_NONE_OR_NUM;
 }
         
 
@@ -136,7 +164,7 @@ void raycast_against_entities_and_surfaces(Ray ray, Room *room, double world_t, 
                 v3 intersection = bbox_intersection;
                 float ray_t = bbox_ray_t;
        
-                Mesh_ID mesh = mesh_for_entity(e);
+                Mesh_ID mesh = mesh_for_entity(e, world_t);
                 if(mesh != MESH_NONE_OR_NUM) {
                     m4x4 m = rotation_matrix(q) * translation_matrix(p);
                     m4x4 inverse = inverse_of(m);
@@ -402,6 +430,45 @@ Player_State player_state_after_completed_action_queue(Entity *player, double wo
 }
 
 
+String entity_action_label(Entity_Action action)
+{
+    switch(action.type) {
+        case ENTITY_ACT_PICK_UP: return STRING("PICK UP"); break;
+        case ENTITY_ACT_PLACE_IN_INVENTORY: return STRING("TO BACKPACK"); break;
+        case ENTITY_ACT_HARVEST: return STRING("HARVEST"); break;
+        case ENTITY_ACT_SET_POWER_MODE: {
+            auto *x = &action.set_power_mode;
+            if(x->set_to_on) {
+                return STRING("START");
+            } else {
+                return STRING("STOP");
+            }
+        } break;
+        case ENTITY_ACT_WATER:      return STRING("WATER"); break;
+        case ENTITY_ACT_CHESS: {
+            auto *chess_action = &action.chess;
+            switch(chess_action->type) {
+                case CHESS_ACT_MOVE: return STRING("CHESS MOVE"); break;
+                default:             return STRING("CHESS ???"); break;
+            }
+        }
+        case ENTITY_ACT_SIT_OR_UNSIT: {
+            auto *x = &action.sit_or_unsit;
+            if(x->unsit) return STRING("STAND UP");
+            else         return STRING("SIT");
+        } break;
+
+        case ENTITY_ACT_SLEEP:      return STRING("SLEEP"); break;
+        case ENTITY_ACT_USE_TOILET: return STRING("USE");   break;
+
+        default: Assert(false); return STRING("???"); break;
+    }
+
+    Assert(false);
+    return EMPTY_STRING;
+}
+
+
 // IMPORTANT: The *_actions array should be in a valid state before calling this proc!
 template<Allocator_ID A>
 void get_available_actions_for_entity(Entity *e, Player_State *player_state, Array<Entity_Action, A> *_actions, bool *_first_action_is_default = NULL)
@@ -412,8 +479,8 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
     if(e->type != ENTITY_ITEM) return;
 
     Assert(e->type == ENTITY_ITEM);
-    Item *item = &e->item_e.item;
-
+    Item *item      = &e->item_e.item;
+    
     switch(item->type)
     {
         case ITEM_APPLE_TREE:
@@ -480,6 +547,7 @@ void get_available_actions_for_entity(Entity *e, Player_State *player_state, Arr
             first_is_default = true;
         } break;
     }
+    
 
     Entity_Action act_a = {0};
     act_a.type = ENTITY_ACT_PICK_UP;

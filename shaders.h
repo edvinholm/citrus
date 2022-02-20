@@ -22,6 +22,7 @@ struct Vertex_Shader
     
     GPU_Uniform_ID mode_2d_uniform;
     GPU_Uniform_ID color_multiplier_uniform;
+    GPU_Uniform_ID desaturation_uniform;
 
 #if GFX_GL
     union {

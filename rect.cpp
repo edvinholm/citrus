@@ -365,6 +365,16 @@ v2 top_right_of(Rect a)
 
 
 inline
+Rect top_left_of(Rect a, float w, float h)
+{
+    a.y += a.h - h;
+    a.w = w;
+    a.h = h;
+    return a;
+}
+
+
+inline
 Rect top_right_of(Rect a, float w, float h)
 {
     a.x += a.w - w;

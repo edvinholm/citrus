@@ -6,10 +6,10 @@ float random_float()
     return ((float)rand()) / RAND_MAX;
 }
 
-int random_int(int min, int max)
-{
-    float delta = max - min;
-    return round(min + random_float() * delta);
+// @Speed!
+s64 random_int(s64 min, s64 max){
+    double delta = max - min;
+    return round(min + (double)random_float() * delta);
 }
 
 v3 random_point_in_unit_sphere()

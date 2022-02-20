@@ -14,7 +14,7 @@ const   s32 player_entity_hands_zoffs = 2;
 
 // TODO @Robustness, @Norelease: We should be able to skip values here, so ITEM_NONE_OR_NUM would not be guaranteed to be correct.
 enum Item_Type_ID
-{
+{   
     ITEM_CHAIR,
     ITEM_BED,
     ITEM_TABLE,
@@ -90,14 +90,26 @@ enum Entity_Action_Type
     ENTITY_ACT_SLEEP = 8,
 
     // Toilet
-    ENTITY_ACT_USE_TOILET = 9
+    ENTITY_ACT_USE_TOILET = 9,
+
+    // Seed containers
+    ENTITY_ACT_PLANT = 10,
+
+
+    
+    ENTITY_ACT_MOVE = 11, // This is the same as PICK_UP + PUT_DOWN.
 };
 
 struct Entity_Action
 {
     Entity_Action_Type type;
-
+    
     union {
+        struct {
+            v3 p;
+            Quat q;
+        } move;
+        
         struct {
             bool set_to_on;
         } set_power_mode;
@@ -112,6 +124,10 @@ struct Entity_Action
             bool impacting_bladder; // Not synced, used by server only (2021-04-04)
             bool impacting_bowel;   // Not synced, used by server only (2021-04-04)
         } use_toilet;
+
+        struct {
+            v3 tp; // @Security: Make sure aligned to grid on server.
+        } plant;
     };
 };
 
@@ -174,7 +190,6 @@ String liquid_names[] = {
 };
 static_assert(ARRLEN(liquid_names) == LQ_NONE_OR_NUM);
 
-typedef u32 Liquid_Amount;
 typedef u32 Liquid_Fraction;
 
 struct Liquid
@@ -223,17 +238,6 @@ v4 liquid_color(Liquid lq) {
 
 
 
-
-struct Liquid_Container
-{
-    Liquid liquid;
-    Liquid_Amount amount;
-};
-bool equal(Liquid_Container *a, Liquid_Container *b) {
-    if(!equal(&a->liquid, &b->liquid)) return false;
-    if(a->amount != b->amount) return false;
-    return true;
-}
 
 enum Nugget_Type: u8
 {
@@ -343,11 +347,49 @@ bool equal(Item *a, Item *b)
 }
 
 
+enum Decor_Type_ID: u32
+{
+    DECOR_FENCE,
+    DECOR_STREET_LIGHT,
+    DECOR_AWNING,
+    DECOR_FOUNTAIN,
+    DECOR_DOOR,
+    DECOR_WINDOW,
+    DECOR_FLOWER_BOX_WALL,
+
+    DECOR_SIGN_CHESS,
+
+    DECOR_NONE_OR_NUM
+};
+
+struct Decor_Type {
+    v3s volume;
+};
+
+Decor_Type decor_types[] = {
+    { 1, 4, 2  }, // Fence
+    { 3, 1, 13 }, // Street light
+    { 2, 2, 2 },
+    { 4, 4, 5 }, // Fountain
+    { 1, 4, 8 }, // Door
+    { 1, 4, 5 },  // Window
+    { 1, 4, 2 },  // Flower Box (Wall)
+    { 1, 10, 4 }  // Sign: Chess
+};
+static_assert(ARRLEN(decor_types) == DECOR_NONE_OR_NUM);
+
+struct Decor {
+    Decor_Type_ID type;
+    v3 p;
+    Quat q;
+};
+
 
 enum Entity_Type
 {
     ENTITY_ITEM,
-    ENTITY_PLAYER
+    ENTITY_PLAYER,
+    ENTITY_DECOR
 };
 
 typedef u64 Entity_ID;
@@ -367,15 +409,17 @@ enum Player_Action_Type
 {
     PLAYER_ACT_ENTITY,
     PLAYER_ACT_WALK,
-    PLAYER_ACT_PUT_DOWN, // Put down held item.
+    PLAYER_ACT_PUT_DOWN, // This is a player action, and not an entity action, because the item we want to put down might not be attached to an entity at the time we enqueue the action.
     PLAYER_ACT_PLACE_FROM_INVENTORY
 };
 
 struct Player_Action
 {
     Player_Action_Type type;
+    u8 step;
 
     World_Time reach_t;
+    World_Time update_t;
     World_Time end_t;
     World_Time end_retry_t;
 
@@ -522,6 +566,7 @@ struct S__Entity
             u8 action_queue_length;
             Player_Action    action_queue[16]; // @Norelease @SecurityMini: Some actions, like chess moves, you want to be private and not downloaded by other players.
             Player_Action_ID action_ids[ARRLEN(action_queue)];
+            bool             action_queue_pauses[ARRLEN(action_queue)+1]; // true at [0] means pause before action_queue[0].
 
             Entity_ID is_on;
             bool laying_down_instead_of_sitting; // Only valid if is_on != NO_ENTITY
@@ -531,6 +576,10 @@ struct S__Entity
             float need_change_speeds[NEED_NONE_OR_NUM];
             
         } player_e;
+
+        
+        Decor decor;
+        
     };
 };
 void clear(S__Entity *e)
@@ -564,18 +613,19 @@ struct Player_State
     Entity_ID laying_on;
 };
 
-enum Tile_Type: s8 {
-    TILE_SAND = 0,
-    TILE_GRASS = 1,
-    TILE_STONE = 2,
-    TILE_WATER = 3,
+enum Tile: s8 {
+    TILE_SAND    = 0,
+    TILE_GRASS   = 1,
+    TILE_CONCRETE_TILES_2X2 = 2,
+    TILE_WATER   = 3,
+    TILE_ASPHALT = 5,
+    TILE_WOOD    = 6,
 
     TILE_WALL = 4,
     
-    TILE_NONE_OR_NUM = 5
+    TILE_NONE_OR_NUM = 8
 };
 
-typedef s8 Tile;
 
 
 struct Chat_Message {

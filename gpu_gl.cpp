@@ -98,7 +98,7 @@ void gpu_set_buffer_set(GPU_Buffer_Set *set, Vertex_Shader *vertex_shader)
 
         // @Hack
         GLint element_size = 0;
-        switch(b % 4) {
+        switch(b % 5) {
             
             case 0: { element_size = 3; } break;
             case 1: { element_size = 2; } break;
@@ -129,6 +129,7 @@ bool gpu_init_shaders(Vertex_Shader *vertex_shader, Fragment_Shader *fragment_sh
 
     vertex_shader->mode_2d_uniform          = glGetUniformLocation(program, "mode_2d");          GPU_GL_Check_Errors();
     vertex_shader->color_multiplier_uniform = glGetUniformLocation(program, "color_multiplier"); GPU_GL_Check_Errors();
+    vertex_shader->desaturation_uniform     = glGetUniformLocation(program, "desaturation");     GPU_GL_Check_Errors();
 
     
     vertex_shader->position_attr = glGetAttribLocation(program, "position"); GPU_GL_Check_Errors();
@@ -191,32 +192,32 @@ void gpu_clear_depth_buffer()
     glClear(GL_DEPTH_BUFFER_BIT);
 }
 
-inline
 void gpu_set_uniform_m4x4(GPU_Uniform_ID uniform, m4x4 m)
 {
     glUniformMatrix4fv(uniform, 1, GL_FALSE, m.elements);
 }
 
-inline
 void gpu_set_uniform_v3(GPU_Uniform_ID uniform, v3 u)
 {
     glUniform3f(uniform, u.x, u.y, u.z);
 }
 
-inline
 void gpu_set_uniform_v4(GPU_Uniform_ID uniform, v4 u)
 {
     glUniform4f(uniform, u.x, u.y, u.z, u.w);
 }
 
 
-inline
 void gpu_set_uniform_bool(GPU_Uniform_ID uniform, bool b)
 {
     glUniform1i(uniform, (b) ? 1 : 0);
 }
 
-inline
+void gpu_set_uniform_float(GPU_Uniform_ID uniform, float f)
+{
+    glUniform1f(uniform, f);
+}
+
 void gpu_set_uniform_int(GPU_Uniform_ID uniform, int i)
 {
     glUniform1i(uniform, i);
@@ -297,7 +298,7 @@ bool gpu_create_texture(u32 w, u32 h, GPU_Texture_Parameters params, GPU_Texture
     glTexImage2D(GL_TEXTURE_2D, 0, params.pixel_components, w, h, 0,
                  params.pixel_format, params.pixel_data_type, data);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     auto err = glGetError();

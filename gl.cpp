@@ -104,6 +104,9 @@ gl_enable_vertex_attrib_array glEnableVertexAttribArray;
 typedef void (*gl_uniform_1i)(GLint location, GLint v0);
 gl_uniform_1i glUniform1i;
 
+typedef void (*gl_uniform_1f)(GLint location, GLfloat v0);
+gl_uniform_1f glUniform1f;
+
 typedef void (*gl_uniform_4fv)(GLint location, GLsizei count, const GLfloat *value);
 gl_uniform_4fv glUniform4fv;
 
@@ -224,6 +227,7 @@ bool load_gl_extensions()
     TRY_LOAD_GL_EXT(gl_vertex_attrib_i_pointer, glVertexAttribIPointer);
     TRY_LOAD_GL_EXT(gl_enable_vertex_attrib_array, glEnableVertexAttribArray);
     TRY_LOAD_GL_EXT(gl_uniform_1i, glUniform1i);
+    TRY_LOAD_GL_EXT(gl_uniform_1f, glUniform1f);
     TRY_LOAD_GL_EXT(gl_uniform_4fv, glUniform4fv);
     TRY_LOAD_GL_EXT(gl_uniform_3fv, glUniform3fv);
     TRY_LOAD_GL_EXT(gl_gen_framebuffers, glGenFramebuffers);

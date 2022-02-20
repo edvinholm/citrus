@@ -32,14 +32,14 @@ profiler_yscale 250
 # show_player_entity_parts true
 # show_entity_forward_vectors true
 
-# show_entity_bounding_boxes true
+ show_entity_bounding_boxes true
 # hide_entity_meshes true
 
 
 
 # camera_rotation_offset      -30  0 20
 # camera_translation_offset   .2  .25
-camera_scale_multiplier     1
+camera_scale_multiplier    1
 
 # show_world_grid true
 

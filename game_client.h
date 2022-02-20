@@ -10,6 +10,7 @@
 
 namespace Client_Game
 {
+    
     struct Entity: public S__Entity
     {
         bool is_preview; // We use an entity with this set to true while we wait for a ROOM_UPDATE after we've sent a request to place an item in the room.
@@ -23,11 +24,25 @@ namespace Client_Game
             struct {
                 struct {
                     s8 selected_square_ix_plus_one;
-                } chess;                
+                } chess;
             } item_local;
         };
 
         bool exists_on_server; // Used on RCB_ROOM_UPDATE to know which entities to remove.
+    };
+    
+    struct Pending_RS_Operation
+    {
+        RSB_Packet_Type rsb_packet_type;
+        u32             rsb_packet_id;
+        
+        bool result_received;
+        bool success; // Only valid if result_received.
+        RCB_Packet_Result_Payload result_payload;
+
+#if DEVELOPER
+        double creation_t;
+#endif
     };
  
     struct Room: public S__Room
@@ -41,17 +56,24 @@ namespace Client_Game
         // If we have multiple rooms, or multiple world views,
         // we would want to have multiple sets of these.       -EH, 2021-03-10
         Entity_ID selected_entity;
-        double action_menu_open_t;  // NOTE: Action menu is open if action_menu_open_t > action_menu_close_t.
-        double action_menu_close_t;
-        Entity_ID action_menu_entity; // NOTE: Needs to be valid during closing animation.
-        v2 action_menu_p;
         
         v3      placement_p; // If we for example have a selected inventory item, this is where we would try to put it.
         Quat    placement_q;
         bool    placing_held_item;
+
+        Entity_ID action_menu_entity;
+        v2 action_menu_p;
+        double action_menu_open_t;
+        double action_menu_close_t;
         //-------------
+
+        Pending_Player_Action pending_actions[ARRLEN(S__Entity::player_e.action_queue)];
+        u32                   pending_action_rsb_packet_ids[ARRLEN(pending_actions)];
+        int num_pending_actions;
         
         bool static_geometry_up_to_date;
+
+        Array<Pending_RS_Operation, ALLOC_MALLOC> pending_rs_operations;
     };
     
     void clear_and_reset(Room *room) {
@@ -63,6 +85,8 @@ namespace Client_Game
         
         room->entities.n = 0;
         room->static_geometry_up_to_date = false;
+
+        clear(&room->pending_rs_operations);
 
         Zero(*room);
     }

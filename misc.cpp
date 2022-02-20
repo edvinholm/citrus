@@ -25,25 +25,6 @@ struct Optional {
     }
 };
 
-template<typename T>
-bool operator == (Optional<T> &o, T &v)
-{
-    if(!o.present) return false;
-    return o.value == v;
-}
-
-template<typename T>
-bool operator != (Optional<T> &o, T &v)
-{
-    return !(o == v);
-}
-
-template<typename T>
-bool operator == (T &v, Optional<T> &o) { return o == v; }
-
-template<typename T>
-bool operator != (T &v, Optional<T> &o) { return o != v; }
-
 
 template<typename T>
 bool get(Optional<T> &o, T *_value)
@@ -66,6 +47,13 @@ Optional<T> opt(T value, bool present = true)
     Optional<T> o = {0};
     o.present = present;
     o.value = value;
+    return o;
+}
+
+template<typename T>
+Optional<T> opt_empty() {
+    Optional<T> o;
+    o.present = false;
     return o;
 }
 
@@ -120,6 +108,10 @@ T *current(Static_Stack<T *, Max> &stack)
 {
     return current_<T *, Max>(stack, NULL);
 }
+
+
+
+
 
 
 template<typename T>

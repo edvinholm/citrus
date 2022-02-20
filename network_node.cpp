@@ -529,6 +529,25 @@ bool write_World_Time(World_Time time, Network_Node *node)
 
 
 
+
+// Decor //
+// @Norelease TODO: Check that it is a valid type.
+bool read_Decor_Type_ID(Decor_Type_ID *_type_id, Network_Node *node)
+{
+    Read(u32, type_id, node);
+    *_type_id = (Decor_Type_ID)type_id;
+    return true;
+}
+
+bool write_Decor_Type_ID(Decor_Type_ID type_id, Network_Node *node)
+{
+    Write(u32, type_id, node);
+    return true;
+}
+
+
+
+
 // Item //
 // @Norelease TODO: Check that it is a valid type.
 bool read_Item_Type_ID(Item_Type_ID *_type_id, Network_Node *node)
@@ -741,14 +760,14 @@ bool write_Substance(Substance s, Network_Node *node)
 }
 
 
-bool read_Substance_Amount(Liquid_Amount *_amt, Network_Node *node)
+bool read_Substance_Amount(Substance_Amount *_amt, Network_Node *node)
 {
     static_assert(sizeof(*_amt) == sizeof(u32));
     Read_To_Ptr(u32, _amt, node);
     return true;
 }
 
-bool write_Substance_Amount(Liquid_Amount amt, Network_Node *node)
+bool write_Substance_Amount(Substance_Amount amt, Network_Node *node)
 {
     static_assert(sizeof(amt) == sizeof(u32));
     Write(u32, amt, node);
@@ -1067,6 +1086,12 @@ bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
     Read_To_Ptr(Entity_Action_Type, &_action->type, node);
 
     switch(_action->type) {
+        case ENTITY_ACT_MOVE: {
+            auto *x = &_action->move;
+            Read_To_Ptr(v3,   &x->p, node);
+            Read_To_Ptr(Quat, &x->q, node);
+        } break;
+            
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &_action->set_power_mode;
             Read_To_Ptr(bool, &x->set_to_on, node);
@@ -1093,6 +1118,11 @@ bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
                 } break;
             }
         } break;
+
+        case ENTITY_ACT_PLANT: {
+            auto *x = &_action->plant;
+            Read_To_Ptr(v3, &x->tp, node);
+        } break;
     }
     
     return true;
@@ -1103,6 +1133,12 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
     Write(Entity_Action_Type, action.type, node);
 
     switch(action.type) {
+        case ENTITY_ACT_MOVE: {
+            auto *x = &action.move;
+            Write(v3,   x->p, node);
+            Write(Quat, x->q, node);
+        } break;
+        
         case ENTITY_ACT_SET_POWER_MODE: {
             auto *x = &action.set_power_mode;
             Write(bool, x->set_to_on, node);
@@ -1126,8 +1162,12 @@ bool write_Entity_Action(Entity_Action action, Network_Node *node)
                 case CHESS_ACT_JOIN: {
                     Write(bool, x->join.as_black, node);
                 } break;
-            }
-            
+            }            
+        } break;
+
+        case ENTITY_ACT_PLANT: {
+            auto *x = &action.plant;
+            Write(v3, x->tp, node);
         } break;
     }
     
@@ -1166,8 +1206,10 @@ bool write_Player_Action_Type(Player_Action_Type type, Network_Node *node)
 bool read_Player_Action(Player_Action *_action, Network_Node *node)
 {
     Read_To_Ptr(Player_Action_Type, &_action->type, node);
+    Read_To_Ptr(u8, &_action->step, node);
     
     Read_To_Ptr(World_Time, &_action->reach_t,     node);
+    Read_To_Ptr(World_Time, &_action->update_t,    node);
     Read_To_Ptr(World_Time, &_action->end_t,       node);
     Read_To_Ptr(World_Time, &_action->end_retry_t, node);
 
@@ -1184,7 +1226,7 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
             auto *x = &_action->walk;
             Read_To_Ptr(v3,         &x->p1, node);
         } break;
-            
+
         case PLAYER_ACT_PUT_DOWN: {
             auto *x = &_action->put_down;
             Read_To_Ptr(v3,   &x->p, node);
@@ -1208,8 +1250,10 @@ bool read_Player_Action(Player_Action *_action, Network_Node *node)
 bool write_Player_Action(Player_Action action, Network_Node *node)
 {
     Write(Player_Action_Type, action.type, node);
+    Write(u8, action.step, node);
     
     Write(World_Time, action.reach_t,     node);
+    Write(World_Time, action.update_t,    node);
     Write(World_Time, action.end_t,       node);
     Write(World_Time, action.end_retry_t, node);
     
@@ -1226,11 +1270,11 @@ bool write_Player_Action(Player_Action action, Network_Node *node)
             auto *x = &action.walk;
             Write(v3, x->p1, node);
         } break;
-            
+
         case PLAYER_ACT_PUT_DOWN: {
             auto *x = &action.put_down;
             Write(v3,   x->p, node);
-            Write(Quat, x->q,  node);
+            Write(Quat, x->q, node);
         } break;
 
         case PLAYER_ACT_PLACE_FROM_INVENTORY: {
@@ -1486,6 +1530,9 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             for(int i = 0; i < x->action_queue_length; i++) {
                 Read_To_Ptr(Player_Action_ID, &x->action_ids[i], node);
             }
+            for(int i = 0; i < x->action_queue_length+1; i++) {
+                Read_To_Ptr(bool, &x->action_queue_pauses[i], node);
+            }
 
             Read_To_Ptr(Entity_ID, &x->is_on, node);
             Read_To_Ptr(bool,      &x->laying_down_instead_of_sitting, node);
@@ -1494,6 +1541,14 @@ bool read_Entity(S__Entity *_entity, Network_Node *node)
             for(int i = 0; i < ARRLEN(x->needs0.values); i++) Read_To_Ptr(float, &x->needs0.values[i], node);
             for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Read_To_Ptr(float, &x->need_change_speeds[i], node);
             
+        } break;
+
+        case ENTITY_DECOR: {
+            auto *x = &_entity->decor;
+            
+            Read_To_Ptr(Decor_Type_ID, &x->type, node);
+            Read_To_Ptr(v3,   &x->p, node);
+            Read_To_Ptr(Quat, &x->q, node);
         } break;
 
         default: Assert(false); return false;
@@ -1587,6 +1642,9 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             for(int i = 0; i < x->action_queue_length; i++) {
                 Write(Player_Action_ID, x->action_ids[i], node);
             }
+            for(int i = 0; i < x->action_queue_length+1; i++) {
+                Write(bool, x->action_queue_pauses[i], node);
+            }
             
             Write(Entity_ID, x->is_on, node);
             Write(bool,      x->laying_down_instead_of_sitting, node);
@@ -1596,6 +1654,15 @@ bool write_Entity(S__Entity *entity, Network_Node *node)
             for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Write(float, x->need_change_speeds[i], node);
             
         } break;
+            
+        case ENTITY_DECOR: {
+            auto *x = &entity->decor;
+            
+            Write(Decor_Type_ID, x->type, node);
+            Write(v3,   x->p, node);
+            Write(Quat, x->q, node);
+        } break;
+
 
         default: Assert(false); return false;
     }

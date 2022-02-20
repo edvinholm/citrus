@@ -49,6 +49,107 @@ bool update_gpu_resources(Graphics *gfx)
     return true;
 }
 
+void sync_gpu_with_bound_textures(Graphics *gfx)
+{
+    Assert(gfx->num_bound_textures <= 4);
+
+    for (int i = 0; i < gfx->num_bound_textures; i++) {
+        gpu_bind_texture(gfx->textures.ids[gfx->bound_textures[i]], i);
+    }
+
+    // NOTE: I did these if:s because i'm not sure what happens if you set a sampler uniform to a texture slot that we haven't bound anything to.
+    if(gfx->num_bound_textures > 0) {
+        gpu_set_uniform_int(gfx->fragment_shader.texture_1_uniform, 0);
+        if (gfx->num_bound_textures > 1) {
+            gpu_set_uniform_int(gfx->fragment_shader.texture_2_uniform, 1);
+            if (gfx->num_bound_textures > 2) {
+                gpu_set_uniform_int(gfx->fragment_shader.texture_3_uniform, 2);
+                if (gfx->num_bound_textures > 3) {
+                    gpu_set_uniform_int(gfx->fragment_shader.texture_4_uniform, 3);
+                }
+            }
+        }
+    }
+
+    gfx->bound_textures_synced = true;
+}
+
+void bind_textures(Texture_ID texture1, Texture_ID texture2, Texture_ID texture3, Texture_ID texture4, bool sync_gpu,
+                   Graphics *gfx)
+{
+    gfx->bound_textures_synced = false;
+
+    gfx->bound_textures[0] = texture1;
+    gfx->bound_textures[1] = texture2;
+    gfx->bound_textures[2] = texture3;
+    gfx->bound_textures[3] = texture4;
+
+    gfx->num_bound_textures = 4;
+
+    if (sync_gpu) {
+        sync_gpu_with_bound_textures(gfx);
+    }
+}
+
+
+void bind_ui_textures(bool sync_gpu, Graphics *gfx)
+{
+    bind_textures(TEX_FONT_TITLE, TEX_FONT_BODY, TEX_FONT_INPUT, TEX_PREVIEWS, sync_gpu, gfx);
+}
+
+void bind_world_textures(bool sync_gpu, Graphics *gfx)
+{
+    bind_textures(TEX_TILES,
+                  TEX_TILES,
+                  TEX_TILES,
+                  TEX_TILES,
+                  sync_gpu,
+                  gfx);
+}
+
+void config_gpu_for_ui(Graphics *gfx)
+{
+    float a = 2.0 / gfx->frame_s.w;
+    float b = 2.0 / gfx->frame_s.h;
+    
+    m4x4 ui_projection = {
+        a, 0, 0,-1,
+        0, b, 0,-1,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    };
+
+    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
+    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+    
+    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    true);
+    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
+
+    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
+
+    gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
+
+    //
+    bind_ui_textures(true, gfx);
+}
+
+
+void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
+{
+    gpu_set_viewport(viewport.x, viewport.y, viewport.w, viewport.h);
+    
+    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
+    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
+    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    false);
+    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
+    
+    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
+
+    //
+    bind_world_textures(true, gfx);
+}
+
+
 void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 {
     v2 old_frame_s = gfx->frame_s;
@@ -64,30 +165,6 @@ void frame_begin(Window *window, bool first_frame, v2 frame_s, Graphics *gfx)
 
     reset(&gfx->default_vertex_buffer);
     reset(&gfx->world_render_buffer);
-
-    // BIND TEXTURES //
-    Assert(ARRLEN(gfx->bound_textures) >= TEX_NONE_OR_NUM);
-    for(int t = 0; t < TEX_NONE_OR_NUM; t++)
-    {
-        if(gfx->num_bound_textures <= t || gfx->bound_textures[t] != (Texture_ID)t)
-        {
-            gpu_bind_texture(gfx->textures.ids[t], t);
-            switch(t) {
-                
-                case 0: gpu_set_uniform_int(gfx->fragment_shader.texture_1_uniform, t); break;
-                case 1: gpu_set_uniform_int(gfx->fragment_shader.texture_2_uniform, t); break;
-                case 2: gpu_set_uniform_int(gfx->fragment_shader.texture_3_uniform, t); break;
-                case 3: gpu_set_uniform_int(gfx->fragment_shader.texture_4_uniform, t); break;
-
-                default: Assert(false); break;
-            }
-
-            gfx->bound_textures[t] = (Texture_ID)t;
-            gfx->num_bound_textures = max(t+1, gfx->num_bound_textures);
-        }
-    }
-    // 
-
 
     gfx->z_for_2d = 1;
     eat_z_for_2d(gfx); // So we don't draw the first thing at 1, which is the clear value.
@@ -199,43 +276,6 @@ bool init_graphics(Window *window, Graphics *gfx)
     return true;
 }
 
-
-void config_gpu_for_ui(Graphics *gfx)
-{
-    float a = 2.0 / gfx->frame_s.w;
-    float b = 2.0 / gfx->frame_s.h;
-    
-    m4x4 ui_projection = {
-        a, 0, 0,-1,
-        0, b, 0,-1,
-        0, 0, 1, 0,
-        0, 0, 0, 1
-    };
-
-    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, ui_projection);
-    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
-    
-    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    true);
-    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
-
-    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
-
-    gpu_set_viewport(0, 0, gfx->frame_s.w, gfx->frame_s.h);
-}
-
-
-void config_gpu_for_world(Graphics *gfx, Rect viewport, m4x4 projection)
-{
-    gpu_set_viewport(viewport.x, viewport.y, viewport.w, viewport.h);
-    
-    gpu_set_uniform_m4x4(gfx->vertex_shader.projection_uniform, projection);
-    gpu_set_uniform_m4x4(gfx->vertex_shader.transform_uniform,  M_IDENTITY);
-    gpu_set_uniform_bool(gfx->vertex_shader.mode_2d_uniform,    false);
-    gpu_set_uniform_v4(gfx->vertex_shader.color_multiplier_uniform, { 1, 1, 1, 1 });
-    
-    gpu_set_uniform_v3(gfx->fragment_shader.lightbox_radiuses_uniform, {0, 0, 0});
-
-}
 
 
 struct Render_Loop
@@ -364,10 +404,14 @@ void draw_ui_image(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     Assert(e->type == UI_IMAGE);
     auto &img = e->image;
     auto a = img.a;
-
+    
     switch(img.type) { // @Jai: #complete
         case UI_IMG_ITEM: {
             draw_item_preview(img.item_type, center_square_of(a), gfx);
+        } break;
+            
+        case UI_IMG_TEXTURE: {
+            draw_rect(a, C_WHITE, gfx, 0, NULL, img.texture);
         } break;
 
         default: Assert(false); break;
@@ -382,33 +426,37 @@ void _draw_button_label(String label, Rect a, Graphics *gfx)
 
 // REMEMBER to do _OPAQUE_UI_() or whatever before calling this.
 void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx, v4 color,
-                  bool enabled = true, bool selected = false, String label = EMPTY_STRING, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT)
+                  bool enabled = true, bool selected = false, String label = EMPTY_STRING, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, UI_Button_Flags flags = 0)
 {
     if(style == UI_BUTTON_STYLE_INVISIBLE) return;
     
-    float color_saturation = saturation_of(color);
-
-    v4 c_idle    = color;
-    v4 c_hovered = color;
-    v4 c_pressed = color;
-    
-    c_hovered.rgb *= 1.1f;
-    c_pressed.rgb *= 0.6f;
-
-    v4 c_disabled = color;
-    c_disabled.rgb *= 0.9f;
-    adjust_saturation(&c_disabled, 0.33f);
-    
-    v4 c_selected = color;
-    c_selected.rgb *= 1.28f;
-    //--
-
     v4 color_to_use;
-    if(selected)                   color_to_use = c_selected;
-    else if(!enabled)              color_to_use = c_disabled;
-    else if(click_state & PRESSED) color_to_use = c_pressed;
-    else if(click_state & HOVERED) color_to_use = c_hovered;
-    else color_to_use = c_idle;
+    if(flags & UI_BUTTON_DONT_ANIMATE) {
+        color_to_use = color;
+    }
+    else {
+        float color_saturation = saturation_of(color);
+
+        v4 c_idle    = color;
+        v4 c_hovered = color;
+        v4 c_pressed = color;
+    
+        c_hovered.rgb *= 1.1f;
+        c_pressed.rgb *= 0.6f;
+            
+        v4 c_disabled = color;
+        c_disabled.rgb *= 0.9f;
+        adjust_saturation(&c_disabled, 0.33f);
+    
+        v4 c_selected = color;
+        c_selected.rgb *= 1.28f;
+    
+        if(selected)                   color_to_use = c_selected;
+        else if(!enabled)              color_to_use = c_disabled;
+        else if(click_state & PRESSED) color_to_use = c_pressed;
+        else if(click_state & HOVERED) color_to_use = c_hovered;
+        else color_to_use = c_idle;
+    }
 
     // BACKGROUND //
     draw_rect(a, color_to_use, gfx);
@@ -429,7 +477,7 @@ void draw_button(UI_Element *e, UI_Manager *ui, Graphics *gfx)
     _OPAQUE_UI_();
 
     _draw_button(btn.a, btn.state, gfx, btn.color,
-                 btn.enabled, btn.selected, get_ui_string(btn.label, ui), btn.style);
+                 btn.enabled, btn.selected, get_ui_string(btn.label, ui), btn.style, btn.flags);
 }
 
 void draw_ui_substance_container(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -585,11 +633,11 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
 
     Rect inner_a = textfield_inner_rect(tf);
     
-    Rect text_a = inner_a;
-    text_a.y   += tf->scroll.value;
-    
     String text = get_ui_string(tf->text, ui);
     Body_Text bt = create_textfield_body_text(text, inner_a, gfx->fonts);
+    float text_h = bt.lines.n * bt.line_height;
+        
+    Rect text_a = textfield_text_rect(inner_a, text_h, tf);
     
     Rect clip_rect = tf->a;
 
@@ -654,7 +702,7 @@ void draw_textfield(UI_Element *e, UI_ID id, UI_Manager *ui, Graphics *gfx)
         draw_rect(caret_a, {0, 0, 0, 1}, gfx);
         // ----------
 
-#if DEBUG && true // DEBUG STUFF
+#if DEBUG && false // DEBUG STUFF
         
 #if true && DEBUG // DEBUG DISPLAY: LAST VERTICAL NAV X
         draw_rect_ps({inner_a.x + ui->active_textfield_state.last_vertical_nav_x-2,
@@ -945,7 +993,7 @@ void draw_progress_bar(UI_Element *e, Graphics *gfx)
 
 // NOTE: tp is tile position, which is (min x, min y, z) of the tile
 // NOTE: selected_item can be null.
-void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
+void draw_tile_hover_indicator(v3 tp, Item *item_to_place, Seed_Type seed_to_plant, v3 placement_p, Quat placement_q, double world_t, Room *room, Input_Manager *input, Client *client, Graphics *gfx)
 {
     User *user = current_user(client);
     
@@ -978,7 +1026,19 @@ void draw_tile_hover_indicator(v3 tp, Item *item_to_place, v3 placement_p, Quat 
                       {hitbox.base.s.x, 0, 0},
                       {0, hitbox.base.s.y, 0},
                       shadow_color, gfx);
+
+        }
+        else if(seed_to_plant != SEED_NONE_OR_NUM) {
+            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
+
+            auto plant_type = plant_type_for_seed(seed_to_plant);
+            auto vol        = item_types[plant_type].volume;
             
+            draw_quad(tp + V3_Z * 0.002f, V3_X * 1.0f, V3_Y * 1.0f, C_GREEN,  gfx);
+            v3 p = volume_p_from_tp(tp, vol, Q_IDENTITY);
+            draw_quad(p - V3(vol.x * .5f, vol.y *.5f, 0) + V3_Z * 0.001f,
+                      V3_X * vol.x, V3_Y * vol.y,
+                      C_YELLOW, gfx);
         }
         else {
 //            _OPAQUE_WORLD_VERTEX_OBJECT_(M_IDENTITY);
@@ -1005,10 +1065,19 @@ void draw_ui_chess_board(UI_Element *e, UI_Manager *ui, Graphics *gfx, Client *c
     
 }
 
+void draw_things_in_world_for_current_tool(UI_World_View *wv, double world_t, Room *room, Client_UI *cui, Graphics *gfx)
+{
+    switch(cui->current_tool) {
+#if DEVELOPER
+        case TOOL_DEV_ROOM_EDITOR: room_editor_draw_in_world(&cui->room_editor, wv, world_t, room, gfx); break;
+#endif
+    }
+}
 
-m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, Client *client, Graphics *gfx, User *user = NULL)
+m4x4 draw_world_view(UI_Element *e, Room *room, double t, Client_UI *cui, Input_Manager *input, Client *client, Graphics *gfx, User *user = NULL)
 {
     _OPAQUE_UI_();
+    bind_ui_textures(false, gfx);
 
     Assert(e->type == WORLD_VIEW);
     auto *wv = &e->world_view;
@@ -1030,26 +1099,39 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
     m4x4 projection_inverse = inverse_of(projection);
 
     { Scoped_Push(gfx->draw_mode, DRAW_3D);
+        bind_world_textures(false, gfx);
+        defer(bind_ui_textures(false, gfx););
         
         gfx->camera_dir = screen_point_to_ray(center_of(viewport), viewport, projection_inverse).dir; // For our orthographic perspective, this point doesn't matter.
         
         Item *item_to_place = NULL;
+        Seed_Type seed_to_plant = SEED_NONE_OR_NUM;
+
+        switch(cui->current_tool) {
+
+            case TOOL_PLANTING: {
+                seed_to_plant = cui->planting_tool.seed_type_cache;
+            } break;
+            
+            case TOOL_NONE: {
+                if(in_array(input->keys, VKEY_CTRL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
+                {
+                    if(player && player_state_after_queue.held_item.type != ITEM_NONE_OR_NUM) {    
+                        // PUT DOWN ITEM //
+                        item_to_place = &player_state_after_queue.held_item;
+                    }
+                }
+                else {
+                    // PLACE FROM INVENTORY //
+                    item_to_place = (user) ? get_selected_inventory_item(user) : NULL;
+                }
+            } break;
+        }
         
-        if(in_array(input->keys, VKEY_CONTROL)) // @Volatile: Set this keybinding somewhere, we have this if in both the draw code and the "control" code. But it's probably @Temporary anyway. @Norelease
-        {
-            if(player && player_state_after_queue.held_item.type != ITEM_NONE_OR_NUM) {    
-                // PUT DOWN ITEM //
-                item_to_place = &player_state_after_queue.held_item;
-            }
-        }
-        else {
-            // PLACE FROM INVENTORY //
-            item_to_place = (user) ? get_selected_inventory_item(user) : NULL;
-        }
 
         // DRAW WORLD //
         auto hovered_entity = (item_to_place != NULL) ? NO_ENTITY : wv->hovered_entity;
-        draw_world(room, world_t, projection, client, gfx, hovered_entity, wv->mouse_ray);
+        draw_world(room, world_t, t, projection, client, gfx, hovered_entity, wv->mouse_ray);
 
         // SURFACE HIGHLIGHT //
         Surface surf;
@@ -1072,8 +1154,10 @@ m4x4 draw_world_view(UI_Element *e, Room *room, double t, Input_Manager *input, 
             if(item_to_place) hovered_tp = tp_from_p(room->placement_p);
             else              hovered_tp = tp_from_index(wv->hovered_tile_ix);
 
-            draw_tile_hover_indicator(hovered_tp, item_to_place, room->placement_p, room->placement_q, world_t, room, input, client, gfx);
+            draw_tile_hover_indicator(hovered_tp, item_to_place, seed_to_plant, room->placement_p, room->placement_q, world_t, room, input, client, gfx);
         }
+
+        draw_things_in_world_for_current_tool(wv, world_t, room, cui, gfx);
     }
 
     
@@ -1112,6 +1196,7 @@ DWORD render_loop(void *loop_)
         Assert(graphics_init_result);
 
         init_fonts(gfx.fonts, &gfx);
+        
         init_assets_for_drawing(&client->assets, &gfx);
 
         // CREATE FONT GLYPH TEXTURES ON GPU //
@@ -1173,6 +1258,8 @@ DWORD render_loop(void *loop_)
                 // Draw UI //
                 const v4 background_color = { 0.3, 0.36, 0.42, 1 };
                 draw_rect(rect(0, 0, gfx.frame_s.w, gfx.frame_s.h), background_color, &gfx);
+
+                int num_elements_left_with_current_scissor = 0;
             
                 for(int i = ui->elements_in_depth_order.n-1; i >= 0; i--)
                 {
@@ -1183,12 +1270,19 @@ DWORD render_loop(void *loop_)
                     switch(e->type) {
                         case PANEL:     draw_panel(e, ui, &gfx, t);      break;
                         case WINDOW:    draw_window(e, ui, &gfx);        break;
+                            
                         case UI_TEXT:   draw_ui_text(e, ui, &gfx);       break;
                         case UI_IMAGE:  draw_ui_image(e, ui, &gfx);      break;
                         case BUTTON:    draw_button(e, ui, &gfx);        break;
                         case TEXTFIELD: draw_textfield(e, id, ui, &gfx); break;
                         case SLIDER:    draw_slider(e, &gfx);            break;
                         case DROPDOWN:  draw_dropdown(e, &gfx);          break;
+                            
+                        case VIEWPORT: {
+                            auto *port = &e->viewport;
+                            push(gfx.scissor, port->a); 
+                            num_elements_left_with_current_scissor = port->num_children + 1;
+                        } break;
 
                         case GRAPH:        draw_graph(e, ui, &gfx); break;
                         case PROGRESS_BAR: draw_progress_bar(e, &gfx); break;
@@ -1207,7 +1301,7 @@ DWORD render_loop(void *loop_)
                                 break;
                             }
 
-                            m4x4 projection = draw_world_view(e, room, t, input, client, &gfx, current_user(client));
+                            m4x4 projection = draw_world_view(e, room, t, &client->cui, input, client, &gfx, current_user(client));
 
                             auto &graphics = gfx; // @Hack @Stupid @Cleanup
                             
@@ -1233,6 +1327,12 @@ DWORD render_loop(void *loop_)
 
                         default: Assert(false); break;
                     }
+
+                    num_elements_left_with_current_scissor--;
+                    if(num_elements_left_with_current_scissor == 0) {
+                        pop(gfx.scissor);
+                    }
+                    
                 }
             }
 
@@ -1321,13 +1421,14 @@ DWORD render_loop(void *loop_)
                 // WORLD //
                 if(world_view_exists) {
                     config_gpu_for_world(&gfx, world_view.a, world_projection);
-                    {
+                    {   
                         // Opaque
                         gpu_set_depth_mask(true);
                         draw_render_object_buffer(&gfx.world_render_buffer.opaque, false, &gfx);
 
                         // Static Opaque
-                        gpu_set_uniform_m4x4(gfx.vertex_shader.transform_uniform, M_IDENTITY);
+                        gpu_set_uniform_m4x4 (gfx.vertex_shader.transform_uniform,    M_IDENTITY);
+                        // @Incomplete TODO gpu_set_uniform_float(gfx.vertex_shader.desaturation_uniform, .5f);
                         draw_vao(&gfx.world.static_opaque_vao, &gfx);
 
                         // Translucent
