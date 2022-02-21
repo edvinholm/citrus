@@ -171,8 +171,10 @@ String copy_of(String *str, Allocator_ID allocator)
     return string(copy_as_cstring(*str, allocator), str->length);
 }
 
-String sub_string(String s, strlength start, strlength end)
+String sub_string(String s, strlength start, strlength end = -1)
 {
+    if(end < 0) end = s.length;
+    
     String result = s;
     result.length = end-start;
     result.data = s.data + start;

@@ -684,7 +684,7 @@ String platform_get_working_directory(Allocator_ID allocator)
     auto result = GetCurrentDirectory(length_including_zero, (LPSTR)path);
     Assert(result == length_including_zero-1);
     
-    return {path, length_including_zero-1};
+    return {path, (strlength)length_including_zero-1};
 }
 
 float platform_get_status_bar_height()
@@ -757,6 +757,8 @@ void platform_set_cursor_icon(Cursor_Icon icon)
         case CURSOR_ICON_I_BEAM:  cursor_name = IDC_IBEAM; break;
         case CURSOR_ICON_RESIZE_H: cursor_name = IDC_SIZEWE; break;
         case CURSOR_ICON_RESIZE_V: cursor_name = IDC_SIZENS; break;
+        case CURSOR_ICON_RESIZE_NE_SW: cursor_name = IDC_SIZENESW; break;
+        case CURSOR_ICON_RESIZE_NW_SE: cursor_name = IDC_SIZENWSE; break;
 
         default: Assert(false); return;
     }

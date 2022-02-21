@@ -45,7 +45,7 @@ enum V_Align
 enum Font_Size
 {
     FS_NONE = -1,
-    FS_10,
+    FS_10 = 0,
     FS_12,
     FS_14,
     FS_16,
@@ -87,6 +87,24 @@ int pixel_height_for_font_size(Font_Size fs, bool multiply_by_oversampling_rate 
     if(multiply_by_oversampling_rate)
         h *= tweak_float(TWEAK_FONT_OVERSAMPLING_RATE);
     return h;
+}
+
+Font_Size round_font_size(float pixel_height)
+{
+    Font_Size result = (Font_Size)0;
+    float prev_ph = pixel_height_for_font_size(result, false);
+    while(result < NUM_FONT_SIZES-1) {
+        auto it = (Font_Size)(result + 1);
+        float ph = pixel_height_for_font_size(it, false);
+        if(pixel_height <= ph) {
+            if(fabs(pixel_height - ph) < fabs(pixel_height - prev_ph)) {
+                result = it;
+            }
+            break;
+        }
+        result = it;
+    }
+    return result;
 }
 
 

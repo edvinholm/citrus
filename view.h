@@ -4,9 +4,11 @@
 
 enum View_Type
 {
-    VIEW_NONE = 0,
+    VIEW_EMPTY = 0,
     VIEW_USER,
-    VIEW_CALCULATOR
+    VIEW_CALCULATOR,
+
+    VIEW_NONE_OR_NUM
 };
 
 struct View_Address
@@ -37,7 +39,7 @@ struct View
 };
 void clear(View *view) {
     switch(view->address.type) {
-        case VIEW_NONE: {
+        case VIEW_EMPTY: {
             clear(&view->empty);
         } break;
 

@@ -128,7 +128,7 @@ bool talk_to_room_server(Room_Server_Connection *con, Client *client, Array<C_RS
                     if(!user) break;
 
                     auto *draft = &user->chat_draft;
-                    String message_text = { draft->e, draft->n };
+                    String message_text = { draft->e, (strlength)draft->n };
                     
                     Enqueue(RSB_CHAT, node, message_text);
                     draft->n = 0;

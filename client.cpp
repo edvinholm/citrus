@@ -1,5 +1,5 @@
 
-void init_client_ui(Client_UI *cui)
+void init_client_ui(Client_UI *cui, Client *client)
 {
     cui->open_bottom_panel_tab = BP_TAB_NONE_OR_NUM;
     
@@ -10,7 +10,9 @@ void init_client_ui(Client_UI *cui)
     // @Norelease: @Temporary, I think. 
     cui->market.order_draft.price = 10;
 
-    init_ui_dock(&cui->dock);
+    if(!load_ui_dock_from_disk(&cui->dock, client)) {
+        init_ui_dock(&cui->dock);
+    }
 
 #if DEVELOPER
     init_developer_ui(&cui->dev);
@@ -1926,6 +1928,11 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
             }
         }
     }
+
+    
+    // DOCK //
+    ui_dock(P(ctx), &cui->dock, input);
+
     
     // ACTION QUEUE //
     { _RIGHT_CUT_(68);
@@ -1944,13 +1951,6 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
 
     // Over world view
     { _AREA_COPY_();
-
-
-        
-        // DOCK //
-        ui_dock(P(ctx), &cui->dock, input);
-
-        
 
         // CHAT // // @Temporary
         float chat_y = world_view_a.y + world_view_a.h;
@@ -2422,7 +2422,7 @@ int client_entry_point(int num_args, char **arguments)
     //--
     
     // INIT CLIENT UI //
-    init_client_ui(&client.cui);
+    init_client_ui(&client.cui, &client);
     //--
 
     // START RENDER LOOP //
@@ -2607,6 +2607,9 @@ int client_entry_point(int num_args, char **arguments)
 #endif
         
         platform_set_cursor_icon(cursor);
+
+        
+        maybe_save_ui_dock_changes_to_disk(&client.cui.dock, t, &client);
     }
 
     stop_network_loop(&network_loop, &client);

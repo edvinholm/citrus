@@ -122,7 +122,7 @@ bool load_meshes(Asset_Catalog *cat)
             continue;
         }
 
-        if(!read_obj({file_contents.e, file_contents.n}, &obj_reader, &cat->allocator, mesh)) {
+        if(!read_obj({file_contents.e, (strlength)file_contents.n}, &obj_reader, &cat->allocator, mesh)) {
             Debug_Print("Unable to read OBJ data of file '%s'\n", filename);
             total_success = false;
             continue;

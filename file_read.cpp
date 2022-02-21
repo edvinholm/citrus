@@ -16,6 +16,21 @@ bool read_s32(s32 *_i, FILE *file)
 }
 
 
+bool read_string(String *_str, FILE *file)
+{
+    s32 length;
+    if(!read_s32(&length, file)) return false;
+    _str->length = length;
+    
+    if(_str->length > 0) {
+        _str->data = tmp_alloc(_str->length);
+        if(!read_from_file((byte *)_str->data, _str->length, file)) return false;
+    } else {
+        _str->data = NULL;
+    }
+    return true;
+}
+
 inline
 bool read_u32(u32 *_i, FILE *file)
 {

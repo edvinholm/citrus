@@ -4,13 +4,13 @@ float body_text_line_width(int line_index, Body_Text *bt, Graphics *gfx);
 
 Rect glyph_area(Sized_Glyph *glyph, int glyph_index, v2 p, int last_glyph_index, Font *font,
                 float scale, v2 *_new_p, int previous_codepoint = 0)
-{
+{    
     p.x += glyph_kerning(&font->stb_info, last_glyph_index, glyph_index) * scale;
 
     Rect glyph_a;
 
-    glyph_a.x = p.x + glyph->offset.x;
-    glyph_a.y = p.y + glyph->offset.y - font->ascent * scale;
+    glyph_a.x = p.x + (glyph->offset.x);
+    glyph_a.y = p.y + (glyph->offset.y - font->ascent * scale);
     glyph_a.s = { glyph->pixel_s.w, glyph->pixel_s.h };
     
     p.x += glyph->advance_width;

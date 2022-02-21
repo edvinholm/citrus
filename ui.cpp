@@ -493,6 +493,23 @@ UI_Click_State evaluate_click_state(UI_Click_State state, bool hovered, Input_Ma
 }
 
 
+Cursor_Icon resize_cursor_from_delta(v2s delta)
+{
+    if(delta.x > 0) {
+        if(delta.y > 0)      return CURSOR_ICON_RESIZE_NE_SW;
+        else if(delta.y < 0) return CURSOR_ICON_RESIZE_NW_SE;
+        else                 return CURSOR_ICON_RESIZE_H;
+    }
+    else if(delta.x < 0) {
+        if(delta.y > 0)      return CURSOR_ICON_RESIZE_NW_SE;
+        else if(delta.y < 0) return CURSOR_ICON_RESIZE_NE_SW;
+        else                 return CURSOR_ICON_RESIZE_H;
+    }
+    
+    Assert(delta.y != 0);
+    return CURSOR_ICON_RESIZE_V;
+}
+
 
 float scrollbar_handle_height(float scrollbar_h, float content_h, float view_h)
 {
@@ -706,7 +723,7 @@ void graph(UI_Context ctx, float *values, int num_values, float y_min = 0, float
 
     Rect a = area(ctx.layout);
 
-    String data = { (u8 *)values, sizeof(*values) * num_values };
+    String data = { (u8 *)values, (strlength)sizeof(*values) * num_values };
 
     auto *graph = &e->graph;
     ui_set(e, &graph->a, a);
@@ -1034,7 +1051,7 @@ String textfield_tmp(UI_ID id, String text, Input_Manager *input, UI_Manager *ui
         }
 
         // Push text before insertion point
-        tf->text = push_ui_string({text.data, pre_end - text.data}, ui);
+        tf->text = push_ui_string({text.data, (strlength)(pre_end - text.data)}, ui);
 
         // Push the new input
         int cp_ix = 0;
@@ -1716,7 +1733,7 @@ void end_window(UI_ID id, UI_Manager *ui, UI_Click_State *_close_button_state = 
     win->num_children_above = (ui->elements_in_depth_order.n-1) - old_depth_index;
 }
 
-void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_ID hovered_element_id, UI_Manager *ui)
+void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *hovered_element, UI_ID hovered_element_id, UI_Manager *ui, Optional<Cursor_Icon> *_requested_cursor)
 {
     auto &mouse = input->mouse;
     
@@ -1755,6 +1772,14 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     }
 
     bool move_to_top = false;
+
+    // We figure this out even if we are not actually resizing,
+    // because we need to know which cursor to choose when hovering a border.
+    v2s resize_dir_if_resizing = {0};
+    if(point_inside_rect(mouse.p, left_border))   resize_dir_if_resizing.x -= 1;
+    if(point_inside_rect(mouse.p, right_border))  resize_dir_if_resizing.x += 1;           
+    if(point_inside_rect(mouse.p, top_border))    resize_dir_if_resizing.y += 1;
+    if(point_inside_rect(mouse.p, bottom_border)) resize_dir_if_resizing.y -= 1;
     
     if(!win->pressed && (mouse.buttons_down & MB_PRIMARY))
     {
@@ -1764,11 +1789,8 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
             // PRESS START //    
             win->pressed = true;
 
-            if(point_inside_rect(mouse.p, left_border))  win->resize_dir_x -= 1;
-            if(point_inside_rect(mouse.p, right_border)) win->resize_dir_x += 1;
-                
-            if(point_inside_rect(mouse.p, top_border))    win->resize_dir_y += 1;
-            if(point_inside_rect(mouse.p, bottom_border)) win->resize_dir_y -= 1;
+            win->resize_dir_x = resize_dir_if_resizing.x;
+            win->resize_dir_y = resize_dir_if_resizing.y;
             
             if(point_inside_rect(mouse.p, title_a)) {
                 // Move Start //
@@ -1811,6 +1833,12 @@ void update_window(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element *ho
     // Remember that we moved or resized.
     if(win->moving || win->resize_dir_x != 0 || win->resize_dir_y != 0)
         win->was_resized_or_moved = true;
+
+    
+    Optional<Cursor_Icon> cursor = {0};
+    if(resize_dir_if_resizing.x != 0 || resize_dir_if_resizing.y != 0)
+        cursor = opt(resize_cursor_from_delta(resize_dir_if_resizing));
+    *_requested_cursor = cursor;
     
 }
 
@@ -2306,7 +2334,13 @@ void end_ui_build(UI_Manager *ui, Input_Manager *input, Font_Table *fonts, doubl
         UI_Element *e = &ui->elements[i];
         
         switch(e->type) { // @Jai: #complete
-            case WINDOW: update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui); break;
+            case WINDOW: {
+                Optional<Cursor_Icon> requested_cursor = {0};
+                update_window(e, ui->element_ids[i], input, hovered_element, hovered_element_id, ui, &requested_cursor);
+                if(requested_cursor.present) {
+                    cursor = requested_cursor.value;
+                }
+            } break;
             case BUTTON: {
                 update_button(e, input, hovered_element);
                 if(e->button.state & PRESSED) pressed_button = e;

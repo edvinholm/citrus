@@ -21,11 +21,11 @@ const v4 C_MAGENTA   = {  1,  0, .5,  1 };
 // ///// ////// //
 
 // DEFAULT UI COLORS //
-const v4 C_PANEL_DEFAULT             = { 0.49, 0.71, 0.86, 1 };
+const v4 C_PANEL_DEFAULT             = { 0.16, 0.22, 0.23, 1};
 const v4 C_BUTTON_DEFAULT            = { 0.16, 0.22, 0.23, 1 };
 const v4 C_WINDOW_BORDER_DEFAULT     = {  0.3,  0.2,  0.9, 1 };
 const v4 C_WINDOW_BACKGROUND_DEFAULT = {    1,    1,    1, 1 };
-const v4 C_TEXT_DEFAULT              = {  0.1,  0.1,  0.1, 1 };
+const v4 C_TEXT_DEFAULT              = {  0.9,  0.9,  0.9, 1 };
 // /////// // ////// //
 
 // ROOM WINDOW //
