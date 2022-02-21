@@ -1996,6 +1996,9 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
     }
 
+
+#if 0 // This is world view and logic that has to do with it. We remove this from here for now, since we are doing
+      // a less visual interface to start with.
     
     auto *wv = world_view(P(ctx));
     
@@ -2144,11 +2147,11 @@ void client_ui(UI_Context ctx, Input_Manager *input, double t, Client *client)
         }
     }
 
-
-
     update_current_tool(cui, t, wv, &player_state_after_queue,
                         world_t, user, player, room,
                         input, client);
+#endif // World view
+    
 }
 
 

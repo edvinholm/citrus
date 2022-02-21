@@ -7,6 +7,7 @@ enum View_Type
     VIEW_EMPTY = 0,
     VIEW_USER,
     VIEW_CALCULATOR,
+    VIEW_WORLD,
 
     VIEW_NONE_OR_NUM
 };
