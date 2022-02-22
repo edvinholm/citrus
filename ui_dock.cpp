@@ -150,7 +150,7 @@ void ui_dock_section(UI_Context ctx, UI_Dock_Section *section, UI_Dock_Section *
         if(tab_requested)        *tab_requester_        = section_ix;
         
         { _PANEL_(P(ctx));
-            view(P(ctx), &section->view, input);
+            view(P(ctx), &section->view, input, dock);
         }
 
         if(requested_split != UI_DOCK_SPLIT_NONE) {

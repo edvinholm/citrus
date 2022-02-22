@@ -4,7 +4,8 @@ String view_type_command_identifiers[] = {
     STRING("EMPTY"),
     STRING("USER"),
     STRING("CALC"),
-    STRING("WORLD")
+    STRING("WORLD"),
+    STRING("PEOPLE")
 };
 static_assert(ARRLEN(view_type_command_identifiers) == VIEW_NONE_OR_NUM);
 

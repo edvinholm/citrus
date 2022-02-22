@@ -8,6 +8,7 @@ enum View_Type
     VIEW_USER,
     VIEW_CALCULATOR,
     VIEW_WORLD,
+    VIEW_PEOPLE,
 
     VIEW_NONE_OR_NUM
 };

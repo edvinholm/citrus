@@ -1,4 +1,5 @@
 #include "view_user.cpp"
+#include "view_people.cpp"
 #include "view_calculator.cpp"
 
 String title_for_view(View *view)
@@ -8,6 +9,7 @@ String title_for_view(View *view)
         case VIEW_USER:         return title_for_user_view(view);
         case VIEW_CALCULATOR:   return title_for_calculator_view(view);
         case VIEW_WORLD:        return STRING("WORLD"); 
+        case VIEW_PEOPLE:       return STRING("PEOPLE"); 
     }
     
     return EMPTY_STRING;
@@ -71,16 +73,17 @@ void empty_view(UI_Context ctx, View *view, Input_Manager *input, UI_Dock *dock 
 
 }
 
-void view(UI_Context ctx, View *view, Input_Manager *input)
+void view(UI_Context ctx, View *view, Input_Manager *input, UI_Dock *dock = NULL)
 {
     U(ctx);
 
     auto vtype = view->address.type;
 
     switch(vtype) { // @Jai: #complete
-        case VIEW_EMPTY: empty_view(P(ctx), view, input); break;
+        case VIEW_EMPTY: empty_view(P(ctx), view, input, dock); break;
         case VIEW_USER: user_view(P(ctx), view); break;
         case VIEW_CALCULATOR: calculator_view(P(ctx), view); break;
         case VIEW_WORLD: world_view(P(ctx)); break;
+        case VIEW_PEOPLE: people_view(P(ctx)); break;
     }
 }
