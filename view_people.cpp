@@ -25,5 +25,8 @@ void people_view(UI_Context ctx)
         button(PC(ctx, i), it->name);
     }
 
+    _TOP_(24);
+    static float x = .3;
+    x = slider(P(ctx), x);
     
 }
