@@ -153,6 +153,7 @@ using namespace Client_Market;
 #include "command.cpp"
 
 #include "ui.cpp"
+#include "ui_list.cpp"
 #include "view.cpp"
 #include "ui_dock.cpp"
 

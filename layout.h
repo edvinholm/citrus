@@ -14,9 +14,11 @@ struct Grid_Layout
 {
     Rect a;
     int cols;
-    int rows;
+    int rows; // This can be set to -1 if row_h > 0
     float spacing; // Spacing between cells
     float row_h;
+
+    Array<float, ALLOC_TMP> column_width_fractions;
 
     int current_cell;
 };
