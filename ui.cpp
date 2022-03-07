@@ -1465,7 +1465,7 @@ void update_textfield(UI_Element *e, UI_ID id, Input_Manager *input, UI_Element 
 }
 
 
-float slider(float value, UI_Context ctx, bool enabled = true)
+float slider(UI_Context ctx, float value, bool enabled = true)
 {    
     U(ctx);
 
@@ -1495,12 +1495,9 @@ void update_slider(UI_Element *e, Input_Manager *input, UI_Element *hovered_elem
     if(!slider->enabled || !(mouse.buttons & MB_PRIMARY))
         slider->pressed = false;
 
-    if(!slider->enabled)
-    {
-        if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
-            if(point_inside_rect(mouse.p, handle_a)) {
-                slider->pressed = true;
-            }
+    if(e == hovered_element && mouse.buttons_down & MB_PRIMARY) {
+        if(point_inside_rect(mouse.p, handle_a)) {
+            slider->pressed = true;
         }
     }
     

@@ -766,57 +766,33 @@ void draw_slider(UI_Element *e, Graphics *gfx)
     auto *slider = &e->slider;
     auto a = slider->a;
 
-    v3 v[6] = {
-        { a.x,       a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y,       0 },
+    // COLORS //
+    v4 handle_c = C_BUTTON_DEFAULT;
 
-        { a.x + a.w, a.y,       0 },
-        { a.x,       a.y + a.h, 0 },
-        { a.x + a.w, a.y + a.h, 0 }
-    };
-        
-    v2 uv[6] = {0};
+    v4 track_border_c  = C_PANEL_DEFAULT;
+    v4 track_inner_c   = adjusted_brightness(track_border_c, .9);
     
-    v4 c[6] = {
-        { 0.05, 0.4, 0.5, 1 },
-        { 0.05, 0.4, 0.5, 1 },
-        { 0.05, 0.4, 0.5, 1 },
-        
-        { 0.05, 0.4, 0.5, 1 },
-        { 0.05, 0.4, 0.5, 1 },
-        { 0.05, 0.4, 0.5, 1 },
-    };
-     
-    v4 d[6] = {
-        { 0.30, 0.35, 0.45, 1 },
-        { 0.30, 0.35, 0.45, 1 },
-        { 0.30, 0.35, 0.45, 1 },
-        
-        { 0.30, 0.35, 0.45, 1 },
-        { 0.30, 0.35, 0.45, 1 },
-        { 0.30, 0.35, 0.45, 1 },
-    };
+    v4 fill_c  = {0.11,0.43,0.39,1};
+    // // //
 
-    float tex[6] = {
-        0, 0, 0,
-        0, 0, 0
-    };
+    // Handle Rect
+    Rect handle_a = slider_handle_rect(a, slider->value);
+    float handle_c_x = center_x(handle_a);
+    float handle_c_dx = handle_c_x - a.x;
 
-    v3 normals[6] = {
-        V3_Z, V3_Z, V3_Z,
-        V3_Z, V3_Z, V3_Z
-    };
+    // Track
+    Rect track_a = center_y(a, a.h * .6);
+    draw_rect(track_a, track_inner_c, gfx);
+    _draw_3d_border(track_a, track_border_c, true, gfx);
 
-    v4 *color = c;
-    if(!slider->enabled)  color = d;
+    // Fill
+    Rect fill_a  = shrunken(left_of(track_a, handle_c_dx), 2);
+    draw_rect(fill_a, fill_c, gfx);
+    _draw_3d_border(fill_a, fill_c, false, gfx);
 
-    triangles(v, uv, color, tex, normals, 6, gfx);
-
-    v4 handle_c   = {0, 0.25, 0.45, 1};
-    v4 handle_c_p = {0.1, 0.1, 0.1, 1};
-    
-    draw_rect(slider_handle_rect(a, slider->value), (slider->pressed) ? handle_c_p : handle_c, gfx);
+    // Handle
+    draw_rect(handle_a, handle_c, gfx);
+    _draw_3d_border(handle_a, handle_c, false, gfx);
 }
 
 void draw_dropdown(UI_Element *e, Graphics *gfx)
