@@ -160,10 +160,18 @@ enum UI_Click_State_
 };
 typedef u16 UI_Click_State; //In @JAI, this can probably be just an enum.
 
+enum UI_Panel_Style
+{
+    UI_PANEL_STYLE_DEFAULT = 0,
+    UI_PANEL_STYLE_LIST_CELL
+};
+
 struct UI_Panel
 {
     Rect a;
     v4 color;
+
+    UI_Panel_Style style;
 };
 
 struct UI_Viewport
@@ -234,7 +242,8 @@ struct UI_Image
 enum UI_Button_Style
 {
     UI_BUTTON_STYLE_DEFAULT = 0,
-    UI_BUTTON_STYLE_INVISIBLE
+    UI_BUTTON_STYLE_INVISIBLE,
+    UI_BUTTON_STYLE_LIST_ITEM
 };
 enum UI_Button_Flag_ : u8 {
     UI_BUTTON_DONT_ANIMATE = 0x1

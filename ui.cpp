@@ -578,7 +578,7 @@ bool update_scrollbar(UI_Scrollbar *scroll, bool scrollbar_hovered,
 }
 
 
-UI_Element *panel(UI_Context ctx, Optional<v4> color = {0})
+UI_Element *panel(UI_Context ctx, Optional<v4> color = {0}, UI_Panel_Style style = UI_PANEL_STYLE_DEFAULT)
 {
     U(ctx);
 
@@ -590,6 +590,7 @@ UI_Element *panel(UI_Context ctx, Optional<v4> color = {0})
     auto *panel = &e->panel;
     ui_set(e, &panel->a,     area(ctx.layout));
     ui_set(e, &panel->color, get_or_default(color, theme->panel));
+    ui_set(e, &panel->style, style);
 
     return e;
 }
@@ -684,7 +685,8 @@ float action_menu_height(int num_items, double anim_t0, double t, bool opening)
 }
 
 
-UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false, Optional<v4> custom_color = {0}, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, UI_Button_Flags flags = 0, Cursor_Icon cursor = CURSOR_ICON_DEFAULT)
+UI_Click_State button(UI_Context ctx, String label = EMPTY_STRING, bool enabled = true, bool selected = false,
+                      Optional<v4> custom_color = {0}, UI_Button_Style style = UI_BUTTON_STYLE_DEFAULT, UI_Button_Flags flags = 0, Cursor_Icon cursor = CURSOR_ICON_DEFAULT)
 {
     U(ctx);
     

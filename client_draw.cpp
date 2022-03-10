@@ -312,13 +312,32 @@ void draw_panel(UI_Element *e, UI_Manager *ui, Graphics *gfx, double t)
 
     _OPAQUE_UI_();
 
-    auto border_color     = e->panel.color;
-    auto background_color = adjusted_brightness(e->panel.color, .9);
+
+
+    auto style = e->panel.style;
+
+    switch(style) { // @Jai: #complete
+        case UI_PANEL_STYLE_DEFAULT: {
+            auto border_color     = e->panel.color;
+            auto background_color = adjusted_brightness(e->panel.color, .9);
     
-    draw_rect(e->panel.a, background_color, gfx);
-    
-    _draw_3d_border(e->panel.a, border_color, false, gfx);
-    _draw_3d_border(shrunken(e->panel.a, 4), border_color, true, gfx);
+            draw_rect(e->panel.a, background_color, gfx);
+        
+            _draw_3d_border(e->panel.a, border_color, false, gfx);
+            _draw_3d_border(shrunken(e->panel.a, 4), border_color, true, gfx);
+        } break;
+
+        case UI_PANEL_STYLE_LIST_CELL: {
+            auto border_color1 = adjusted_brightness(e->panel.color,  .9);
+            auto border_color2 = adjusted_brightness(e->panel.color, 1.1);
+            
+            draw_rect(left_of(e->panel.a, 1),  border_color1, gfx);
+            draw_rect(right_of(e->panel.a, 1), border_color2, gfx);
+            draw_rect(bottom_of(e->panel.a, 1), border_color1, gfx);
+        } break;
+
+        default: Assert(false); break;
+    }
 }
 
 void draw_window(UI_Element *e, UI_Manager *ui, Graphics *gfx)
@@ -462,8 +481,12 @@ void _draw_button(Rect a, UI_Click_State click_state, Graphics *gfx, v4 color,
     draw_rect(a, color_to_use, gfx);
 
     // BORDER //
-    bool invert_border = (selected || (click_state & PRESSED));
-    _draw_3d_border(a, color_to_use, invert_border, gfx);
+    if(style == UI_BUTTON_STYLE_DEFAULT) {
+        bool invert_border = (selected || (click_state & PRESSED));
+        _draw_3d_border(a, color_to_use, invert_border, gfx);
+    } else {
+//        _draw_3d_border(a, color_to_use, true, gfx);
+    }
         
     // LABEL //
     if(label.length > 0) _draw_button_label(label, a, gfx);

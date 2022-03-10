@@ -36,13 +36,7 @@ void people_view(UI_Context ctx)
     }
     end_list(P(ctx));
 
-#if 0
-    for(int i = 0; i < ARRLEN(people); i++) {
-        _TOP_SLIDE_(24);
-        auto *it = &people[i];
-        button(PC(ctx, i), it->name);
-    }
-
+    
     _TOP_(24);
     static float x = .3;
     x = slider(P(ctx), x);
