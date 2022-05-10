@@ -3,11 +3,6 @@
 //                       If on surface, make sure z = surface.z (not always snapped to grid)
 //                          If surface is CENTERING, make sure item is centered.
 
-#include "room_server_bound.cpp"
-
-#define RCB_OUTBOUND
-#include "room_client_bound.cpp"
-
 
 const int MAX_INBOUND_RS_CLIENT_PACKETS_PER_LOOP = 16;
 
@@ -509,8 +504,14 @@ RS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
         if(connection->user_id == user_id) return connection;
     }
 
+    Node_Connection_Arguments args;
+    Zero(args);
+    args.user.user = user_id;
+    args.user.client_type = US_CLIENT_RS;
+    args.user.client_node_id = server->server_id;
+    
     Network_Node node = { 0 };
-    if(!connect_to_user_server(user_id, &node, US_CLIENT_RS, server->server_id)) return NULL;
+    if(!connect_to_node(&node, NODE_USER, args)) return NULL;
 
     RS_User_Server_Connection new_connection = {0};
     new_connection.user_id = user_id;

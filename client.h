@@ -116,7 +116,7 @@ struct Client
     // --
 
     Client_UI cui;
-
+    
     // --
     User   user;
     Room   room;

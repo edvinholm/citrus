@@ -46,6 +46,7 @@ void deinit_user_client_queue(US_Client_Queue *queue)
 
 struct User_Server
 {
+    Thread thread;
     u32 server_id;
     
     Atomic<bool> should_exit; // @Speed: Semaphore?

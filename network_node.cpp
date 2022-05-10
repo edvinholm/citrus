@@ -1,55 +1,4 @@
 
-#ifndef NETWORK_NODE_INCLUDED
-#define NETWORK_NODE_INCLUDED
-
-#define Enqueue(Packet_Type, Node_Ptr, ...) \
-    Fail_If_True(!enqueue_##Packet_Type##_packet(Node_Ptr, __VA_ARGS__));   \
-    
-#define Enqueue_NoArgs(Packet_Type, Node_Ptr)                        \
-    Fail_If_True(!enqueue_##Packet_Type##_packet(Node_Ptr));    \
-    
-#define Send_Now(Packet_Type, Node_Ptr, ...)                            \
-    Enqueue(Packet_Type, Node_Ptr, __VA_ARGS__);                        \
-    Assert((Node_Ptr)->packet_queue.n == 1);                            \
-    Fail_If_True(!send_outbound_packets(Node_Ptr))
-
-// @Jai @Cleanup this stupid poop.
-#define Send_Now_NoArgs(Packet_Type, Node_Ptr)                  \
-    Enqueue_NoArgs(Packet_Type, Node_Ptr);                        \
-    Assert((Node_Ptr)->packet_queue.n == 1);                      \
-    Fail_If_True(!send_outbound_packets(Node_Ptr))
-
-
-#define Data_Ptr(Ptr, Length, Node_Ptr)                                 \
-    Fail_If_True(!place_data_pointer((u8 **)&Ptr, Length, Node_Ptr))
-
-
-struct Network_Node_Buffer: public Memory_Buffer
-{
-    s64 caret; // Only used when reading.
-    s64 packet_size; // When sending, this is the size of all packets together.
-};
-
-struct Network_Node
-{
-    // TODO @Norelease: Don't have the buffers in the node struct.
-    //                  Have pointers to them here instead, or something...
-    //                  and share them between multiple nodes where possible.
-    Network_Node_Buffer receive_buffer; // NOTE: This holds at most one packet.
-    Network_Node_Buffer send_buffer;    // NOTE: This holds at most one packet.
-
-    struct Packet {
-        s64 start;
-        s64 size;
-    };
-    
-    s64 current_outbound_packet_start_plus_one;
-    Array<Packet, ALLOC_MALLOC> packet_queue;
-    
-    Socket socket;
-};
-
-
 void reset_network_node_buffer(Network_Node_Buffer *buf)
 {
     buf->packet_size = 0;
@@ -192,62 +141,58 @@ bool place_data_pointer(u8 **_pointer, s64 data_length, Network_Node *node)
 
 
 
-inline
 bool read_s8(s8 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
 bool read_s16(s16 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
 bool read_s32(s32 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
 bool read_s64(s64 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
 
-inline
+
 bool read_u8(u8 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
+
 bool read_u16(u16 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
+
 bool read_u32(u32 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
+
 bool read_u64(u64 *_i, Network_Node *node)
 {
     return read_bytes(_i, sizeof(*_i), node);
 }
 
-inline
+
 bool read_float(float *_f, Network_Node *node)
 {
     return read_bytes(_f, sizeof(*_f), node);
 }
 
-inline
+
 bool read_bool(bool *_b, Network_Node *node)
 {
     Read(u8, i, node);
@@ -256,7 +201,7 @@ bool read_bool(bool *_b, Network_Node *node)
 }
 
 
-inline
+
 bool read_Quat(Quat *_q, Network_Node *node)
 {   
     Assert(sizeof(_q->x) == sizeof(u32));
@@ -276,7 +221,7 @@ bool read_Quat(Quat *_q, Network_Node *node)
 }
 
 
-inline
+
 bool read_v3(v3 *_u, Network_Node *node)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -293,7 +238,7 @@ bool read_v3(v3 *_u, Network_Node *node)
     return true;
 }
 
-inline
+
 bool read_v4(v4 *_u, Network_Node *node)
 {
     Assert(sizeof(_u->x) == sizeof(u32));
@@ -313,7 +258,7 @@ bool read_v4(v4 *_u, Network_Node *node)
 }
 
 // NOTE: _str->data will point to a place in node->receive_buffer.data on success.
-inline
+
 bool read_String(String *_str, Network_Node *node)
 {
     u64 length;
@@ -325,7 +270,7 @@ bool read_String(String *_str, Network_Node *node)
 
 
 
-inline
+
 bool write_bytes(void *data, u64 length, Network_Node *node)
 {
     auto *buf = &node->send_buffer;
@@ -337,25 +282,25 @@ bool write_bytes(void *data, u64 length, Network_Node *node)
 }
 
 
-inline
+
 bool write_s8(s8 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_s16(s16 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_s32(s32 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_s64(s64 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
@@ -363,31 +308,31 @@ bool write_s64(s64 i, Network_Node *node)
 
 
 
-inline
+
 bool write_u8(u8 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_u16(u16 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_u32(u32 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_u64(u64 i, Network_Node *node)
 {
     return write_bytes(&i, sizeof(i), node);
 }
 
-inline
+
 bool write_float(float f, Network_Node *node)
 {
     Assert(sizeof(f) == sizeof(u32));
@@ -398,14 +343,14 @@ bool write_float(float f, Network_Node *node)
 }
 
 
-inline
+
 bool write_bool(bool b, Network_Node *node)
 {
     return write_u8(b ? 1 : 0, node);
 }
 
 
-inline
+
 bool write_Quat(Quat q, Network_Node *node)
 {
     Assert(sizeof(q.x) == sizeof(u32));
@@ -425,7 +370,7 @@ bool write_Quat(Quat q, Network_Node *node)
 }
 
 
-inline
+
 bool write_v3(v3 u, Network_Node *node)
 {
     Assert(sizeof(u.x) == sizeof(u32));
@@ -443,7 +388,7 @@ bool write_v3(v3 u, Network_Node *node)
 }
 
 
-inline
+
 bool write_v4(v4 u, Network_Node *node)
 {
     Assert(sizeof(u.x) == sizeof(u32));
@@ -462,7 +407,7 @@ bool write_v4(v4 u, Network_Node *node)
     return true;
 }
 
-inline
+
 bool write_String(String str, Network_Node *node)
 {
     // @Norelease: TODO @Security: Assert str.length < max length for strings... See note in read_String.
@@ -477,1243 +422,120 @@ bool write_String(String str, Network_Node *node)
 
 
 
-
-// User //
-static_assert(sizeof(User_ID) == sizeof(u64));
-bool read_User_ID(User_ID *_user_id, Network_Node *node)
-{
-    Read(u64, id, node);
-    *_user_id = (User_ID)id;
-    return true;
-}
-
-bool write_User_ID(User_ID user_id, Network_Node *node)
-{
-    Write(u64, user_id, node);
-    return true;
-}
-
-static_assert(sizeof(Money) == sizeof(u64));
-bool read_Money(Money *_money, Network_Node *node)
-{
-    Read(s64, i, node);
-    *_money = (Money)i;
-    return true;
-}
-
-bool write_Money(Money money, Network_Node *node)
-{
-    Write(s64, money, node);
-    return true;
-}
-
-
-
-
-// World_Time //
-
-static_assert(sizeof(World_Time) == sizeof(double));
-                  
-bool read_World_Time(World_Time *_time, Network_Node *node)
-{
-    Read(u64, time, node);
-    *_time = (World_Time)time / 1000000.0;
-    return true;
-}
-
-bool write_World_Time(World_Time time, Network_Node *node)
-{
-    Write(u64, time * 1000000.0, node);
-    return true;
-}
-
-
-
-
-// Decor //
-// @Norelease TODO: Check that it is a valid type.
-bool read_Decor_Type_ID(Decor_Type_ID *_type_id, Network_Node *node)
-{
-    Read(u32, type_id, node);
-    *_type_id = (Decor_Type_ID)type_id;
-    return true;
-}
-
-bool write_Decor_Type_ID(Decor_Type_ID type_id, Network_Node *node)
-{
-    Write(u32, type_id, node);
-    return true;
-}
-
-
-
-
-// Item //
-// @Norelease TODO: Check that it is a valid type.
-bool read_Item_Type_ID(Item_Type_ID *_type_id, Network_Node *node)
-{
-    Read(u32, type_id, node);
-    *_type_id = (Item_Type_ID)type_id;
-    return true;
-}
-
-bool write_Item_Type_ID(Item_Type_ID type_id, Network_Node *node)
-{
-    Write(u32, type_id, node);
-    return true;
-}
-
-bool read_Item_ID(Item_ID *_id, Network_Node *node)
-{
-    Read(u64, origin, node);
-    Read(u64, number, node);
-    _id->origin = origin;
-    _id->number = number;
-    return true;
-}
-
-bool write_Item_ID(Item_ID id, Network_Node *node)
-{
-    Write(u64, id.origin, node);
-    Write(u64, id.number, node);
-    return true;
-}
-
-
-// @Norelease @Security: Check that it is a valid type.
-bool read_Nugget_Type(Nugget_Type *_type, Network_Node *node)
-{
-    static_assert(sizeof(*_type) == sizeof(u8));
-    Read(u8, type, node);
-    *_type = (Nugget_Type)type;
-    return true;
-}
-
-bool write_Nugget_Type(Nugget_Type type, Network_Node *node)
-{
-    static_assert(sizeof(type) == sizeof(u8));
-    Write(u8, type, node);
-    return true;
-}
-
-
-
-// @Norelease @Security: Check that it is a valid type.
-bool read_Liquid_Type(Liquid_Type *_type, Network_Node *node)
-{
-    static_assert(sizeof(*_type) == sizeof(u8));
-    Read(u8, type, node);
-    *_type = (Liquid_Type)type;
-    return true;
-}
-
-bool write_Liquid_Type(Liquid_Type type, Network_Node *node)
-{
-    static_assert(sizeof(type) == sizeof(u8));
-    Write(u8, type, node);
-    return true;
-}
-
-
-bool read_Liquid_Fraction(Liquid_Fraction *_f, Network_Node *node)
-{
-    static_assert(sizeof(*_f) == sizeof(u32));
-    Read_To_Ptr(u32, _f, node);
-    return true;
-}
-
-bool write_Liquid_Fraction(Liquid_Fraction f, Network_Node *node)
-{
-    static_assert(sizeof(f) == sizeof(u32));
-    Write(u32, f, node);
-    return true;
-}
-
-
-bool read_Liquid(Liquid *_lq, Network_Node *node)
-{
-    Read_To_Ptr(Liquid_Type, &_lq->type, node);
-
-    if(_lq->type == LQ_YEAST_WATER) {
-        auto &yw = _lq->yeast_water;
-        Read_To_Ptr(Liquid_Fraction, &yw.yeast, node);
-        Read_To_Ptr(Liquid_Fraction, &yw.nutrition, node);
-    }
-    
-    return true;
-}
-
-bool write_Liquid(Liquid lq, Network_Node *node)
-{
-    Write(Liquid_Type, lq.type, node);
-
-    if(lq.type == LQ_YEAST_WATER) {
-        auto &yw = lq.yeast_water;
-        Write(Liquid_Fraction, yw.yeast, node);
-        Write(Liquid_Fraction, yw.nutrition, node);
-    }
-    
-    return true;
-}
-
-
-bool read_Seed_Type(Seed_Type *_type, Network_Node *node)
-{
-    static_assert(sizeof(*_type) == sizeof(u16));
-    Read(u16, t, node);
-    *_type = (Seed_Type)t;
-    return true;
-}
-
-bool write_Seed_Type(Seed_Type type, Network_Node *node)
-{
-    static_assert(sizeof(type) == sizeof(u16));
-    Write(u16, type, node);
-    return true;
-}
-
-
-bool read_Nugget(Nugget *_nugget, Network_Node *node)
-{
-    Read_To_Ptr(Nugget_Type, &_nugget->type, node);
-
-    if(_nugget->type == NUGGET_SEEDS) {
-        Read_To_Ptr(Seed_Type, &_nugget->seed_type, node);
-    }
-    
-    return true;
-}
-
-bool write_Nugget(Nugget nugget, Network_Node *node)
-{
-    Write(Nugget_Type, nugget.type, node);
-
-    if(nugget.type == NUGGET_SEEDS) {
-        Write(Seed_Type, nugget.seed_type, node);
-    }
-    
-    return true;
-}
-
-
-// @Norelease @Security: Check that it is a valid value.
-// NOTE: Don't call this to read a bitfield of Substance_Forms.
-bool read_Substance_Form(Substance_Form *_f, Network_Node *node)
-{
-    static_assert(sizeof(*_f) == sizeof(u8));
-    Read(u8, f, node);
-    *_f = (Substance_Form)f;
-    return true;
-}
-
-bool write_Substance_Form(Substance_Form f, Network_Node *node)
-{
-    static_assert(sizeof(f) == sizeof(u8));
-    Write(u8, f, node);
-    return true;
-}
-
-bool read_Substance(Substance *_s, Network_Node *node)
-{
-    Read_To_Ptr(Substance_Form, &_s->form, node);
-    switch(_s->form) { // @Jai: #complete
-        case SUBST_LIQUID:
-            Read_To_Ptr(Liquid, &_s->liquid, node);
-            break;
-            
-        case SUBST_NUGGET:
-            Read_To_Ptr(Nugget, &_s->nugget, node);
-            break;
-
-        case SUBST_NONE: break;
-            
-        default: {
-            Fail_If_True(true);
-            return false;
-        };
-    }
-    
-    return true;
-}
-
-bool write_Substance(Substance s, Network_Node *node)
-{
-    Write(Substance_Form, s.form, node);
-    switch(s.form) { // @Jai: #complete
-        case SUBST_LIQUID:
-            Write(Liquid, s.liquid, node);
-            break;
-            
-        case SUBST_NUGGET:
-            Write(Nugget, s.nugget, node);
-            break;
-
-        case SUBST_NONE: break;
-
-        default: {
-            Fail_If_True(true);
-            return false;
-        };
-    }
-    
-    return true;
-}
-
-
-bool read_Substance_Amount(Substance_Amount *_amt, Network_Node *node)
-{
-    static_assert(sizeof(*_amt) == sizeof(u32));
-    Read_To_Ptr(u32, _amt, node);
-    return true;
-}
-
-bool write_Substance_Amount(Substance_Amount amt, Network_Node *node)
-{
-    static_assert(sizeof(amt) == sizeof(u32));
-    Write(u32, amt, node);
-    return true;
-}
-
-
-bool read_Substance_Container(Substance_Container *_c, Network_Node *node)
-{
-    Read_To_Ptr(Substance,        &_c->substance, node);
-    Read_To_Ptr(Substance_Amount, &_c->amount, node);
-    return true;
-}
-
-bool write_Substance_Container(Substance_Container c, Network_Node *node)
-{
-    Write(Substance,        c.substance, node);
-    Write(Substance_Amount, c.amount, node);
-    return true;
-}
-
-bool read_Item(Item *_item, Network_Node *node)
-{
-    Read_To_Ptr(Item_ID,      &_item->id,    node);
-    Read_To_Ptr(Item_Type_ID, &_item->type,  node);
-    Read_To_Ptr(User_ID,      &_item->owner, node);
-
-    switch(_item->type) {
-        case ITEM_APPLE_TREE:
-        case ITEM_WHEAT: {
-            auto *x = &_item->plant;
-            Read_To_Ptr(float, &x->grow_progress, node);
-        } break;
-    }
-
-    if(item_types[_item->type].container_forms != SUBST_NONE) {
-        Read_To_Ptr(Substance_Container, &_item->container, node);
-    }
-    
-    return true;
-}
-
-bool write_Item(Item item, Network_Node *node)
-{
-    Write(Item_ID,      item.id,    node);
-    Write(Item_Type_ID, item.type,  node);
-    Write(User_ID,      item.owner, node);
-
-    switch(item.type) {
-        case ITEM_APPLE_TREE:
-        case ITEM_WHEAT: {
-            auto *x = &item.plant;
-            Write(float, x->grow_progress, node);
-        } break;
-    }
-
-    // @Speed? (Accessing item_types[..] which might not be in cache? Or is it?
-    if(item_types[item.type].container_forms != SUBST_NONE) {
-        Write(Substance_Container, item.container, node);
-    }
-    
-    return true;
-}
-
-bool read_Inventory_Slot_Flags(Inventory_Slot_Flags *_flags, Network_Node *node)
-{
-    Read(u8, flags, node);
-    *_flags = (Inventory_Slot_Flags)flags;
-    return true;
-}
-bool write_Inventory_Slot_Flags(Inventory_Slot_Flags flags, Network_Node *node)
-{
-    Write(u8, flags, node);
-    return true;
-}
-
-bool read_Inventory_Slot(Inventory_Slot *_slot, Network_Node *node)
-{
-    Read_To_Ptr(Inventory_Slot_Flags, &_slot->flags, node);
-    Read_To_Ptr(Item, &_slot->item, node);
-    return true;
-}
-
-bool write_Inventory_Slot(Inventory_Slot *slot, Network_Node *node)
-{
-    Write(Inventory_Slot_Flags, slot->flags, node);
-    Write(Item, slot->item, node);
-    return true;
-}
-
-
-
-// Market //
-
-// @Norelease TODO: Check that it is a valid value.
-bool read_Price_Period(Price_Period *_period, Network_Node *node)
-{
-    Read(u8, period, node);
-    *_period = (Price_Period)period;
-    return true;
-}
-
-bool write_Price_Period(Price_Period period, Network_Node *node)
-{
-    Write(u8, period, node);
-    return true;
-}
-
-// @Norelease TODO: Check that it is a valid value.
-bool read_Market_View_Target_Type(Market_View_Target_Type *_type, Network_Node *node)
-{
-    Read(u8, type, node);
-    *_type = (Market_View_Target_Type)type;
-    return true;
-}
-
-bool write_Market_View_Target_Type(Market_View_Target_Type type, Network_Node *node)
-{
-    Write(u8, type, node);
-    return true;
-}
-
-bool read_Market_View_Target(Market_View_Target *_target, Network_Node *node)
-{
-    Read_To_Ptr(Market_View_Target_Type, &_target->type, node);
-
-    switch(_target->type)
-    {
-        case MARKET_VIEW_TARGET_ARTICLE: {
-            auto *x = &_target->article;
-            Read_To_Ptr(Item_Type_ID, &x->article,      node);
-            Read_To_Ptr(Price_Period, &x->price_period, node);
-        } break;
-
-        case MARKET_VIEW_TARGET_ORDERS: {
-            
-        } break;
-    }
-
-    return true;
-}
-
-bool write_Market_View_Target(Market_View_Target target, Network_Node *node)
-{
-    Write(Market_View_Target_Type, target.type, node);
-
-    switch(target.type)
-    {
-        case MARKET_VIEW_TARGET_ARTICLE: {
-            auto *x = &target.article;
-            Write(Item_Type_ID, x->article,      node);
-            Write(Price_Period, x->price_period, node);
-        } break;
-
-        case MARKET_VIEW_TARGET_ORDERS: {
-            
-        } break;
-    }
-
-    return true;
-}
-
-
-bool read_Market_View(S__Market_View *_view, Network_Node *node)
-{
-    Read_To_Ptr(Market_View_Target, &_view->target, node);
-
-    switch(_view->target.type)
-    {
-        case MARKET_VIEW_TARGET_ARTICLE: {
-            auto *x = &_view->article;
-            
-            if(_view->target.article.article != ITEM_NONE_OR_NUM)
-            {
-                Read_To_Ptr(u16, &x->num_prices, node);
-                Fail_If_True(x->num_prices > ARRLEN(x->prices));
-                
-                for(int i = 0; i < x->num_prices; i++) {
-                    Read_To_Ptr(Money, &x->prices[i], node);
-                }
-            }
-        } break;
-
-        case MARKET_VIEW_TARGET_ORDERS: {
-            auto *x = &_view->orders;
-        } break;
-    }
-    
-    return true;
-}
-
-bool write_Market_View(S__Market_View *view, Network_Node *node)
-{
-    Write(Market_View_Target, view->target, node);
-
-    switch(view->target.type)
-    {
-        case MARKET_VIEW_TARGET_ARTICLE: {
-            auto *x = &view->article;
-            
-            if(view->target.article.article != ITEM_NONE_OR_NUM)
-            {
-                Fail_If_True(x->num_prices > ARRLEN(x->prices));
-                Write(u16, x->num_prices, node);
-                
-                for(int i = 0; i < x->num_prices; i++) {
-                    Write(Money, x->prices[i], node);
-                }
-            }
-        } break;
-
-        case MARKET_VIEW_TARGET_ORDERS: {
-            auto *x = &view->orders;
-        } break;
-    }
-
-    return true;
-}
-
-
-
-// Room //
-bool read_Room_ID(Room_ID *_room_id, Network_Node *node)
-{
-    Read(u64, id, node);
-    *_room_id = (Room_ID)id;
-    return true;
-}
-
-bool write_Room_ID(Room_ID room_id, Network_Node *node)
-{
-    Write(u64, room_id, node);
-    return true;
-}
-
-
-// Chat //
-bool read_Chat_Message(Chat_Message *_message, Network_Node *node)
-{
-    Read_To_Ptr(World_Time, &_message->t,    node);
-    Read_To_Ptr(User_ID,    &_message->user, node);
-    Read_To_Ptr(String,     &_message->text, node);
-    return true;
-}
-
-bool write_Chat_Message(Chat_Message message, Network_Node *node)
-{
-    Write(World_Time, message.t,    node);
-    Write(User_ID,    message.user, node);
-    Write(String,     message.text, node);
-    return true;
-}
-
-// Chess (@Cleanup: Move to some chess file?) //
-// @Norelease TODO: Check that it is a valid type.
-bool read_Chess_Action_Type(Chess_Action_Type *_type, Network_Node *node)
-{
-    Read(u8, type, node);
-    *_type = (Chess_Action_Type)type;
-    return true;
-}
-
-bool write_Chess_Action_Type(Chess_Action_Type type, Network_Node *node)
-{
-    Write(u8, type, node);
-    return true;
-}
-
-
-// Entity //
-// @Norelease TODO: Check that it is a valid type.
-bool read_Entity_Type(Entity_Type *_type, Network_Node *node)
-{
-    Read(u8, type, node);
-    *_type = (Entity_Type)type;
-    return true;
-}
-
-bool write_Entity_Type(Entity_Type type, Network_Node *node)
-{
-    Write(u8, type, node);
-    return true;
-}
-
-bool read_Entity_ID(Entity_ID *_id, Network_Node *node)
-{
-    Read(u64, id, node);
-    *_id = (Entity_ID)id;
-    return true;
-}
-
-bool write_Entity_ID(Entity_ID id, Network_Node *node)
-{
-    Write(u64, id, node);
-    return true;
-}
-
-
-// @Norelease TODO: Check that it is a valid type.
-bool read_Entity_Action_Type(Entity_Action_Type *_type, Network_Node *node)
-{
-    Read(u32, i, node);
-    *_type = (Entity_Action_Type)i;
-    return true;
-}
-
-bool write_Entity_Action_Type(Entity_Action_Type type, Network_Node *node)
-{
-    Write(u32, type, node);
-    return true;
-}
-
-
-bool read_Entity_Action(Entity_Action *_action, Network_Node *node)
-{
-    Read_To_Ptr(Entity_Action_Type, &_action->type, node);
-
-    switch(_action->type) {
-        case ENTITY_ACT_MOVE: {
-            auto *x = &_action->move;
-            Read_To_Ptr(v3,   &x->p, node);
-            Read_To_Ptr(Quat, &x->q, node);
-        } break;
-            
-        case ENTITY_ACT_SET_POWER_MODE: {
-            auto *x = &_action->set_power_mode;
-            Read_To_Ptr(bool, &x->set_to_on, node);
-        } break;
-            
-        case ENTITY_ACT_SIT_OR_UNSIT: {
-            auto *x = &_action->sit_or_unsit;
-            Read_To_Ptr(bool, &x->unsit, node);
-        } break;
-
-        case ENTITY_ACT_CHESS: {
-            auto *x = &_action->chess;
-
-            Read_To_Ptr(Chess_Action_Type, &x->type, node);
-            switch(x->type) {
-                case CHESS_ACT_MOVE: {
-                    // @Norelease: Check that square indices are in range!
-                    Read_To_Ptr(u8, &x->move.from, node);
-                    Read_To_Ptr(u8, &x->move.to, node);
-                } break;
-
-                case CHESS_ACT_JOIN: {
-                    Read_To_Ptr(bool, &x->join.as_black, node);
-                } break;
-            }
-        } break;
-
-        case ENTITY_ACT_PLANT: {
-            auto *x = &_action->plant;
-            Read_To_Ptr(v3, &x->tp, node);
-        } break;
-    }
-    
-    return true;
-}
-
-bool write_Entity_Action(Entity_Action action, Network_Node *node)
-{
-    Write(Entity_Action_Type, action.type, node);
-
-    switch(action.type) {
-        case ENTITY_ACT_MOVE: {
-            auto *x = &action.move;
-            Write(v3,   x->p, node);
-            Write(Quat, x->q, node);
-        } break;
-        
-        case ENTITY_ACT_SET_POWER_MODE: {
-            auto *x = &action.set_power_mode;
-            Write(bool, x->set_to_on, node);
-        } break;
-                        
-        case ENTITY_ACT_SIT_OR_UNSIT: {
-            auto *x = &action.sit_or_unsit;
-            Write(bool, x->unsit, node);
-        } break;
-
-        case ENTITY_ACT_CHESS: {
-            auto *x = &action.chess;
-
-            Write(Chess_Action_Type, x->type, node);
-            switch(x->type) {
-                case CHESS_ACT_MOVE: {
-                    Write(u8, x->move.from, node);
-                    Write(u8, x->move.to, node);
-                } break;
-
-                case CHESS_ACT_JOIN: {
-                    Write(bool, x->join.as_black, node);
-                } break;
-            }            
-        } break;
-
-        case ENTITY_ACT_PLANT: {
-            auto *x = &action.plant;
-            Write(v3, x->tp, node);
-        } break;
-    }
-    
-    return true;
-}
-
-bool read_Player_Action_ID(Player_Action_ID *_id, Network_Node *node)
-{
-    static_assert(sizeof(*_id) == sizeof(u32));
-    Read_To_Ptr(u32, _id, node);
-    return true;
-}
-
-bool write_Player_Action_ID(Player_Action_ID id, Network_Node *node)
-{
-    static_assert(sizeof(id) == sizeof(u32));
-    Write(u32, id, node);
-    return true;
-}
-    
-// @Norelease TODO: Check that it is a valid type.
-bool read_Player_Action_Type(Player_Action_Type *_type, Network_Node *node)
-{
-    Read(u32, i, node);
-    *_type = (Player_Action_Type)i;
-    return true;
-}
-
-bool write_Player_Action_Type(Player_Action_Type type, Network_Node *node)
-{
-    Write(u32, type, node);
-    return true;
-}
-
-
-bool read_Player_Action(Player_Action *_action, Network_Node *node)
-{
-    Read_To_Ptr(Player_Action_Type, &_action->type, node);
-    Read_To_Ptr(u8, &_action->step, node);
-    
-    Read_To_Ptr(World_Time, &_action->reach_t,     node);
-    Read_To_Ptr(World_Time, &_action->update_t,    node);
-    Read_To_Ptr(World_Time, &_action->end_t,       node);
-    Read_To_Ptr(World_Time, &_action->end_retry_t, node);
-
-    Read_To_Ptr(bool, &_action->dequeue_requested, node);
-
-    switch(_action->type) { // @Jai: #complete
-        case PLAYER_ACT_ENTITY: {
-            auto *x = &_action->entity;
-            Read_To_Ptr(Entity_ID,     &x->target, node);
-            Read_To_Ptr(Entity_Action, &x->action, node);
-        } break;
-
-        case PLAYER_ACT_WALK: {
-            auto *x = &_action->walk;
-            Read_To_Ptr(v3,         &x->p1, node);
-        } break;
-
-        case PLAYER_ACT_PUT_DOWN: {
-            auto *x = &_action->put_down;
-            Read_To_Ptr(v3,   &x->p, node);
-            Read_To_Ptr(Quat, &x->q,  node);
-        } break;
-            
-        case PLAYER_ACT_PLACE_FROM_INVENTORY: {
-            auto *x = &_action->place_from_inventory;
-            Read_To_Ptr(Item_ID, &x->item, node);
-            Read_To_Ptr(v3,      &x->p, node);
-            Read_To_Ptr(Quat,    &x->q,  node);
-        } break;
-
-        default: Assert(false); return false;
-    }
-
-    return true;
-}
-
-
-bool write_Player_Action(Player_Action action, Network_Node *node)
-{
-    Write(Player_Action_Type, action.type, node);
-    Write(u8, action.step, node);
-    
-    Write(World_Time, action.reach_t,     node);
-    Write(World_Time, action.update_t,    node);
-    Write(World_Time, action.end_t,       node);
-    Write(World_Time, action.end_retry_t, node);
-    
-    Write(bool, action.dequeue_requested, node);
-
-    switch(action.type) { // @Jai: #complete
-        case PLAYER_ACT_ENTITY: {
-            auto *x = &action.entity;
-            Write(Entity_ID,     x->target, node);
-            Write(Entity_Action, x->action, node);
-        } break;
-
-        case PLAYER_ACT_WALK: {
-            auto *x = &action.walk;
-            Write(v3, x->p1, node);
-        } break;
-
-        case PLAYER_ACT_PUT_DOWN: {
-            auto *x = &action.put_down;
-            Write(v3,   x->p, node);
-            Write(Quat, x->q, node);
-        } break;
-
-        case PLAYER_ACT_PLACE_FROM_INVENTORY: {
-            auto *x = &action.place_from_inventory;
-            Write(Item_ID, x->item, node); // @Norelease @Robustness: Check that this is not NO_ITEM
-            Write(v3,      x->p, node);
-            Write(Quat,    x->q,  node);
-        } break;
-
-        default: Assert(false); return false;
-    }
-
-    return true;
-}
-
-// @Norelease: Check that it is a valid value.
-bool read_Chess_Player_Flags(Chess_Player_Flags *_flags, Network_Node *node)
-{
-    Read(u8, flags, node);
-    *_flags = (Chess_Player_Flags)flags;
-    return true;
-}
-
-bool write_Chess_Player_Flags(Chess_Player_Flags flags, Network_Node *node)
-{
-    Write(u8, flags, node);
-    return true;
-}
-
-bool read_Chess_Player(Chess_Player *_player, Network_Node *node)
-{
-    Read_To_Ptr(User_ID,            &_player->user, node);
-    Read_To_Ptr(Chess_Player_Flags, &_player->flags, node);
-    return true;
+enum Node_Type {
+    NODE_CLIENT,
+    NODE_MASTER,
+    NODE_ROOM,
+    NODE_USER,
+    NODE_MARKET
 };
 
-bool write_Chess_Player(Chess_Player player, Network_Node *node)
+struct Node_Connection_Arguments
 {
-    Write(User_ID,            player.user, node);
-    Write(Chess_Player_Flags, player.flags, node);
-    return true;
+    union {
+        struct {} client;
+        struct {} master;
+        struct {
+            Room_ID room;
+            User_ID as_user;
+        } room;
+        struct {
+            User_ID user;
+            US_Client_Type client_type;
+            u32 client_node_id; // The client's node ID if client_type != PLAYER
+        } user;
+        struct {
+            User_ID user;
+            MS_Client_Type client_type;
+        } market;
+    };
 };
 
 
-bool read_Chess_Move(Chess_Move *_move, Network_Node *node)
+bool connect_to_node(Network_Node *node, Node_Type type, Node_Connection_Arguments arguments)
 {
-    Read_To_Ptr(u8, &_move->from, node);
-    Read_To_Ptr(u8, &_move->to,   node);
-    return true;
-}
-
-bool write_Chess_Move(Chess_Move move, Network_Node *node)
-{
-    Write(u8, move.from, node);
-    Write(u8, move.to,   node);
-    return true;
-}
-
-// @Norelease: Check that it is a valid value.
-bool read_Chess_Special_Move(Chess_Special_Move *_special, Network_Node *node)
-{
-    Read(u8, special, node);
-    *_special = (Chess_Special_Move)special;
-    return true;
-}
-
-bool write_Chess_Special_Move(Chess_Special_Move special, Network_Node *node)
-{
-    Write(u8, special, node);
-    return true;
-}
-
-// @Norelease: Check that all squares have valid values.
-bool read_Chess_Board(Chess_Board *_board, Network_Node *node)
-{
-    static_assert(sizeof(_board->squares[0]) == 1);
-    static_assert(sizeof(_board->squares)    == 8*8);
+    Assert(type != NODE_CLIENT);
     
-    Read_To_Ptr(Chess_Player, &_board->white_player, node);
-    Read_To_Ptr(Chess_Player, &_board->black_player, node);
+    Assert(!node->connected);
     
-    Read_To_Ptr(bool, &_board->black_players_turn, node);
+    node->last_connect_attempt_failed = true; // We set this to false before returning true.
 
-    Read_To_Ptr(u32, &_board->num_moves, node);
-    Read_To_Ptr(Chess_Move,         &_board->last_move, node);
-    Read_To_Ptr(Chess_Special_Move, &_board->last_move_special, node);
+    u16 port;
     
-    Read_Bytes(_board->squares, 8*8, node);
-    
-    return true;
-}
-
-bool write_Chess_Board(Chess_Board *board, Network_Node *node)
-{
-    static_assert(sizeof(board->squares[0]) == 1);
-    static_assert(sizeof(board->squares)    == 8*8);
-    
-    Write(Chess_Player, board->white_player, node);
-    Write(Chess_Player, board->black_player, node);
-    
-    Write(bool, board->black_players_turn, node);
-
-    Write(u32, board->num_moves, node);
-    Write(Chess_Move,         board->last_move, node);
-    Write(Chess_Special_Move, board->last_move_special, node);
-    
-    Write_Bytes(board->squares, 8*8, node);
-    
-    return true;
-}
-
-
-bool read_Machine(Machine *_machine, Network_Node *node)
-{
-    Read_To_Ptr(World_Time, &_machine->t_on_recipe_begin, node);
-    Read_To_Ptr(World_Time, &_machine->recipe_duration, node);
-
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Read_To_Ptr(s64, &_machine->recipe_inputs.n, node);
-    Fail_If_True(_machine->recipe_inputs.n > ARRLEN(_machine->recipe_inputs.e));
-    for(s64 i = 0; i < _machine->recipe_inputs.n; i++) {
-        Read_To_Ptr(Entity_ID, &_machine->recipe_inputs.e[i], node);
-    }
-    
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Read_To_Ptr(s64, &_machine->recipe_input_used_as_container.n, node);
-    Fail_If_True(_machine->recipe_input_used_as_container.n > ARRLEN(_machine->recipe_input_used_as_container.e));
-    for(s64 i = 0; i < _machine->recipe_input_used_as_container.n; i++) {
-        Read_To_Ptr(bool, &_machine->recipe_input_used_as_container.e[i], node);
-    }
-
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Read_To_Ptr(s64, &_machine->recipe_outputs.n, node);
-    Fail_If_True(_machine->recipe_outputs.n > ARRLEN(_machine->recipe_outputs.e));
-    for(s64 i = 0; i < _machine->recipe_outputs.n; i++) {
-        Read_To_Ptr(Entity_ID, &_machine->recipe_outputs.e[i], node);
-    }
-    
-    return true;
-}
-
-bool write_Machine(Machine *machine, Network_Node *node)
-{
-    Write(World_Time, machine->t_on_recipe_begin, node);
-    Write(World_Time, machine->recipe_duration, node);
-    
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Write(s64, machine->recipe_inputs.n, node);
-    for(s64 i = 0; i < machine->recipe_inputs.n; i++) {
-        Write(Entity_ID, machine->recipe_inputs.e[i], node);
-    }
-    
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Write(s64, machine->recipe_input_used_as_container.n, node);
-    for(s64 i = 0; i < machine->recipe_input_used_as_container.n; i++) {
-        Write(bool, machine->recipe_input_used_as_container.e[i], node);
-    }
-    
-    // @Cleanup: Have a way of reading Static_Arrays... Maybe wait for @Jai.
-    Write(s64, machine->recipe_outputs.n, node);
-    for(s64 i = 0; i < machine->recipe_outputs.n; i++) {
-        Write(Entity_ID, machine->recipe_outputs.e[i], node);
-    }
-    
-    return true;
-}
-
-bool read_Entity(S__Entity *_entity, Network_Node *node)
-{
-    Zero(*_entity);
-    
-    Read_To_Ptr(Entity_ID,   &_entity->id,   node);
-    Read_To_Ptr(Entity_Type, &_entity->type, node);
-    
-    Read_To_Ptr(Entity_ID, &_entity->held_by, node);
-    Read_To_Ptr(Entity_ID, &_entity->holding, node);
-
-    switch(_entity->type) {
-        case ENTITY_ITEM: {
-            auto *x = &_entity->item_e;
-            
-            Read_To_Ptr(v3,   &x->p, node);
-            Read_To_Ptr(Quat, &x->q, node);
-            
-            Read_To_Ptr(Item, &x->item, node);
-
-            Read_To_Ptr(Entity_ID, &x->locked_by, node);
-            
-            switch(x->item.type) {
-                case ITEM_APPLE_TREE:
-                case ITEM_WHEAT: {
-                    auto *plant = &x->plant;
-                    Read_To_Ptr(World_Time, &plant->t_on_plant,             node);
-                    Read_To_Ptr(float,      &plant->grow_progress_on_plant, node);
-                } break;
-
-                case ITEM_MACHINE: {
-                    auto *machine = &x->machine;
-                    Read_To_Ptr(World_Time, &machine->start_t, node);
-                    Read_To_Ptr(World_Time, &machine->stop_t,  node);
-                } break;
-
-                case ITEM_CHESS_BOARD: {
-                    auto *board = &x->chess_board;
-                    Read_To_Ptr(Chess_Board, board, node);
-                } break;
-
-                case ITEM_BLENDER: {
-                    auto *blender = &x->blender;
-                    Read_To_Ptr(Machine, &blender->machine, node);
-                } break;
-
-                case ITEM_FILTER_PRESS: {
-                    auto *press = &x->filter_press;
-                    Read_To_Ptr(Machine, &press->machine, node);
-                } break;
-            }
-
-            auto *type = &item_types[x->item.type];
-            if(type->container_forms != SUBST_NONE) {
-                auto *container = &x->container;
-                Read_To_Ptr(World_Time, &container->t0, node);
-                Read_To_Ptr(World_Time, &container->t1, node);
-                
-                Read_To_Ptr(Substance_Container, &container->c0, node);
-                Read_To_Ptr(Substance_Container, &container->c1, node);
-            }
-            
+    switch(type) { // @Jai: #complete
+        case NODE_CLIENT: Assert(false); return false;
+        case NODE_MASTER: Assert(!"Not yet implemented"); return false;
+        case NODE_ROOM: {
+            port = ROOM_SERVER_PORT;
         } break;
-            
-        case ENTITY_PLAYER: {
-            auto *x = &_entity->player_e;
-            Read_To_Ptr(User_ID, &x->user_id, node);
-
-            // WALK PATH //
-            Read_To_Ptr(World_Time, &x->walk_t0, node);
-
-            Read_To_Ptr(u16, &x->walk_path_length, node);
-            Fail_If_True(x->walk_path_length < 2);
-
-            x->walk_path = (v3 *)tmp_alloc(sizeof(*x->walk_path) * x->walk_path_length);
-            
-            for(int i = 0; i < x->walk_path_length; i++) {
-                Read_To_Ptr(v3, &x->walk_path[i], node);
-            }
-            //--
-
-            Read_To_Ptr(u8, &x->action_queue_length, node);
-            Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
-            for(int i = 0; i < x->action_queue_length; i++) {
-                Read_To_Ptr(Player_Action, &x->action_queue[i], node);
-            }
-            for(int i = 0; i < x->action_queue_length; i++) {
-                Read_To_Ptr(Player_Action_ID, &x->action_ids[i], node);
-            }
-            for(int i = 0; i < x->action_queue_length+1; i++) {
-                Read_To_Ptr(bool, &x->action_queue_pauses[i], node);
-            }
-
-            Read_To_Ptr(Entity_ID, &x->is_on, node);
-            Read_To_Ptr(bool,      &x->laying_down_instead_of_sitting, node);
-
-            Read_To_Ptr(World_Time, &x->needs_t0, node);
-            for(int i = 0; i < ARRLEN(x->needs0.values); i++) Read_To_Ptr(float, &x->needs0.values[i], node);
-            for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Read_To_Ptr(float, &x->need_change_speeds[i], node);
-            
+        case NODE_USER: {
+            port = USER_SERVER_PORT;
         } break;
-
-        case ENTITY_DECOR: {
-            auto *x = &_entity->decor;
-            
-            Read_To_Ptr(Decor_Type_ID, &x->type, node);
-            Read_To_Ptr(v3,   &x->p, node);
-            Read_To_Ptr(Quat, &x->q, node);
+        case NODE_MARKET: {
+            port = MARKET_SERVER_PORT;
         } break;
-
         default: Assert(false); return false;
     }
     
-    return true;
-}
-
-bool write_Entity(S__Entity *entity, Network_Node *node)
-{
-    Write(Entity_ID,   entity->id,   node);
-    Write(Entity_Type, entity->type, node);
+    Socket socket;
     
-    Write(Entity_ID, entity->held_by, node);
-    Write(Entity_ID, entity->holding, node);
+    if(!platform_create_tcp_socket(&socket)) {
+        Debug_Print("Unable to create socket.\n");
+        return false;
+    }
 
-    switch(entity->type) {
-        case ENTITY_ITEM: {
-            auto *x = &entity->item_e;
-            
-            Write(v3,   x->p, node);
-            Write(Quat, x->q, node);
-            
-            Write(Item, x->item, node);
-            
-            Write(Entity_ID, x->locked_by, node);
-            
-            switch(x->item.type) {
-                case ITEM_APPLE_TREE:
-                case ITEM_WHEAT: {
-                    auto *plant = &x->plant;
-                    Write(World_Time, plant->t_on_plant,             node);
-                    Write(float,      plant->grow_progress_on_plant, node);
-                } break;
+    if(!platform_connect_socket(&socket, "127.0.0.1", port)) {
+        Debug_Print("Unable to connect socket to server. WSA Error: %d\n", WSAGetLastError());
+        return false;
+    }
 
-                case ITEM_MACHINE: {
-                    auto *machine = &x->machine;
-                    Write(World_Time, machine->start_t, node);
-                    Write(World_Time, machine->stop_t, node);
-                } break;
-                    
-                case ITEM_CHESS_BOARD: {
-                    auto *board = &x->chess_board;
-                    Write(Chess_Board, board, node);
-                } break;
-                    
-                case ITEM_BLENDER: {
-                    auto *blender = &x->blender;
-                    Write(Machine, &blender->machine, node);
-                } break;
+    reset_network_node(node, socket);                 
+    platform_set_socket_read_timeout(&node->socket, 5 * 1000);
 
-                case ITEM_FILTER_PRESS: {
-                    auto *press = &x->filter_press;
-                    Write(Machine, &press->machine, node);
-                } break;
-            }
-
+    switch(type) { // @Jai: #complete
+        case NODE_CLIENT: Assert(false); return false;
+        case NODE_MASTER: Assert(!"Not yet implemented"); return false;
             
-            auto *type = &item_types[x->item.type];
-            if(type->container_forms != SUBST_NONE) {
-                auto *container = &x->container;
-                Write(World_Time, container->t0, node);
-                Write(World_Time, container->t1, node);
-                
-                Write(Substance_Container, container->c0, node);
-                Write(Substance_Container, container->c1, node);
-
-            }
+        case NODE_ROOM: {
+            auto &args = arguments.room;
             
-        } break;
-
-        case ENTITY_PLAYER: {
-            auto *x = &entity->player_e;
-            Write(User_ID, x->user_id, node);
-
-            // WALK PATH //
-            Fail_If_True(x->walk_path_length < 2);
-
-            Write(World_Time, x->walk_t0,          node);
-            Write(u16,        x->walk_path_length, node);
-            for(int i = 0; i < x->walk_path_length; i++) {
-                Write(v3, x->walk_path[i], node);
-            }
-            //--
+            Send_Now(RSB_HELLO, node, args.room, args.as_user);
             
-            Fail_If_True(x->action_queue_length > ARRLEN(x->action_queue));
-            Write(u8, x->action_queue_length, node);
-            for(int i = 0; i < x->action_queue_length; i++) {
-                Write(Player_Action, x->action_queue[i], node);
-            }
-            for(int i = 0; i < x->action_queue_length; i++) {
-                Write(Player_Action_ID, x->action_ids[i], node);
-            }
-            for(int i = 0; i < x->action_queue_length+1; i++) {
-                Write(bool, x->action_queue_pauses[i], node);
-            }
-            
-            Write(Entity_ID, x->is_on, node);
-            Write(bool,      x->laying_down_instead_of_sitting, node);
-
-            Write(World_Time, x->needs_t0, node);
-            for(int i = 0; i < ARRLEN(x->needs0.values); i++) Write(float, x->needs0.values[i], node);
-            for(int i = 0; i < ARRLEN(x->need_change_speeds); i++) Write(float, x->need_change_speeds[i], node);
-            
+            RCB_Packet_Header header;
+    
+            Fail_If_True(!expect_type_of_next_rcb_packet(RCB_HELLO, node, &header));
+            Fail_If_True(header.hello.connect_status != ROOM_CONNECT__REQUEST_RECEIVED);
+    
+            Fail_If_True(!expect_type_of_next_rcb_packet(RCB_HELLO, node, &header));
+            Fail_If_True(header.hello.connect_status != ROOM_CONNECT__CONNECTED);
         } break;
             
-        case ENTITY_DECOR: {
-            auto *x = &entity->decor;
+        case NODE_USER: {
+            auto &args = arguments.user;
             
-            Write(Decor_Type_ID, x->type, node);
-            Write(v3,   x->p, node);
-            Write(Quat, x->q, node);
+            Send_Now(USB_HELLO, node, args.user, args.client_type, args.client_node_id);
+            UCB_Packet_Header header;
+            
+            Fail_If_True(!expect_type_of_next_ucb_packet(UCB_HELLO, node, &header));
+            Fail_If_True(header.hello.connect_status != USER_CONNECT__CONNECTED);
         } break;
-
-
+            
+        case NODE_MARKET: {
+            auto &args = arguments.market;
+            
+            Send_Now(MSB_HELLO, node, args.user, args.client_type);
+            MCB_Packet_Header header;
+            
+            Fail_If_True(!expect_type_of_next_mcb_packet(MCB_HELLO, node, &header));
+            Fail_If_True(header.hello.connect_status != MARKET_CONNECT__CONNECTED);
+        } break;
+            
         default: Assert(false); return false;
     }
 
+    platform_set_socket_read_timeout(&node->socket, 1000);
+
+    node->connected = true;
+    node->last_connect_attempt_failed = false;
     return true;
 }
-
-
-
-// Tile //
-bool read_Tile(Tile *_tile, Network_Node *node)
-{
-    Read(u8, i, node);
-    *_tile = (Tile)i;
-    return true;
-}
-
-bool write_Tile(Tile tile, Network_Node *node)
-{
-    return write_u8(tile, node);
-}
-
-
-
-
-
-
-// Transaction //
-// @Norelease TODO: Check that it is a valid type.
-bool read_Transaction_Message(Transaction_Message *_message, Network_Node *node)
-{
-    Read(u8, msg, node);
-    *_message = (Transaction_Message)msg;
-    return true;
-}
-
-
-bool write_Transaction_Message(Transaction_Message message, Network_Node *node)
-{
-    Write(u8, message, node);
-    return true;
-}
-
-
-
-
-
-
-
-
-
-
-
-#endif // NETWORK_NODE_INCLUDED

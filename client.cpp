@@ -49,7 +49,7 @@ void request_connection_to_market(Client *client)
 
 User_ID current_user_id(Client *client)
 {
-    if(!client->connections.user.connected) return NO_USER;
+    if(!client->connections.user.node.connected) return NO_USER;
     if(!client->user.initialized) return NO_USER;
 
     Assert(client->user.id == client->connections.user.current_user);
@@ -235,7 +235,7 @@ void user_window(UI_Context ctx, Client *client)
 
     auto *user = &client->user;
     
-    bool connected  = client->connections.user.connected;
+    bool connected  = client->connections.user.node.connected;
     bool connecting = client->connections.user_connect_requested;
 
     _WINDOW_(P(ctx), user->username, true, opt(user->color, connected));
@@ -320,7 +320,7 @@ void market_article_view(UI_Context ctx, Market_View *view, bool controls_enable
     auto price_period = article_target->price_period;
     
     bool connecting = client->connections.market_connect_requested;
-    bool connected  = !connecting && client->connections.market.connected;
+    bool connected  = !connecting && client->connections.market.node.connected;
 
     
     // PLACE ORDER //
@@ -568,7 +568,7 @@ void market_window(UI_Context ctx, double t, Input_Manager *input, Market_UI *mu
     
     
     bool connecting = client->connections.market_connect_requested;
-    bool connected  = !connecting && client->connections.market.connected;
+    bool connected  = !connecting && client->connections.market.node.connected;
 
     String window_title;
     if(connected)       window_title = STRING("MARKET [CONNECTED]");
@@ -2281,7 +2281,7 @@ void update_client(Client *client, Input_Manager *input)
     // if the window is open, but for now keep it clean and just
     // be connected always. @Norelease
     if(user) {
-        bool connected  = client->connections.market.connected;
+        bool connected  = client->connections.market.node.connected;
         bool connecting = client->connections.market_connect_requested;
         
         if(!connected && !connecting) {
@@ -2487,7 +2487,7 @@ int client_entry_point(int num_args, char **arguments)
                     
                 auto *cons = &client.connections;
                 if(!cons->user_connect_requested) {
-                    user_connect_successful = cons->user.connected;
+                    user_connect_successful = cons->user.node.connected;
                     break;
                 }
             }

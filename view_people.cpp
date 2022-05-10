@@ -9,7 +9,6 @@ void people_view(UI_Context ctx)
 {
     U(ctx);
 
-
     Person people[] = {
         { STRING("Kombucha Baba") },
         { STRING("Marclat Picco") },
@@ -18,8 +17,6 @@ void people_view(UI_Context ctx)
         { STRING("Benk Zimande") },
         { STRING("Fuppu Raloon") }
     };
-    
-
     
     String titles[]    = { STRING("Name"), STRING("Age"), STRING("Location"), STRING("Actions") };
     float  fractions[] = {     .4,    .1,         .2,        .3 };

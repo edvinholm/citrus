@@ -3,22 +3,22 @@ double get_time() {
     return (double)platform_performance_counter() / (double)platform_performance_counter_frequency();
 }
 
-void stop_room_server(Room_Server *server, Thread *thread, s32 timeout_ms)
+void stop_room_server(Room_Server *server, s32 timeout_ms)
 {
     set(&server->should_exit, true);
-    platform_join_thread(*thread, timeout_ms);
+    platform_join_thread(server->thread, timeout_ms);
 }
 
-void stop_user_server(User_Server *server, Thread *thread, s32 timeout_ms)
+void stop_user_server(User_Server *server, s32 timeout_ms)
 {
     set(&server->should_exit, true);
-    platform_join_thread(*thread, timeout_ms);
+    platform_join_thread(server->thread, timeout_ms);
 }
 
-void stop_market_server(Market_Server *server, Thread *thread, s32 timeout_ms)
+void stop_market_server(Market_Server *server, s32 timeout_ms)
 {
     set(&server->should_exit, true);
-    platform_join_thread(*thread, timeout_ms);
+    platform_join_thread(server->thread, timeout_ms);
 }
 
 // Returned string is allocated with ALLOC_TMP or constant.
@@ -36,50 +36,77 @@ String socket_to_string(Socket socket)
     return concat_tmp("(", socket.handle, " | ", ip_str, ":", addr.sin_port, " | E: ", wsa_error, ")");
 }
 
+bool start_new_room_server(Server *server)
+{
+    Room_Server *s = array_add_uninitialized(server->room_servers);
+    Zero(*s);
+    
+    init_room_server(s, server->next_server_id++);
+    if(!platform_create_thread(&room_server_main_loop, s, &s->thread)) {
+        Debug_Print("Failed to create room server thread.\n");
+        server->room_servers.n -= 1;
+        return false;
+    }
+
+    return true;
+}
+
+bool start_new_user_server(Server *server)
+{
+    User_Server *s = array_add_uninitialized(server->user_servers);
+    Zero(*s);
+    
+    init_user_server(s, server->next_server_id++);
+    if(!platform_create_thread(&user_server_main_loop, s, &s->thread)) {
+        Debug_Print("Failed to create user server thread.\n");
+        server->user_servers.n -= 1;
+        return false;
+    }
+
+    return true;
+}
+
+bool start_new_market_server(Server *server)
+{
+    Market_Server *s = array_add_uninitialized(server->market_servers);
+    Zero(*s);
+    
+    init_market_server(s, server->next_server_id++);
+    if(!platform_create_thread(&market_server_main_loop, s, &s->thread)) {
+        Debug_Print("Failed to create market server thread.\n");
+        server->market_servers.n -= 1;
+        return false;
+    }
+
+    return true;
+}
+
 int server_entry_point(int num_args, char **arguments)
 {
     Debug_Print("I am a server.\n");
 
     Server server = {0};
-    Room_Server   *room_server   = &server.room_server;
-    User_Server   *user_server   = &server.user_server;
-    Market_Server *market_server = &server.market_server;
-        
+    
     if(!platform_init_socket_use()) { Debug_Print("platform_init_socket_use() failed.\n"); return 1; }
     defer(platform_deinit_socket_use(););
 
-    u32 next_server_index = 1; // @Norelease: This must be globally unique, so need to reserve it from some master ID server...
-    
-    // INIT ROOM SERVER //
-    init_room_server(room_server, next_server_index++);
-    Thread room_server_thread;
-    if(!platform_create_thread(&room_server_main_loop, room_server, &room_server_thread)) {
-        Debug_Print("Failed to create room server thread.\n");
-        return 1;
-    }
-    defer(stop_room_server(room_server, &room_server_thread, 10*1000););
+    server.next_server_id = 1; // @Norelease: This must be globally unique, so need to reserve it from some master ID server...
 
-    // INIT USER SERVER //
-    init_user_server(user_server, next_server_index++);
-    Thread user_server_thread;
-    if(!platform_create_thread(&user_server_main_loop, user_server, &user_server_thread)) {
-        Debug_Print("Failed to create user server thread.\n");
-        return 1;
-    }
-    defer(stop_user_server(user_server, &user_server_thread, 10*1000););
-
-    // INIT MARKET SERVER //
-    init_market_server(market_server, next_server_index++);
-    Thread market_server_thread;
-    if(!platform_create_thread(&market_server_main_loop, market_server, &market_server_thread)) {
-        Debug_Print("Failed to create market server thread.\n");
-        return 1;
-    }
-    defer(stop_market_server(market_server, &market_server_thread, 10*1000););
-
+    if(!start_new_room_server(&server)) return 1;
+    if(!start_new_user_server(&server)) return 1;
+    if(!start_new_market_server(&server)) return 1;
     
     // TODO @Temporary @Norelease: Wait for termination signal
-    WaitForSingleObject(room_server_thread.handle, INFINITE);
+    WaitForSingleObject(server.room_servers[0].thread.handle, INFINITE);
+    
+    for(int i = 0; i < server.room_servers.n; i++)
+        stop_room_server(&server.room_servers[i], 10 * 1000);
+    
+    for(int i = 0; i < server.user_servers.n; i++)
+        stop_user_server(&server.user_servers[i], 10 * 1000);
+    
+    for(int i = 0; i < server.market_servers.n; i++)
+        stop_market_server(&server.market_servers[i], 10 * 1000);
 
     
     printf("Main server thread exiting.\n");

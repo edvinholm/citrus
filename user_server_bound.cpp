@@ -111,9 +111,9 @@ bool read_USB_Packet_Header(USB_Packet_Header *_header, Network_Node *node)
 
 
 // NOTE: Pass zero for server_id if client_type == US_CLIENT_PLAYER.
-bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type client_type, u32 server_id)
+bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type client_type, u32 client_node_id)
 {
-    Assert(client_type == US_CLIENT_PLAYER || server_id > 0);
+    Assert(client_type == US_CLIENT_PLAYER || client_node_id > 0);
     
     begin_outbound_packet(node);
     {
@@ -124,7 +124,7 @@ bool enqueue_USB_HELLO_packet(Network_Node *node, User_ID user, US_Client_Type c
         Write(US_Client_Type, client_type, node);
         
         if(client_type != US_CLIENT_PLAYER) {
-            Write(u32, server_id, node);
+            Write(u32, client_node_id, node);
         }
     }
     end_outbound_packet(node);

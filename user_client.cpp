@@ -1,13 +1,10 @@
 
-#include "network_node.cpp"
 
-#include "user_server_bound.h"
 
-#include "user_server_bidirectional.cpp"
-#include "user_server_bound.cpp"
-#include "user_client_bound.cpp"
 
-bool receive_next_ucb_packet(Network_Node *node, UCB_Packet_Header *_packet_header, bool *_error, bool block = false)
+
+
+bool receive_next_ucb_packet(Network_Node *node, UCB_Packet_Header *_packet_header, bool *_error, bool block/* = false*/)
 {
     if(!receive_next_network_node_packet(node, _error, block)) return false;
 
@@ -51,6 +48,7 @@ bool user_server_transaction_send_decision(bool commit, Network_Node *node)
     return true;
 }
 
+/* @Remove
 // NOTE: Pass zero for server_id if client_type == US_CLIENT_PLAYER.
 bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type client_type, u32 server_id)
 {
@@ -83,6 +81,7 @@ bool connect_to_user_server(User_ID user_id, Network_Node *node, US_Client_Type 
 
     return true;
 }
+*/
 
 
 bool disconnect_from_user_server(Network_Node *node, bool say_goodbye = true)

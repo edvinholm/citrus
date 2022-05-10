@@ -2,6 +2,8 @@
 #include "view_people.cpp"
 #include "view_calculator.cpp"
 
+#include "view_dev_servers.cpp"
+
 String title_for_view(View *view)
 {
     switch(view->address.type) { // @Jai: #complete
@@ -9,7 +11,7 @@ String title_for_view(View *view)
         case VIEW_USER:         return title_for_user_view(view);
         case VIEW_CALCULATOR:   return title_for_calculator_view(view);
         case VIEW_WORLD:        return STRING("WORLD"); 
-        case VIEW_PEOPLE:       return STRING("PEOPLE"); 
+        case VIEW_PEOPLE:       return STRING("PEOPLE");
     }
     
     return EMPTY_STRING;
@@ -85,5 +87,7 @@ void view(UI_Context ctx, View *view, Input_Manager *input, UI_Dock *dock = NULL
         case VIEW_CALCULATOR: calculator_view(P(ctx), view); break;
         case VIEW_WORLD: world_view(P(ctx)); break;
         case VIEW_PEOPLE: people_view(P(ctx)); break;
+            
+        case VIEW_DEV_SERVERS: dev_servers_view(P(ctx)); break;
     }
 }

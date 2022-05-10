@@ -56,8 +56,53 @@ using namespace Server_Market;
 #include "net_server.h"
 
 #include "network.cpp"
+
+
+
+
+// x_bound.h
+#include "user_server_bidirectional.h"
+#include "user_server_bound.h"
+#include "user_client_bound.h"
+#include "market_server_bound.h"
+#include "market_client_bound.h"
+#include "room_server_bound.h"
+#include "room_client_bound.h"
+
+//
+#include "network_node.h"
+
+// x_client.h
+#include "room_client.h"
+#include "user_client.h"
+#include "market_client.h"
+
+//
+#include "net_model.cpp"
+
+// x_bound.cpp
+#include "room_server_bound.cpp"
+#include "room_client_bound.cpp"
+
+#include "user_server_bidirectional.cpp"
+#include "user_server_bound.cpp"
+#include "user_client_bound.cpp"
+
+#include "market_server_bound.cpp"
+#include "market_client_bound.cpp"
+
+//
+#include "network_node.cpp"
+
+// x_client.cpp
 #include "market_client.cpp"
 #include "user_client.cpp"
+#include "room_client.cpp"
+
+
+
+
+
 
 #include "pathfinding.cpp"
 

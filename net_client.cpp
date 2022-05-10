@@ -32,6 +32,12 @@ struct Network_Loop
     }                                                               \
 
 
+
+
+
+
+
+
 u32 add_pending_rs_operation(RSB_Packet_Type packet_type, Room *room, Room_Server_Connection *con, double t)
 {
     Pending_RS_Operation op = {0};
@@ -604,21 +610,18 @@ bool talk_to_market_server(Network_Node *node, Client *client, Array<C_MS_Action
 }
 
 
-
-
-
 // @Cleanup: @Jai: Make this a proc local to network_loop()
 // TODO @Norelease: Disconnect from room server when disconnecting from user server...
 //                  Should probably be a higher level logic thing, not in this proc.
 bool client__disconnect_from_user_server(User_Server_Connection *us_con, bool say_goodbye = true)
 {
-    Assert(us_con->connected);
+    Assert(us_con->node.connected);
  
     Debug_Print("Disconnecting from user server...\n");
     bool result = disconnect_from_user_server(&us_con->node, say_goodbye);
 
     us_con->current_user = NO_USER;
-    us_con->connected = false;
+    us_con->node.connected = false;
 
     return result;
 }
@@ -626,14 +629,14 @@ bool client__disconnect_from_user_server(User_Server_Connection *us_con, bool sa
 // @Cleanup: @Jai: Make this a proc local to network_loop()
 bool client__disconnect_from_room_server(Room_Server_Connection *rs_con, bool say_goodbye = true)
 {
-    Assert(rs_con->connected);
+    Assert(rs_con->node.connected);
     
     Debug_Print("Disconnecting from room server...\n");
 
     bool result = disconnect_from_room_server(&rs_con->node, say_goodbye);
     
     rs_con->current_room = 0;
-    rs_con->connected = false;
+    rs_con->node.connected = false;
 
     return result;
 }
@@ -641,13 +644,13 @@ bool client__disconnect_from_room_server(Room_Server_Connection *rs_con, bool sa
 // @Cleanup: @Jai: Make this a proc local to network_loop()
 bool client__disconnect_from_market_server(Market_Server_Connection *ms_con, bool say_goodbye = true)
 {
-    Assert(ms_con->connected == true);
+    Assert(ms_con->node.connected == true);
     
     Debug_Print("Disconnecting from market server...\n");
     bool result = disconnect_from_market_server(&ms_con->node, say_goodbye);
 
     ms_con->current_user = NO_USER;
-    ms_con->connected = false;
+    ms_con->node.connected = false;
 
     return result;
 }
@@ -735,36 +738,33 @@ DWORD network_loop(void *loop_)
         unlock_mutex(client->mutex);
 
         // TALK TO SERVERS HERE //
-        {
+        {   
             // CONNECT TO ROOM SERVER //
             if(room_connect_requested) {
 
-                if(!us_connection.connected) {
+                if(!us_connection.node.connected) {
                     Debug_Print("Can't connect to room server before connected to user server.\n");
                 }
                 else
                 {                
-                    if(rs_connection.connected) {
+                    if(rs_connection.node.connected) {
                         // DISCONNECT FROM CURRENT SERVER //
                         if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed. (%s:%d)\n", __FILE__, __LINE__); }
                         else Debug_Print("Disconnected from room server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
 
-                    Assert(!rs_connection.connected);
+                    Assert(!rs_connection.node.connected);
 
                     User_ID user_id = us_connection.current_user;
+
+                    Node_Connection_Arguments args = {};
+                    Zero(args);
+                    args.room.room = requested_room;
+                    args.room.as_user = user_id;
                     
-                    if(connect_to_room_server(requested_room, user_id, &rs_connection.node)) {
-                        rs_connection.connected = true;
+                    if(connect_to_node(&rs_connection.node, NODE_ROOM, args)) {
                         rs_connection.current_room = requested_room;
-                    
-                        rs_connection.last_connect_attempt_failed = false;
                         did_connect_to_room_this_loop = true;
-                    }
-                    else
-                    {
-                        rs_connection.connected = false;
-                        rs_connection.last_connect_attempt_failed = true;
                     }
                 }
             }
@@ -773,81 +773,73 @@ DWORD network_loop(void *loop_)
             // CONNECT TO USER SERVER // // @Cleanup @Boilerplate
             if(user_connect_requested) {
 
-                if(us_connection.connected) {
+                if(us_connection.node.connected) {
                     // DISCONNECT FROM USER SERVER //
                     if(!client__disconnect_from_user_server(&us_connection)) { Debug_Print("Disconnecting from user server failed. (%s:%d)\n", __FILE__, __LINE__); }
                     else Debug_Print("Disconnected from user server successfully.\n");
 
                     // DISCONNECT FROM ROOM AND MARKET SERVERS, because they depend on the current user ID. //
-                    if(rs_connection.connected) {
+                    if(rs_connection.node.connected) {
                         if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed. (%s:%d)\n", __FILE__, __LINE__); }
                         else Debug_Print("Disconnected from room server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
 
-                    if(ms_connection.connected) {
+                    if(ms_connection.node.connected) {
                         if(!client__disconnect_from_market_server(&ms_connection)) { Debug_Print("Disconnecting from market server failed. (%s:%d)\n", __FILE__, __LINE__); }
                         else Debug_Print("Disconnected from market server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
                 }
 
-                Assert(!us_connection.connected);
-                
-                if(connect_to_user_server(requested_user, &us_connection.node, US_CLIENT_PLAYER, 0)) {
-                    us_connection.connected = true;
-                    us_connection.current_user = requested_user;
-                    
-                    us_connection.last_connect_attempt_failed = false;
-                    did_connect_to_user_this_loop = true;
+                Assert(!us_connection.node.connected);
 
+                
+                Node_Connection_Arguments args = {};
+                Zero(args);
+                args.user.user = requested_user;
+                args.user.client_type = US_CLIENT_PLAYER;
+                    
+                if(connect_to_node(&us_connection.node, NODE_USER, args)) {
+                    us_connection.current_user = requested_user;
+                    did_connect_to_user_this_loop = true;
                     Debug_Print("Connected to user server for user ID = \"%llu\".\n", requested_user);
-                }
-                else
-                {
-                    us_connection.connected = false;
-                    us_connection.last_connect_attempt_failed = true;
                 }
             }
             // // //
                         
             // CONNECT TO MARKET SERVER // // @Cleanup @Boilerplate
             if(market_connect_requested) {
-                if(!us_connection.connected) {
+                if(!us_connection.node.connected) {
                     Debug_Print("Can't connect to market server before connected to user server.\n");
                 }
                 else
                 {                
-                    if(ms_connection.connected) {
+                    if(ms_connection.node.connected) {
                         // DISCONNECT FROM CURRENT SERVER //
                         if(!client__disconnect_from_market_server(&ms_connection)) { Debug_Print("Disconnecting from market server failed. (%s:%d)\n", __FILE__, __LINE__); }
                         else Debug_Print("Disconnected from market server successfully. (%s:%d)\n", __FILE__, __LINE__);
                     }
 
-                    Assert(!ms_connection.connected);
-                    
-                    User_ID user_id = us_connection.current_user;
-                
-                    if(connect_to_market_server(user_id, &ms_connection.node, MS_CLIENT_PLAYER)) {
-                        ms_connection.connected = true;
-                        ms_connection.current_user = user_id;
-                    
-                        ms_connection.last_connect_attempt_failed = false;
-                        did_connect_to_market_this_loop = true;
+                    Assert(!ms_connection.node.connected);
 
+                    auto user_id = us_connection.current_user;
+                    
+                    Node_Connection_Arguments args = {};
+                    Zero(args);
+                    args.market.user = user_id;
+                    args.market.client_type = MS_CLIENT_PLAYER;
+                
+                    if(connect_to_node(&ms_connection.node, NODE_MARKET, args)) {
+                        ms_connection.current_user = user_id;
+                        did_connect_to_market_this_loop = true;
                         Debug_Print("Connected to market server for user ID = \"%llu\".\n", user_id);
-                    }
-                    else
-                    {
-                        ms_connection.connected = false;
-                        ms_connection.last_connect_attempt_failed = true;
                     }
                 }
             }
             // // //
 
             
-
             // TALK TO ROOM SERVER //
-            if(rs_connection.connected &&
+            if(rs_connection.node.connected &&
                !did_connect_to_room_this_loop)
             {
                 // NOTE: talk_to_room_server might lock client->mutex.
@@ -864,7 +856,7 @@ DWORD network_loop(void *loop_)
             // // //
 
             // TALK TO USER SERVER // // @Cleanup @Boilerplate
-            if(us_connection.connected &&
+            if(us_connection.node.connected &&
                !did_connect_to_user_this_loop)
             {
                 bool server_said_goodbye = false;
@@ -879,7 +871,7 @@ DWORD network_loop(void *loop_)
             // // //
 
             // TALK TO MARKET SERVER // // @Cleanup @Boilerplate
-            if(ms_connection.connected &&
+            if(ms_connection.node.connected &&
                !did_connect_to_market_this_loop)
             {
                 bool server_said_goodbye;
@@ -926,7 +918,7 @@ DWORD network_loop(void *loop_)
     // DISCONNECT FROM ALL CONNECTED SERVERS //
 
     // Room Server
-    if(rs_connection.connected) {
+    if(rs_connection.node.connected) {
         if(!client__disconnect_from_room_server(&rs_connection)) { Debug_Print("Disconnecting from room server failed.\n"); }
         else {
             Debug_Print("Disconnected from room server successfully.\n");
@@ -934,7 +926,7 @@ DWORD network_loop(void *loop_)
     }
 
     // User Server
-    if(us_connection.connected) {
+    if(us_connection.node.connected) {
         if(!client__disconnect_from_user_server(&us_connection)) { Debug_Print("Disconnecting from user server failed.\n"); }
         else {
             Debug_Print("Disconnected from user server successfully.\n");

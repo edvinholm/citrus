@@ -1,13 +1,6 @@
 
-#include "network_node.cpp"
 
-#include "market_server_bound.h"
-
-#include "market_server_bound.cpp"
-#include "market_client_bound.cpp"
-
-
-bool receive_next_mcb_packet(Network_Node *node, MCB_Packet_Header *_packet_header, bool *_error, bool block = false)
+bool receive_next_mcb_packet(Network_Node *node, MCB_Packet_Header *_packet_header, bool *_error, bool block/* = false*/)
 {
     if(!receive_next_network_node_packet(node, _error, block)) return false;
 
@@ -33,7 +26,7 @@ bool expect_type_of_next_mcb_packet(MCB_Packet_Type expected_type, Network_Node 
 }
 
 
-
+/* @Remove
 bool connect_to_market_server(User_ID user_id, Network_Node *node, MS_Client_Type client_type)
 {
     Socket socket;
@@ -63,7 +56,7 @@ bool connect_to_market_server(User_ID user_id, Network_Node *node, MS_Client_Typ
 
     return true;
 }
-
+*/
 
 bool disconnect_from_market_server(Network_Node *node, bool say_goodbye = true)
 {    

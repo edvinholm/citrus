@@ -1,8 +1,6 @@
 
 // @Norelease @Bug: Selling for $0 does not work.
 
-#include "market_server_bound.h"
-
 struct Market_Server;
 
 typedef s64 MS_Client_ID;
@@ -85,6 +83,7 @@ struct MS_User_Server_Connection
 
 struct Market_Server
 {
+    Thread thread;
     u32 server_id;
     
     Atomic<bool> should_exit; // @Speed: Semaphore?

@@ -1,8 +1,4 @@
 
-#include "market_server_bound.cpp"
-#include "market_client_bound.cpp"
-
-
 const char *LOG_TAG_MS = "$MS$"; // Market Server
 const char *LOG_TAG_MS_LIST = "$MS$LIST$"; // Listening loop
 
@@ -298,8 +294,14 @@ MS_User_Server_Connection *find_or_add_connection_to_user_server(User_ID user_id
         if(connection->user_id == user_id) return connection;
     }
 
+    Node_Connection_Arguments args;
+    Zero(args);
+    args.user.user = user_id;
+    args.user.client_type = US_CLIENT_MS;
+    args.user.client_node_id = server->server_id;
+
     Network_Node node = { 0 };
-    if(!connect_to_user_server(user_id, &node, US_CLIENT_MS, server->server_id)) return NULL;
+    if(!connect_to_node(&node, NODE_USER, args)) return NULL;
 
     MS_User_Server_Connection new_connection = {0};
     new_connection.user_id = user_id;

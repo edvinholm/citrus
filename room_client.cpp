@@ -1,9 +1,6 @@
 
-#include "network_node.cpp"
-#include "room_server_bound.cpp"
-#include "room_client_bound.cpp"
 
-bool receive_next_rcb_packet(Network_Node *node, RCB_Packet_Header *_packet_header, bool *_error, bool block = false)
+bool receive_next_rcb_packet(Network_Node *node, RCB_Packet_Header *_packet_header, bool *_error, bool block/* = false*/)
 {
     if(!receive_next_network_node_packet(node, _error, block)) return false;
     
@@ -22,6 +19,7 @@ bool expect_type_of_next_rcb_packet(RCB_Packet_Type expected_type, Network_Node 
     return true;
 }
 
+/* @Remove
 bool connect_to_room_server(Room_ID room, User_ID as_user, Network_Node *node)
 {
     Socket socket;
@@ -54,6 +52,7 @@ bool connect_to_room_server(Room_ID room, User_ID as_user, Network_Node *node)
 
     return true;
 }
+*/
 
 
 bool disconnect_from_room_server(Network_Node *node, bool say_goodbye = true)

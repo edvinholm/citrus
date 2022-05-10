@@ -10,8 +10,11 @@ enum View_Type
     VIEW_WORLD,
     VIEW_PEOPLE,
 
+    VIEW_DEV_SERVERS,
+
     VIEW_NONE_OR_NUM
 };
+
 
 struct View_Address
 {
@@ -39,6 +42,7 @@ struct View
         // Here we can have view type specific state.
     };
 };
+
 void clear(View *view) {
     switch(view->address.type) {
         case VIEW_EMPTY: {

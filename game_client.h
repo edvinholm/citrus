@@ -1,4 +1,13 @@
 
+
+struct Pending_Player_Action: public Player_Action
+{
+    union {
+        bool is_pick_up_for_planting;
+    };
+};
+
+
 /*
   Client Game
 */

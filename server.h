@@ -1,9 +1,11 @@
 
 
 struct Server {
-    Room_Server   room_server;
-    User_Server   user_server;
-    Market_Server market_server;
+    Array<Room_Server, ALLOC_MALLOC>   room_servers;
+    Array<User_Server, ALLOC_MALLOC>   user_servers;
+    Array<Market_Server, ALLOC_MALLOC> market_servers;
+
+    u32 next_server_id;
 };
 
 

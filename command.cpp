@@ -5,9 +5,13 @@ String view_type_command_identifiers[] = {
     STRING("USER"),
     STRING("CALC"),
     STRING("WORLD"),
-    STRING("PEOPLE")
+    STRING("PEOPLE"),
+
+    STRING("DEV.SERVERS")
 };
 static_assert(ARRLEN(view_type_command_identifiers) == VIEW_NONE_OR_NUM);
+
+
 
 
 // @Incomplete: We ignore parameters here.

@@ -604,7 +604,19 @@ u64 platform_milliseconds()
 inline
 double platform_get_time()
 {
-    return platform_performance_counter() / (double)platform_performance_counter_frequency();
+    FILETIME file_time;
+    GetSystemTimeAsFileTime(&file_time);
+    
+    s64 t_s64 = (s64)file_time.dwLowDateTime + ((s64)(file_time.dwHighDateTime) << 32LL);
+    double t = t_s64 / (10000.0 * 1000.0); // nano to milli to sec.
+    
+    return t;
+    
+    
+    /* NOTE: This sometimes jumped because time() and GetSystemTime() didn't line up.
+    double result = time(NULL) + platform_get_date_time().millisecond / 1000.0;
+    return result;
+    */
 }
 
 

@@ -1304,7 +1304,7 @@ DWORD render_loop(void *loop_)
 
                             auto &graphics = gfx; // @Hack @Stupid @Cleanup
                             
-                            if(!client->connections.room.connected &&
+                            if(!client->connections.room.node.connected &&
                                !client->connections.room_connect_requested)
                             {
                                 auto *gfx = &graphics;

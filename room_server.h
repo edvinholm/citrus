@@ -44,6 +44,7 @@ struct RS_User_Server_Connection
 
 struct Room_Server
 {
+    Thread thread;
     u32 server_id;
     
     Atomic<bool> should_exit; // @Speed: Semaphore?

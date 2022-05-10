@@ -81,14 +81,45 @@
 #include "transaction.h"
 
 #include "network.cpp"
-#include "room_client.cpp"
-#include "user_client.cpp"
-#include "market_client.cpp"
 
-#include "net_client.h"
+
+
+
+
+
 
 #include "ui.h"
 
+
+
+
+
+
+
+
+
+
+// THIS NETWORK STUFF BELOW IS STUPID. I HATE IT. I REALLY REALLY HATE IT VERY MUCH.
+
+// x_bound.h
+#include "user_server_bidirectional.h"
+#include "user_server_bound.h"
+#include "user_client_bound.h"
+#include "market_server_bound.h"
+#include "market_client_bound.h"
+#include "room_server_bound.h"
+#include "room_client_bound.h"
+
+//
+#include "network_node.h"
+
+// x_client.h
+#include "room_client.h"
+#include "user_client.h"
+#include "market_client.h"
+
+
+// Game Model
 
 #include "game_client.h"
 using namespace Client_Game;
@@ -97,15 +128,55 @@ using namespace Client_User;
 using namespace Client_Market;
 
 #include "user_shared.cpp"
-
 #include "plant.cpp"
 #include "world_shared.cpp"
-
-
 #include "pathfinding_shared.cpp"
-
-
 #include "machine_shared.cpp"
+
+// --
+
+
+//
+#include "net_model.cpp"
+
+// x_bound.cpp
+#include "room_server_bound.cpp"
+#include "room_client_bound.cpp"
+
+#include "user_server_bidirectional.cpp"
+#include "user_server_bound.cpp"
+#include "user_client_bound.cpp"
+
+#include "market_server_bound.cpp"
+#include "market_client_bound.cpp"
+
+//
+#include "network_node.cpp"
+
+// x_client.cpp
+#include "room_client.cpp"
+#include "user_client.cpp"
+#include "market_client.cpp"
+
+//
+#include "net_client.h"
+
+////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #include "view.h"
 #include "ui_dock.h"

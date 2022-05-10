@@ -1,11 +1,4 @@
 
-struct Pending_Player_Action: public Player_Action
-{
-    union {
-        bool is_pick_up_for_planting;
-    };
-};
-
 
 enum C_RS_Action_Type
 {
@@ -84,46 +77,32 @@ struct C_MS_Action
 // @Cleanup: Merge with User_Server_Connection in some way?
 struct Room_Server_Connection
 {
-    bool connected;
-    Room_ID current_room;
     Network_Node node;
-
+    
+    Room_ID current_room;
     u32 prev_rsb_packet_id; // NOTE: Not all RSB types use IDs => This will not always increase for every packet.
 
-    bool last_connect_attempt_failed;
 };
 bool equal(Room_Server_Connection *a, Room_Server_Connection *b)
 {
-    if(a->connected != b->connected) return false;
+    if(!equal(&a->node, &b->node)) return false;
     if(a->current_room != b->current_room) return false;
-    if(!equal(&a->node.socket, &b->node.socket)) return false;
-    
-    if(a->last_connect_attempt_failed != b->last_connect_attempt_failed) return false;
-
     return true;
 }
 
 struct User_Server_Connection
 {
-    bool connected;
-    User_ID current_user;
     Network_Node node;
-
-    bool last_connect_attempt_failed;
+ 
+    User_ID current_user;
 };
 
 // NOTE: This is only used in an assert as of 2021-02-04.
 // @BadName: "totally" means that we for example require pointers to data to be the exact same pointer.
 bool totally_equal(User_Server_Connection *a, User_Server_Connection *b)
 {
-    if(a->connected != b->connected) return false;
-    
+    if(!equal(&a->node, &b->node)) return false;    
     if(a->current_user != b->current_user) return false;
-
-    if(!equal(&a->node.socket, &b->node.socket)) return false;
-    
-    if(a->last_connect_attempt_failed != b->last_connect_attempt_failed) return false;
-
     return true;
 };
 
@@ -131,25 +110,17 @@ bool totally_equal(User_Server_Connection *a, User_Server_Connection *b)
 
 struct Market_Server_Connection
 {
-    bool connected;
-    User_ID current_user;
     Network_Node node;
-
-    bool last_connect_attempt_failed;
+    
+    User_ID current_user;
 };
 
 // NOTE: This is only used in an assert as of 2021-02-04.
 // @BadName: "totally" means that we for example require pointers to data to be the exact same pointer.
 bool totally_equal(Market_Server_Connection *a, Market_Server_Connection *b)
 {
-    if(a->connected != b->connected) return false;
-    
+    if(!equal(&a->node, &b->node)) return false;
     if(a->current_user != b->current_user) return false;
-
-    if(!equal(&a->node.socket, &b->node.socket)) return false;
-    
-    if(a->last_connect_attempt_failed != b->last_connect_attempt_failed) return false;
-
     return true;
 };
 
@@ -157,6 +128,13 @@ bool totally_equal(Market_Server_Connection *a, Market_Server_Connection *b)
 
 struct Server_Connections
 {
+#if 0
+    // MASTER SERVER //
+    bool master_connect_requested; // Writable by main loop
+    Master_Server_Connection master;
+    // ////// ////// //
+#endif
+    
     // ROOM SERVER //
     bool room_connect_requested; // Writable by main loop
     Room_ID requested_room;      // Writable by main loop

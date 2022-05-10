@@ -1,8 +1,4 @@
 
-#include "user_server_bound.cpp"
-#include "user_client_bound.cpp"
-
-
 const char *LOG_TAG_US = "-US-"; // User Server
 const char *LOG_TAG_US_LIST = "-US-LIST-"; // Listening loop
 
