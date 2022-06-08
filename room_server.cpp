@@ -260,7 +260,7 @@ DWORD room_server_listening_loop(void *room_server_)
         if(!success) {
             RS_LIST_Log("Client accept failed. Disconnecting socket.\n");
             if(!platform_close_socket(&client_socket)) {
-                RS_LIST_Log("Unable to close new client's socket.\n");
+                RS_LIST_Log ("Unable to close new client's socket.\n");
                 continue;
             }
             RS_LIST_Log("New client's socket closed successfully.\n");

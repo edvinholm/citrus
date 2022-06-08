@@ -46,6 +46,10 @@ struct Network_Node
     bool connected;
     bool last_connect_attempt_failed;
     Socket socket;
+
+    Array<Transaction, ALLOC_MALLOC> transaction_queue;
+    bool first_transaction_in_queue_is_active;
+    Transaction_ID last_transaction_id;
 };
 
 bool equal(Network_Node *a, Network_Node *b)

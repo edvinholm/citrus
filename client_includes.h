@@ -78,7 +78,6 @@
 
 #include "recipe.cpp"
 
-#include "transaction.h"
 
 #include "network.cpp"
 
@@ -101,8 +100,11 @@
 
 // THIS NETWORK STUFF BELOW IS STUPID. I HATE IT. I REALLY REALLY HATE IT VERY MUCH.
 
-// x_bound.h
 #include "user_server_bidirectional.h"
+
+#include "transaction.h"
+
+// x_bound.h
 #include "user_server_bound.h"
 #include "user_client_bound.h"
 #include "market_server_bound.h"
@@ -112,6 +114,7 @@
 
 //
 #include "network_node.h"
+#include "transaction.cpp"
 
 // x_client.h
 #include "room_client.h"

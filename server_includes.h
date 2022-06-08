@@ -51,17 +51,16 @@ using namespace Server_Market;
 
 #include "log.cpp"
 
-#include "transaction.h"
 
 #include "net_server.h"
 
 #include "network.cpp"
 
 
-
+#include "user_server_bidirectional.h"
+#include "transaction.h"
 
 // x_bound.h
-#include "user_server_bidirectional.h"
 #include "user_server_bound.h"
 #include "user_client_bound.h"
 #include "market_server_bound.h"
@@ -92,6 +91,8 @@ using namespace Server_Market;
 #include "market_client_bound.cpp"
 
 //
+#include "transaction.cpp"
+
 #include "network_node.cpp"
 
 // x_client.cpp
